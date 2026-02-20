@@ -1,48 +1,82 @@
-# .
+# 🃏 Planning Poker
 
-This template should help get you started developing with Vue 3 in Vite.
+Aplicação de Planning Poker em tempo real para estimativas ágeis com seu time.
 
-## Recommended IDE Setup
+Projeto guiado para estudo de **Vue 3** com foco em conceitos e boas práticas do mercado atual.
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+## ✨ Features
 
-## Recommended Browser Setup
+- 🏠 **Criar ou entrar em salas** com código compartilhável
+- 👑 **Papéis**: Admin (Scrum Master), Jogador e Espectador
+- 🎴 **Baralhos customizáveis**: Fibonacci, T-Shirt Sizes ou Sequencial
+- ✅ **Validação de formulários** com VeeValidate + Zod
+- 💾 **Persistência automática** de dados do jogador via localStorage
+- 🌙 **Dark mode** automático via CSS Custom Properties
+- ⚡ **Transições e animações** entre rotas e componentes
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+## 🛠️ Stack
 
-## Type Support for `.vue` Imports in TS
+| Tecnologia                                                                  | Papel                                          |
+| --------------------------------------------------------------------------- | ---------------------------------------------- |
+| [Vue 3](https://vuejs.org/)                                                 | Framework — Composition API + `<script setup>` |
+| [Vite](https://vitejs.dev/)                                                 | Build tool                                     |
+| [TypeScript](https://www.typescriptlang.org/)                               | Tipagem estática                               |
+| [Pinia](https://pinia.vuejs.org/)                                           | Gerenciamento de estado                        |
+| [Vue Router](https://router.vuejs.org/)                                     | Roteamento SPA                                 |
+| [VeeValidate](https://vee-validate.logaretm.com/) + [Zod](https://zod.dev/) | Validação de formulários                       |
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+## 📁 Estrutura
 
-## Customize configuration
+```
+src/
+├── assets/         # CSS global e design tokens
+├── components/     # Componentes reutilizáveis (BaseButton, BaseCard, BaseInput, BaseModal)
+├── composables/    # Lógica reutilizável (useRoom)
+├── features/       # Módulos por feature
+│   ├── room/       # Sala de votação
+│   └── history/    # Histórico de sessões
+├── layouts/        # Layout principal (DefaultLayout)
+├── router/         # Configuração de rotas
+├── stores/         # Stores Pinia (user, room)
+├── types/          # Tipos TypeScript do domínio
+└── views/          # Páginas (HomeView)
+```
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+## 🚀 Setup
 
-## Project Setup
-
-```sh
+```bash
+# Instalar dependências
 npm install
-```
 
-### Compile and Hot-Reload for Development
-
-```sh
+# Rodar em modo de desenvolvimento
 npm run dev
-```
 
-### Type-Check, Compile and Minify for Production
+# Lint e formatação
+npm run lint
+npm run format
 
-```sh
+# Verificar tipos
+npm run type-check
+
+# Build para produção
 npm run build
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+## 📖 Guia de Aprendizado
 
-```sh
-npm run lint
-```
+O arquivo [`LEARNING_GUIDE.md`](./LEARNING_GUIDE.md) documenta todos os conceitos Vue 3 praticados em cada fase do projeto, com exemplos de código e explicações detalhadas.
+
+## 📋 Roadmap
+
+- [x] **Fase 1** — Fundação (Vite, Vue 3, TypeScript, Router, Pinia)
+- [x] **Fase 2** — Design System & Layout (Componentes base, CSS tokens, Transitions)
+- [x] **Fase 3** — Criação & Entrada na Sala (Forms, VeeValidate + Zod, Composables)
+- [ ] **Fase 4** — Sala de Votação (Cartas animadas, máquina de estados, papéis)
+- [ ] **Fase 5** — Tempo Real com WebSocket (Socket.io, sincronização)
+- [ ] **Fase 6** — Histórico & Estatísticas (Persistência, gráficos)
+- [ ] **Fase 7** — Testes (Vitest, Vue Test Utils, Playwright)
+- [ ] **Fase 8** — Boas Práticas & Finalização (a11y, performance, responsividade)
+
+## 📄 Licença
+
+MIT
