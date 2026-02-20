@@ -12,7 +12,11 @@ const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
 
-const roomId = route.params.id as string
+// Type-safe: route.params.id pode ser string | string[]. Usamos computed + guard em vez de `as string`
+const roomId = computed(() => {
+  const id = route.params.id
+  return Array.isArray(id) ? id[0] : id
+})
 const isAdmin = computed(() => userStore.playerRole === 'admin')
 const deckLabel = computed(() => {
   const dt = roomStore.roomConfig?.deckType

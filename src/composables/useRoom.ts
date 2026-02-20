@@ -2,7 +2,7 @@ import { useRouter } from 'vue-router'
 import { v4 as uuidv4 } from 'uuid'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
-import type { PlayerRole, DeckType, RoomConfig } from '@/types'
+import type { JoinableRole, DeckType, RoomConfig } from '@/types'
 
 /**
  * Composable que encapsula a lógica de criação e entrada em uma sala.
@@ -42,7 +42,7 @@ export function useRoom() {
   /**
    * Entra em uma sala existente com o código fornecido.
    */
-  function joinRoom(playerName: string, roomCode: string, role: PlayerRole = 'member') {
+  function joinRoom(playerName: string, roomCode: string, role: JoinableRole = 'member') {
     const playerId = uuidv4()
 
     // Salvar dados do player

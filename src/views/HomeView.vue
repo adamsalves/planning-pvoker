@@ -7,8 +7,7 @@ import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
-import type { DeckType, PlayerRole } from '@/types'
-import { DECKS } from '@/types'
+import { DECKS, DECK_TYPES, JOINABLE_ROLES } from '@/types'
 
 // Tab state: 'create' ou 'join'
 const activeTab = ref<'create' | 'join'>('create')
@@ -16,13 +15,15 @@ const activeTab = ref<'create' | 'join'>('create')
 const { createRoom, joinRoom } = useRoom()
 
 // --- FORMULÁRIO: Criar Sala ---
+// O z.enum() usa a mesma constante que define o tipo DeckType
+// Assim o Zod infere exatamente "fibonacci" | "tshirt" | "sequential" — sem necessidade de `as`
 const createSchema = toTypedSchema(
   z.object({
     playerName: z
       .string()
       .min(2, 'Nome deve ter pelo menos 2 caracteres')
       .max(20, 'Nome deve ter no máximo 20 caracteres'),
-    deckType: z.enum(['fibonacci', 'tshirt', 'sequential']),
+    deckType: z.enum(DECK_TYPES),
     autoReveal: z.boolean(),
   }),
 )
@@ -35,7 +36,7 @@ const {
   validationSchema: createSchema,
   initialValues: {
     playerName: '',
-    deckType: 'fibonacci' as DeckType,
+    deckType: DECK_TYPES[0], // 'fibonacci' — inferido como DeckType, não string
     autoReveal: false,
   },
 })
@@ -45,7 +46,8 @@ const [createDeckType, createDeckTypeAttrs] = defineCreateField('deckType')
 const [createAutoReveal, createAutoRevealAttrs] = defineCreateField('autoReveal')
 
 const onCreateRoom = handleCreateSubmit((values) => {
-  createRoom(values.playerName, values.deckType as DeckType, values.autoReveal)
+  // values.deckType já é DeckType — sem cast!
+  createRoom(values.playerName, values.deckType, values.autoReveal)
 })
 
 // --- FORMULÁRIO: Entrar na Sala ---
@@ -56,7 +58,7 @@ const joinSchema = toTypedSchema(
       .min(2, 'Nome deve ter pelo menos 2 caracteres')
       .max(20, 'Nome deve ter no máximo 20 caracteres'),
     roomCode: z.string().min(1, 'Código da sala é obrigatório'),
-    role: z.enum(['member', 'observer'] as const),
+    role: z.enum(JOINABLE_ROLES),
   }),
 )
 
@@ -69,7 +71,7 @@ const {
   initialValues: {
     playerName: '',
     roomCode: '',
-    role: 'member' as const,
+    role: JOINABLE_ROLES[0], // 'member' — inferido como JoinableRole, não string
   },
 })
 
@@ -78,7 +80,8 @@ const [joinRoomCode, joinRoomCodeAttrs] = defineJoinField('roomCode')
 const [joinRole, joinRoleAttrs] = defineJoinField('role')
 
 const onJoinRoom = handleJoinSubmit((values) => {
-  joinRoom(values.playerName, values.roomCode, values.role as PlayerRole)
+  // values.role já é "member" | "observer" — sem cast!
+  joinRoom(values.playerName, values.roomCode, values.role)
 })
 </script>
 

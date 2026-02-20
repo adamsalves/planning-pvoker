@@ -1,8 +1,14 @@
 // Types for the Planning Poker application
 
-export type PlayerRole = 'admin' | 'member' | 'observer'
+// Constantes como "single source of truth" — tanto os tipos quanto o Zod derivam delas
+export const DECK_TYPES = ['fibonacci', 'tshirt', 'sequential'] as const
+export const PLAYER_ROLES = ['admin', 'member', 'observer'] as const
+export const JOINABLE_ROLES = ['member', 'observer'] as const
 
-export type DeckType = 'fibonacci' | 'tshirt' | 'sequential'
+// Tipos derivados das constantes — sempre sincronizados
+export type DeckType = (typeof DECK_TYPES)[number]
+export type PlayerRole = (typeof PLAYER_ROLES)[number]
+export type JoinableRole = (typeof JOINABLE_ROLES)[number]
 
 export type RoundStatus = 'waiting' | 'voting' | 'revealed'
 
