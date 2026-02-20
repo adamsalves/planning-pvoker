@@ -274,3 +274,161 @@ export default { inheritAttrs: false }
 - ✅ `npm run lint` — sem warnings
 - ✅ `npm run type-check` — sem erros de tipo
 - ✅ Componentes prontos para uso nas próximas fases
+
+---
+
+## Fase 3 — Criação & Entrada na Sala
+
+**Objetivo:** Implementar formulários de criação/entrada em sala com validação, roles de usuário e persistência de estado.
+
+### Arquivos Criados
+
+| Arquivo                          | Descrição                                                   |
+| -------------------------------- | ----------------------------------------------------------- |
+| `src/types/index.ts`             | Tipos TypeScript do domínio (Player, Room, Round, DeckType) |
+| `src/stores/user.ts`             | Store do jogador com persistência via localStorage          |
+| `src/stores/room.ts`             | Store da sala com state machine completa                    |
+| `src/composables/useRoom.ts`     | Composable encapsulando lógica de criação/entrada           |
+| `src/views/HomeView.vue`         | Tela inicial com forms de criar/entrar na sala              |
+| `src/features/room/RoomView.vue` | Tela da sala com info do jogador e badges                   |
+
+### Dependências Adicionadas
+
+| Pacote                        | Papel                                         |
+| ----------------------------- | --------------------------------------------- |
+| `vee-validate`                | Gerenciamento de formulários reativo          |
+| `@vee-validate/zod`           | Adaptador VeeValidate → Zod                   |
+| `zod`                         | Schema de validação type-safe                 |
+| `uuid`                        | Geração de IDs únicos                         |
+| `pinia-plugin-persistedstate` | Salvar stores automaticamente no localStorage |
+
+### Conceitos Praticados
+
+#### Composables — Lógica Reutilizável Fora dos Componentes
+
+Composables são funções que usam a Composition API (`ref`, `computed`, `watch`, etc.) para encapsular lógica reutilizável:
+
+```ts
+// src/composables/useRoom.ts
+export function useRoom() {
+  const router = useRouter()
+  const userStore = useUserStore()
+
+  function createRoom(playerName: string, deckType: DeckType, autoReveal: boolean) {
+    const roomId = uuidv4().substring(0, 8)
+    userStore.setPlayer(playerName, playerId, 'admin')
+    roomStore.createRoom(roomId, { id: playerId, name: playerName, role: 'admin' }, config)
+    router.push({ name: 'room', params: { id: roomId } })
+  }
+
+  return { createRoom, joinRoom }
+}
+```
+
+**Regra de ouro:** Se uma lógica é usada em mais de um componente, ela vira composable. Se é específica de um componente, fica no próprio componente.
+
+---
+
+#### Pinia — Composition API Style + Persistência
+
+Diferente do Vuex, o Pinia usa a mesma Composition API que os componentes:
+
+```ts
+// src/stores/user.ts
+export const useUserStore = defineStore(
+  'user',
+  () => {
+    const playerName = ref('') // state
+    const playerId = ref('') // state
+
+    function setPlayer(name, id, role) {
+      // action
+      playerName.value = name
+      playerId.value = id
+    }
+
+    return { playerName, playerId, setPlayer }
+  },
+  {
+    persist: true, // ← salva automaticamente no localStorage!
+  },
+)
+```
+
+**`pinia-plugin-persistedstate`:** Configurado uma única vez no `main.ts`, persiste qualquer store que tenha `persist: true`.
+
+---
+
+#### VeeValidate + Zod — Validação Type-Safe
+
+O combo VeeValidate + Zod é o padrão do mercado para validação em Vue 3:
+
+```ts
+// 1. Definir schema com Zod
+const schema = toTypedSchema(
+  z.object({
+    playerName: z.string().min(2, 'Mínimo 2 caracteres'),
+    deckType: z.enum(['fibonacci', 'tshirt', 'sequential']),
+  }),
+)
+
+// 2. Conectar ao VeeValidate
+const { handleSubmit, errors, defineField } = useForm({
+  validationSchema: schema,
+  initialValues: { playerName: '', deckType: 'fibonacci' },
+})
+
+// 3. Vincular campos ao template
+const [playerName, playerNameAttrs] = defineField('playerName')
+```
+
+**`defineField`:** Retorna um `ref` reativo e atributos extras (validação, dirty state, etc.) que você binda no template com `v-model` + `v-bind`.
+
+**`errors`:** Objeto reativo calculado automaticamente pelo VeeValidate a cada mudança no campo.
+
+---
+
+#### Navegação Programática
+
+Após criar a sala, o composable navega sem que o usuário clique em um `<RouterLink>`:
+
+```ts
+router.push({ name: 'room', params: { id: roomId } })
+```
+
+**`name` vs `path`:** Usar o nome da rota torna o código imune a mudanças no path. Se `/room/:id` virar `/sala/:id`, basta mudar no router — todos os `push` continuam funcionando.
+
+---
+
+#### Rota Dinâmica com `useRoute`
+
+O componente da sala acessa o parâmetro `:id` da URL:
+
+```ts
+const route = useRoute()
+const roomId = route.params.id as string
+```
+
+---
+
+### Resumo de Conceitos — Fase 3
+
+| Conceito                      | Onde                                   |
+| ----------------------------- | -------------------------------------- |
+| Composables                   | `useRoom.ts`                           |
+| Pinia Composition API         | `useUserStore`, `useRoomStore`         |
+| `pinia-plugin-persistedstate` | `main.ts` + `useUserStore`             |
+| VeeValidate + Zod             | `HomeView.vue`                         |
+| `defineField`                 | `HomeView.vue`                         |
+| `toTypedSchema`               | `HomeView.vue`                         |
+| Navegação programática        | `useRoom.ts`                           |
+| Rotas dinâmicas (`:id`)       | `router/index.ts` + `RoomView.vue`     |
+| `<Transition>` entre tabs     | `HomeView.vue`                         |
+| Radio buttons customizados    | `HomeView.vue` (deck + role selection) |
+| Toggle switch CSS             | `HomeView.vue` (auto-reveal)           |
+
+### Verificação
+
+- ✅ `npm run lint` + `npm run type-check` — sem erros
+- ✅ Criar sala → navega para `/room/:id` com badge de Admin
+- ✅ Nome do jogador persiste no localStorage
