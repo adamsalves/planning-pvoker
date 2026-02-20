@@ -432,3 +432,203 @@ const roomId = route.params.id as string
 - ✅ `npm run lint` + `npm run type-check` — sem erros
 - ✅ Criar sala → navega para `/room/:id` com badge de Admin
 - ✅ Nome do jogador persiste no localStorage
+
+---
+
+## Fase 4 — Sala de Votação (Core)
+
+**Objetivo:** Construir a experiência completa de votação: cartas animadas, lista de jogadores, revelação de votos com estatísticas e celebrações.
+
+### Arquivos Criados
+
+| Arquivo                               | Descrição                                           |
+| ------------------------------------- | --------------------------------------------------- |
+| `src/features/room/SubjectForm.vue`   | Formulário para o admin definir o subject da rodada |
+| `src/features/room/RoundHeader.vue`   | Header com rodada atual, subject e status           |
+| `src/features/room/PokerCard.vue`     | Carta de poker com flip 3D e estados visuais        |
+| `src/features/room/VotingArea.vue`    | Grid de cartas dinâmica baseada no baralho          |
+| `src/features/room/PlayerList.vue`    | Lista de jogadores + seção de espectadores          |
+| `src/features/room/VoteReveal.vue`    | Estatísticas, distribuição e confetti               |
+| `src/features/room/RoundControls.vue` | Controles de admin (revelar / nova rodada)          |
+
+### Conceitos Praticados
+
+#### Animação CSS 3D — Flip de Carta
+
+O `PokerCard` usa `transform-style: preserve-3d` para criar o efeito de virar a carta:
+
+```css
+.card-inner {
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.poker-card.revealed .card-inner {
+  transform: rotateY(180deg);
+}
+
+.card-front,
+.card-back {
+  backface-visibility: hidden;
+}
+
+.card-back {
+  transform: rotateY(180deg); /* já virada — aparece quando o inner gira */
+}
+```
+
+**Como funciona:** O `.card-inner` é um container com duas faces. Ambas usam `backface-visibility: hidden`. A face traseira já começa girada 180°. Quando adicionamos a classe `.revealed`, o container inteiro gira, escondendo a frente e mostrando o verso.
+
+---
+
+#### `<TransitionGroup>` — Animando Listas
+
+Diferente do `<Transition>` (um elemento), o `<TransitionGroup>` anima **múltiplos elementos** de uma lista:
+
+```vue
+<TransitionGroup name="player" tag="ul" class="player-list">
+  <li v-for="player in players" :key="player.id">
+    {{ player.name }}
+  </li>
+</TransitionGroup>
+```
+
+**Regra:** Cada item **precisa** de um `:key` único. O Vue aplica `.player-enter-from`, `.player-leave-to` automaticamente.
+
+---
+
+#### Composição de Componentes — O RoomView
+
+O `RoomView` não tem lógica visual própria — ele orquestra 7 componentes filhos usando `v-if` baseado no estado:
+
+```vue
+<!-- Admin: Subject Form (quando não há rodada ou após revelar) -->
+<SubjectForm
+  v-if="isAdmin && (!currentRound || currentRound.status === 'revealed')"
+  @submit="handleStartRound"
+/>
+
+<!-- Cartas de votação (apenas durante votação e para jogadores) -->
+<VotingArea
+  v-if="currentRound?.status === 'voting' && !isObserver"
+  :deck-type="deckType"
+  :selected-value="selectedVote"
+  @vote="handleVote"
+/>
+
+<!-- Estatísticas (após revelar) -->
+<VoteReveal
+  v-if="currentRound?.status === 'revealed'"
+  :votes="currentRound.votes"
+  :player-count="activePlayerCount"
+/>
+```
+
+**Princípio:** Cada componente é responsável por **uma coisa** e recebe dados via props. A lógica de "quando mostrar" fica no pai.
+
+---
+
+#### `watch` com Side Effects — Auto-Reveal
+
+O `watch` observa quando todos votaram e dispara a revelação automática:
+
+```ts
+watch(allActiveVoted, (allVoted) => {
+  if (allVoted && autoReveal.value && currentRound.value?.status === 'voting') {
+    roomStore.revealVotes()
+  }
+})
+```
+
+**Boas práticas com `watch`:**
+
+- Ideal para **side effects** (ações que não são renderização)
+- Quando precisa reagir a mudanças **específicas**, use `watch`
+- Quando precisa de um valor **derivado**, use `computed`
+
+---
+
+#### `computed` Chains — Dados Derivados
+
+O `VoteReveal` usa computed encadeados para calcular estatísticas:
+
+```ts
+const numericVotes = computed(() =>
+  Object.values(props.votes).filter((v): v is number => typeof v === 'number'),
+)
+
+const average = computed(() => {
+  if (numericVotes.value.length === 0) return null
+  const sum = numericVotes.value.reduce((acc, v) => acc + v, 0)
+  return Math.round((sum / numericVotes.value.length) * 10) / 10
+})
+```
+
+**Type guard inline:** `(v): v is number` é um type predicate — diz ao TypeScript que após o `filter`, o array contém apenas `number`.
+
+---
+
+#### `canvas-confetti` — Celebrações Visuais
+
+Biblioteca leve que dispara confetti no canvas do browser:
+
+```ts
+import confetti from 'canvas-confetti'
+
+confetti({
+  particleCount: 100,
+  spread: 70,
+  origin: { y: 0.6 },
+})
+```
+
+Dispara quando detectamos **consenso** (todos votaram a mesma carta).
+
+---
+
+#### CSS Grid — Layout Responsivo 2 Colunas
+
+O layout da sala usa Grid com coluna fixa para o sidebar:
+
+```css
+.room-content {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: var(--space-5);
+}
+
+/* Responsivo: volta para 1 coluna */
+@media (max-width: 768px) {
+  .room-content {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+O `position: sticky` no sidebar mantém a lista de jogadores visível durante scroll.
+
+---
+
+### Resumo de Conceitos — Fase 4
+
+| Conceito                         | Onde                                 |
+| -------------------------------- | ------------------------------------ |
+| CSS 3D Transform (`preserve-3d`) | `PokerCard.vue`                      |
+| `<TransitionGroup>`              | `PlayerList.vue`                     |
+| Composição de componentes        | `RoomView.vue` orquestrando 7 filhos |
+| `v-if` com state machine         | `RoomView.vue`                       |
+| `watch` com side effects         | `RoomView.vue` (auto-reveal)         |
+| Computed chains                  | `VoteReveal.vue` (stats)             |
+| Type predicates                  | `VoteReveal.vue` (`v is number`)     |
+| `canvas-confetti`                | `VoteReveal.vue`                     |
+| CSS Grid 2 colunas               | `RoomView.vue`                       |
+| `position: sticky`               | Sidebar do `RoomView.vue`            |
+| Optional chaining (`?.`)         | `RoomView.vue`                       |
+| `defineEmits` tipado             | Todos os componentes de room         |
+
+### Verificação
+
+- ✅ `npm run lint` + `npm run type-check` — sem erros
+- ✅ Fluxo completo: Subject → Votação → Revelar → Estatísticas
+- ✅ Confetti dispara ao atingir consenso
+- ✅ Layout responsivo com sidebar sticky
