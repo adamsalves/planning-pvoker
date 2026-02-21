@@ -5,13 +5,13 @@ interface Props {
   value: string | number
   selected?: boolean
   disabled?: boolean
-  revealed?: boolean
+  faceDown?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
   disabled: false,
-  revealed: false,
+  faceDown: false,
 })
 
 const emit = defineEmits<{
@@ -34,7 +34,7 @@ function handleClick() {
       {
         selected,
         disabled,
-        revealed,
+        'face-down': faceDown,
         special: isSpecial,
       },
     ]"
@@ -86,7 +86,7 @@ function handleClick() {
   transform-style: preserve-3d;
 }
 
-.poker-card.revealed .card-inner {
+.poker-card.face-down .card-inner {
   transform: rotateY(180deg);
 }
 

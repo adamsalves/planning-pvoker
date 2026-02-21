@@ -10,6 +10,7 @@ import SubjectForm from './SubjectForm.vue'
 import RoundHeader from './RoundHeader.vue'
 import VotingArea from './VotingArea.vue'
 import PlayerList from './PlayerList.vue'
+import PokerTable from './PokerTable.vue'
 import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
 
@@ -152,6 +153,15 @@ function handleLeave() {
           :total-rounds="roomStore.currentRoom!.rounds.length"
           :status="currentRound.status"
         />
+
+        <!-- Poker Table (Mesa central com animações 3D) -->
+        <BaseCard v-if="currentRound" class="section-card table-wrapper">
+          <PokerTable
+            :players="players"
+            :votes="currentRound.votes"
+            :status="currentRound.status"
+          />
+        </BaseCard>
 
         <!-- Voting Cards (jogadores podem votar) -->
         <BaseCard v-if="currentRound?.status === 'voting' && !isObserver" class="section-card">
