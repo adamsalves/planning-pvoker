@@ -1,82 +1,77 @@
-# 🃏 Planning Poker
+# 🃏 Vue Planning Poker
 
-Aplicação de Planning Poker em tempo real para estimativas ágeis com seu time.
+Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com Vue 3, Vite, Pinia, TypeScript, Node.js e Socket.IO.
 
-Projeto guiado para estudo de **Vue 3** com foco em conceitos e boas práticas do mercado atual.
+## ✨ Funcionalidades
 
-## ✨ Features
+- **Real-time:** Conectividade de baixa latência em WebSockets para múltiplos usuários simultâneos na mesma sala.
+- **Tipos de Baralho Customizáveis:** Crie rodadas usando as sequências _Fibonacci_, _T-Shirt_ (P, M, G, GG...) ou _Sequencial_.
+- **Papéis Dedicados:** Jogue definindo um _Scrum Master (Admin)_, _Membros_ ativos e _Espectadores_ passivos.
+- **Gráficos e Histórico:** Armazenamento automático e local (localStorage via Pinia Persisted) de rodadas com exibições estatísticas ricas (Chart.js e `vue-chartjs`).
+- **Acessibilidade & Performance:** Totalmente navegável por teclado, _ARIA attributes_ suportados, e navegação via Lazy Loading Componentes no Vue Router.
 
-- 🏠 **Criar ou entrar em salas** com código compartilhável
-- 👑 **Papéis**: Admin (Scrum Master), Jogador e Espectador
-- 🎴 **Baralhos customizáveis**: Fibonacci, T-Shirt Sizes ou Sequencial
-- ✅ **Validação de formulários** com VeeValidate + Zod
-- 💾 **Persistência automática** de dados do jogador via localStorage
-- 🌙 **Dark mode** automático via CSS Custom Properties
-- ⚡ **Transições e animações** entre rotas e componentes
+## 🚀 Rodando o Projeto Localmente
 
-## 🛠️ Stack
+O repositório é composto de **Duas aplicações**: O servidor real-time e a UI em Vue. Ambas as camadas precisam rodar em paralelo.
 
-| Tecnologia                                                                  | Papel                                          |
-| --------------------------------------------------------------------------- | ---------------------------------------------- |
-| [Vue 3](https://vuejs.org/)                                                 | Framework — Composition API + `<script setup>` |
-| [Vite](https://vitejs.dev/)                                                 | Build tool                                     |
-| [TypeScript](https://www.typescriptlang.org/)                               | Tipagem estática                               |
-| [Pinia](https://pinia.vuejs.org/)                                           | Gerenciamento de estado                        |
-| [Vue Router](https://router.vuejs.org/)                                     | Roteamento SPA                                 |
-| [VeeValidate](https://vee-validate.logaretm.com/) + [Zod](https://zod.dev/) | Validação de formulários                       |
+### Configurando o Backend (Node Server)
 
-## 📁 Estrutura
-
-```
-src/
-├── assets/         # CSS global e design tokens
-├── components/     # Componentes reutilizáveis (BaseButton, BaseCard, BaseInput, BaseModal)
-├── composables/    # Lógica reutilizável (useRoom)
-├── features/       # Módulos por feature
-│   ├── room/       # Sala de votação
-│   └── history/    # Histórico de sessões
-├── layouts/        # Layout principal (DefaultLayout)
-├── router/         # Configuração de rotas
-├── stores/         # Stores Pinia (user, room)
-├── types/          # Tipos TypeScript do domínio
-└── views/          # Páginas (HomeView)
-```
-
-## 🚀 Setup
+O Node atua em memória mantendo as conexões e transmitindo os eventos de votos sem persistência contínua na máquina.
 
 ```bash
-# Instalar dependências
+# Navegue até a pasta do servidor
+cd server/
+
+# Instale os pacotes e suba o Express/Socket.IO (iniciará na porta 3001)
 npm install
-
-# Rodar em modo de desenvolvimento
 npm run dev
-
-# Lint e formatação
-npm run lint
-npm run format
-
-# Verificar tipos
-npm run type-check
-
-# Build para produção
-npm run build
 ```
 
-## 📖 Guia de Aprendizado
+### Configurando o Frontend (Vue App)
 
-O arquivo [`LEARNING_GUIDE.md`](./LEARNING_GUIDE.md) documenta todos os conceitos Vue 3 praticados em cada fase do projeto, com exemplos de código e explicações detalhadas.
+```bash
+# Na raiz principal do projeto frontend
+npm install
 
-## 📋 Roadmap
+# Suba o app Vite (em ambiente de desenvolvimento)
+npm run dev
+```
 
-- [x] **Fase 1** — Fundação (Vite, Vue 3, TypeScript, Router, Pinia)
-- [x] **Fase 2** — Design System & Layout (Componentes base, CSS tokens, Transitions)
-- [x] **Fase 3** — Criação & Entrada na Sala (Forms, VeeValidate + Zod, Composables)
-- [ ] **Fase 4** — Sala de Votação (Cartas animadas, máquina de estados, papéis)
-- [ ] **Fase 5** — Tempo Real com WebSocket (Socket.io, sincronização)
-- [ ] **Fase 6** — Histórico & Estatísticas (Persistência, gráficos)
-- [ ] **Fase 7** — Testes (Vitest, Vue Test Utils, Playwright)
-- [ ] **Fase 8** — Boas Práticas & Finalização (a11y, performance, responsividade)
+> O Frontend vai procurar conectar automaticamente com o Node no localhost:3001.
 
-## 📄 Licença
+---
 
-MIT
+## 🧪 Testes
+
+A saúde do software é validada de duas formas e pode ser conferida em linha de comando ou via Interface UI a qualquer momento.
+
+### Unitários (Vitest)
+
+Cobrindo funções utilitárias e todo o core das `Store` (Pinia) e de navegação de Composables (`useRoom` e `useSocket`).
+
+```bash
+npm run test:unit
+```
+
+### End-to-End (Playwright)
+
+O robô cria duas abas independentes (contextos) realizando interações ponta-a-ponta entre uma máquina Administradora e uma de um Participante simulando um ciclo completo de sala.
+
+```bash
+# Para instalar navegadores da engine se necessário pela primeira vez:
+npx playwright install chromium
+
+# Rodando os testes
+npm run test:e2e
+```
+
+## 🛠️ Stack Utilizada
+
+- **Vue 3** (`<script setup>` Composition API)
+- **Vite** (Ferramenta de Bundler e Build ultra rápida)
+- **Pinia** (Ecossistema modular de estado global)
+- **Vue Router** (Manuseio de URL local dinâmico)
+- **Socket.IO** (Sincronização cliente-servidor nativa)
+- **VeeValidate & Zod** (Gestão pesada e parseamento em Type-level validation dos formulários)
+- **Vitest & Playwright** (Camada de qualidade)
+- **Vanilla CSS** (Componentização com Variáveis de Root nativo. _Mobile-First_)

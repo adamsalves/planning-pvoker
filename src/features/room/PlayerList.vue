@@ -29,7 +29,12 @@ function getVote(playerId: string): string | number | undefined {
     <div class="player-section">
       <h4 class="section-title">Jogadores ({{ activePlayers.length }})</h4>
       <TransitionGroup name="player" tag="ul" class="player-list">
-        <li v-for="player in activePlayers" :key="player.id" class="player-item">
+        <li
+          v-for="player in activePlayers"
+          :key="player.id"
+          class="player-item"
+          v-memo="[player.name, player.role, status, hasVoted(player.id), getVote(player.id)]"
+        >
           <div class="player-info">
             <span class="player-avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="player-name">

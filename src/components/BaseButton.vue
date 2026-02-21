@@ -31,7 +31,13 @@ const classes = computed(() => {
 </script>
 
 <template>
-  <button :class="classes" :type="type" :disabled="disabled || loading">
+  <button
+    :class="classes"
+    :type="type"
+    :disabled="disabled || loading"
+    :aria-busy="loading"
+    :aria-disabled="disabled || loading"
+  >
     <span v-if="loading" class="spinner"></span>
     <span :class="{ 'opacity-0': loading }">
       <slot />

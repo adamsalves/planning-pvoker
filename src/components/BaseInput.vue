@@ -39,12 +39,14 @@ const inputId = computed(() => props.id || `input-${Math.random().toString(36).s
         :placeholder="placeholder"
         :disabled="disabled"
         :class="['base-input', { 'has-error': !!error }]"
+        :aria-invalid="!!error"
+        :aria-describedby="error ? `${inputId}-error` : undefined"
         v-bind="$attrs"
       />
     </div>
 
     <Transition name="fade">
-      <span v-if="error" class="input-error-msg">{{ error }}</span>
+      <span v-if="error" :id="`${inputId}-error`" class="input-error-msg">{{ error }}</span>
     </Transition>
   </div>
 </template>

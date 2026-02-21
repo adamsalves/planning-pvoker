@@ -1,10 +1,10 @@
-import { ref, computed } from 'vue'
+import { shallowRef, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { Room } from '@/types'
 
 export const useRoomStore = defineStore('room', () => {
   // State from server (Source of Truth)
-  const currentRoom = ref<Room | null>(null)
+  const currentRoom = shallowRef<Room | null>(null)
 
   // Getters
   const isInRoom = computed(() => currentRoom.value !== null)

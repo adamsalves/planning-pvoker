@@ -41,6 +41,7 @@ function handleClick() {
     :disabled="disabled"
     @click="handleClick"
     :aria-label="`Votar ${value}`"
+    :aria-pressed="selected"
   >
     <div class="card-inner">
       <div class="card-front">
