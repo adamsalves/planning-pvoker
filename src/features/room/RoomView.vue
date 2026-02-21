@@ -14,11 +14,13 @@ import PokerTable from './PokerTable.vue'
 import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
 import { useSocket } from '@/composables/useSocket'
+import { useHistoryStore } from '@/stores/history'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
+const historyStore = useHistoryStore()
 const { startRound, castVote, revealVotes, disconnect, joinRoom } = useSocket()
 
 // Type-safe route param
@@ -93,6 +95,16 @@ function handleNewRound() {
 }
 
 function handleLeave() {
+  if (roomStore.currentRoom && roomStore.currentRoom.rounds.length > 0) {
+    historyStore.saveSession({
+      id: `${roomId.value}-${Date.now()}`,
+      date: new Date().toISOString(),
+      roomId: roomId.value,
+      deckType: deckType.value,
+      rounds: roomStore.currentRoom.rounds,
+    })
+  }
+
   disconnect()
   roomStore.leaveRoom()
   userStore.clearPlayer()
