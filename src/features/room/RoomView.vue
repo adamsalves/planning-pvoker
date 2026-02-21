@@ -13,16 +13,18 @@ import PlayerList from './PlayerList.vue'
 import PokerTable from './PokerTable.vue'
 import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
+import { useSocket } from '@/composables/useSocket'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
+const { startRound, castVote, revealVotes, disconnect, joinRoom } = useSocket()
 
 // Type-safe route param
 const roomId = computed(() => {
   const id = route.params.id
-  return Array.isArray(id) ? id[0] : id
+  return (Array.isArray(id) ? id[0] : id) as string
 })
 
 const isAdmin = computed(() => userStore.playerRole === 'admin')
@@ -54,49 +56,35 @@ const allActiveVoted = computed(() => {
 const autoReveal = computed(() => roomStore.roomConfig?.autoReveal ?? false)
 watch(allActiveVoted, (allVoted) => {
   if (allVoted && autoReveal.value && currentRound.value?.status === 'voting') {
-    roomStore.revealVotes()
+    revealVotes(roomId.value)
   }
 })
 
-// Adicionar jogadores mock para demonstração (serão removidos na Fase 5 com WebSocket)
-function addMockPlayers() {
-  roomStore.addPlayer({ id: 'mock-1', name: 'Maria', role: 'member' })
-  roomStore.addPlayer({ id: 'mock-2', name: 'João', role: 'member' })
-  roomStore.addPlayer({ id: 'mock-3', name: 'Ana', role: 'observer' })
-}
-
-// Se a sala não tem outros jogadores, adicionar mocks
-if (players.value.length <= 1) {
-  addMockPlayers()
+// Rejoin effect if the user refreshes the page directly on the /room/:id URL
+if (userStore.playerId && userStore.playerName) {
+  // Configs optionality means joining existing room handled by backend
+  joinRoom(roomId.value, {
+    id: userStore.playerId,
+    name: userStore.playerName,
+    role: userStore.playerRole,
+  })
+} else {
+  // Go home to define a name
+  router.push('/')
 }
 
 // Handlers
 function handleStartRound(subject: string) {
-  roomStore.startRound(subject)
+  startRound(roomId.value, subject)
 }
 
 function handleVote(value: string | number) {
   if (currentRound.value?.status !== 'voting') return
-  roomStore.castVote(userStore.playerId, value)
-
-  // Mock: simular votos dos outros jogadores após 500ms
-  setTimeout(() => {
-    const deck = DECKS[deckType.value].values
-    for (const p of players.value) {
-      if (p.id !== userStore.playerId && p.role !== 'observer') {
-        if (!currentRound.value?.votes[p.id]) {
-          const randomValue = deck[Math.floor(Math.random() * (deck.length - 1))]
-          if (randomValue !== undefined) {
-            roomStore.castVote(p.id, randomValue)
-          }
-        }
-      }
-    }
-  }, 800)
+  castVote(roomId.value, userStore.playerId, value)
 }
 
 function handleReveal() {
-  roomStore.revealVotes()
+  revealVotes(roomId.value)
 }
 
 function handleNewRound() {
@@ -105,6 +93,7 @@ function handleNewRound() {
 }
 
 function handleLeave() {
+  disconnect()
   roomStore.leaveRoom()
   userStore.clearPlayer()
   router.push({ name: 'home' })

@@ -11,9 +11,20 @@ describe('Room Store', () => {
   const adminPlayer: Player = { id: 'p1', name: 'Admin', role: 'admin' }
   const roomConfig: RoomConfig = { deckType: 'fibonacci', autoReveal: false }
 
-  it('creates a room with initial state', () => {
+  it('syncs room state coming from server', () => {
     const store = useRoomStore()
-    store.createRoom('room-123', adminPlayer, roomConfig)
+
+    // Server payload
+    const serverRoom = {
+      id: 'room-123',
+      adminId: 'p1',
+      config: roomConfig,
+      players: [adminPlayer],
+      rounds: [],
+      currentRoundIndex: -1,
+    }
+
+    store.syncRoom(serverRoom)
 
     expect(store.currentRoom).toBeDefined()
     expect(store.currentRoom!.id).toBe('room-123')
@@ -23,42 +34,42 @@ describe('Room Store', () => {
     expect(store.currentRoom!.players[0]!.name).toBe('Admin')
   })
 
-  it('starts a new round and maps it correctly to currentRound', () => {
+  it('computes currentRound properly', () => {
     const store = useRoomStore()
-    store.createRoom('r1', adminPlayer, roomConfig)
-    store.startRound('Refactor backend')
+
+    expect(store.currentRound).toBeNull()
+
+    // Simulate server round start
+    store.syncRoom({
+      id: 'room-123',
+      adminId: 'p1',
+      config: roomConfig,
+      players: [adminPlayer],
+      rounds: [{ id: 'rnd-1', subject: 'Login bug', status: 'voting', votes: {} }],
+      currentRoundIndex: 0,
+    })
 
     expect(store.currentRound).toBeDefined()
-    expect(store.currentRound?.subject).toBe('Refactor backend')
+    expect(store.currentRound?.subject).toBe('Login bug')
     expect(store.currentRound?.status).toBe('voting')
-    expect(store.currentRound?.votes).toEqual({})
   })
 
-  it('casts a vote and reveals', () => {
+  it('leaves room effectively', () => {
     const store = useRoomStore()
-    store.createRoom('r1', adminPlayer, roomConfig)
-    store.startRound('Vote check')
 
-    // cast vote
-    store.castVote('p1', 5)
-    expect(store.currentRound?.votes['p1']).toBe(5)
+    store.syncRoom({
+      id: 'r1',
+      adminId: 'p1',
+      config: roomConfig,
+      players: [adminPlayer],
+      rounds: [],
+      currentRoundIndex: -1,
+    })
 
-    // reveal
-    store.revealVotes()
-    expect(store.currentRound?.status).toBe('revealed')
-  })
+    expect(store.isInRoom).toBe(true)
 
-  it('adds and removes players correctly', () => {
-    const store = useRoomStore()
-    store.createRoom('r1', adminPlayer, roomConfig)
-
-    const bob: Player = { id: 'p2', name: 'Bob', role: 'member' }
-    store.addPlayer(bob)
-
-    expect(store.currentRoom?.players).toHaveLength(2)
-    expect(store.players).toHaveLength(2)
-
-    store.removePlayer('p2')
-    expect(store.currentRoom?.players).toHaveLength(1)
+    store.leaveRoom()
+    expect(store.isInRoom).toBe(false)
+    expect(store.currentRoom).toBeNull()
   })
 })
