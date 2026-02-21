@@ -21,7 +21,7 @@ Documentação de acompanhamento do projeto. Cada fase concluída é registrada 
 
 ### Estrutura de Pastas
 
-```
+```text
 src/
 ├── assets/          → CSS global e design tokens
 ├── components/      → Componentes reutilizáveis (BaseButton, BaseCard…)
@@ -36,7 +36,7 @@ src/
 └── views/           → Páginas (HomeView, RoomView, HistoryView)
 ```
 
-### Conceitos Praticados
+### Conceitos Praticados — Fase 1
 
 #### Vite — Por que não Webpack?
 
@@ -44,18 +44,28 @@ Vite usa ESModules nativos do browser em dev, eliminando o bundling durante dese
 
 #### Vue Router — Lazy Loading
 
-As rotas de `/room/:id` e `/history` usam **dynamic import** para carregar os componentes apenas quando acessados:
+**Todas** as rotas usam **dynamic import** para carregar os componentes apenas quando acessados:
 
 ```ts
 // src/router/index.ts
 {
+  path: '/',
+  name: 'home',
+  component: () => import('../views/HomeView.vue'), // lazy loaded
+},
+{
   path: '/room/:id',
   name: 'room',
   component: () => import('../features/room/RoomView.vue'), // lazy loaded
+},
+{
+  path: '/history',
+  name: 'history',
+  component: () => import('../features/history/HistoryView.vue'), // lazy loaded
 }
 ```
 
-**Benefício:** O bundle inicial fica menor, melhorando o tempo de carregamento.
+**Benefício:** O bundle inicial fica menor, melhorando o tempo de carregamento. Nenhuma view é importada estaticamente.
 
 #### Pinia — Setup Global
 
@@ -69,7 +79,7 @@ app.use(createPinia())
 
 Diferente do Vuex, o Pinia não precisa de `mutations` — ele usa composables nativos com `ref`, `computed` e funções regulares.
 
-### Verificação
+### Verificação — Fase 1
 
 - ✅ `npm run dev` — app abre sem erros
 - ✅ `npm run lint` — sem warnings
@@ -81,7 +91,7 @@ Diferente do Vuex, o Pinia não precisa de `mutations` — ele usa composables n
 
 **Objetivo:** Criar o sistema de design visual e os componentes atômicos reutilizáveis.
 
-### Arquivos Criados
+### Arquivos Criados — Fase 2
 
 | Arquivo                         | Descrição                                               |
 | ------------------------------- | ------------------------------------------------------- |
@@ -93,7 +103,7 @@ Diferente do Vuex, o Pinia não precisa de `mutations` — ele usa composables n
 | `src/components/BaseModal.vue`  | Modal com Teleport e transições                         |
 | `src/layouts/DefaultLayout.vue` | Layout principal (Navbar + RouterView animado)          |
 
-### Conceitos Praticados
+### Conceitos Praticados — Fase 2
 
 #### CSS Custom Properties — Design Tokens
 
@@ -269,7 +279,7 @@ export default { inheritAttrs: false }
 | `inheritAttrs` + `$attrs`                 | BaseInput                           |
 | `<RouterView>` scoped slot                | DefaultLayout                       |
 
-### Verificação
+### Verificação — Fase 2
 
 - ✅ `npm run lint` — sem warnings
 - ✅ `npm run type-check` — sem erros de tipo
@@ -281,16 +291,16 @@ export default { inheritAttrs: false }
 
 **Objetivo:** Implementar formulários de criação/entrada em sala com validação, roles de usuário e persistência de estado.
 
-### Arquivos Criados
+### Arquivos Criados — Fase 3
 
-| Arquivo                          | Descrição                                                   |
-| -------------------------------- | ----------------------------------------------------------- |
-| `src/types/index.ts`             | Tipos TypeScript do domínio (Player, Room, Round, DeckType) |
-| `src/stores/user.ts`             | Store do jogador com persistência via localStorage          |
-| `src/stores/room.ts`             | Store da sala com state machine completa                    |
-| `src/composables/useRoom.ts`     | Composable encapsulando lógica de criação/entrada           |
-| `src/views/HomeView.vue`         | Tela inicial com forms de criar/entrar na sala              |
-| `src/features/room/RoomView.vue` | Tela da sala com info do jogador e badges                   |
+| Arquivo                          | Descrição                                                    |
+| -------------------------------- | ------------------------------------------------------------ |
+| `src/types/index.ts`             | Tipos TypeScript do domínio (Player, Room, Round, DeckType)  |
+| `src/stores/user.ts`             | Store do jogador com persistência via localStorage           |
+| `src/stores/room.ts`             | Store da sala — sincroniza estado vindo do servidor          |
+| `src/composables/useRoom.ts`     | Composable encapsulando lógica de criação/entrada via Socket |
+| `src/views/HomeView.vue`         | Tela inicial com forms de criar/entrar na sala               |
+| `src/features/room/RoomView.vue` | Tela da sala com info do jogador e badges                    |
 
 ### Dependências Adicionadas
 
@@ -302,7 +312,7 @@ export default { inheritAttrs: false }
 | `uuid`                        | Geração de IDs únicos                         |
 | `pinia-plugin-persistedstate` | Salvar stores automaticamente no localStorage |
 
-### Conceitos Praticados
+### Conceitos Praticados — Fase 3
 
 #### Composables — Lógica Reutilizável Fora dos Componentes
 
@@ -313,17 +323,23 @@ Composables são funções que usam a Composition API (`ref`, `computed`, `watch
 export function useRoom() {
   const router = useRouter()
   const userStore = useUserStore()
+  const { joinRoom: socketJoin } = useSocket()
 
   function createRoom(playerName: string, deckType: DeckType, autoReveal: boolean) {
     const roomId = uuidv4().substring(0, 8)
+    const playerId = uuidv4()
+    const config: RoomConfig = { deckType, autoReveal }
+
     userStore.setPlayer(playerName, playerId, 'admin')
-    roomStore.createRoom(roomId, { id: playerId, name: playerName, role: 'admin' }, config)
+    socketJoin(roomId, { id: playerId, name: playerName, role: 'admin' }, config)
     router.push({ name: 'room', params: { id: roomId } })
   }
 
   return { createRoom, joinRoom }
 }
 ```
+
+**Arquitetura Server-Driven:** O composable não cria a sala localmente — ele emite um evento Socket.IO (`join_room`) e o servidor responde com o estado completo via `room_state_updated`. A store `room.ts` apenas sincroniza esse estado com `syncRoom()`.
 
 **Regra de ouro:** Se uma lógica é usada em mais de um componente, ela vira composable. Se é específica de um componente, fica no próprio componente.
 
@@ -427,7 +443,7 @@ const roomId = route.params.id as string
 | Radio buttons customizados    | `HomeView.vue` (deck + role selection) |
 | Toggle switch CSS             | `HomeView.vue` (auto-reveal)           |
 
-### Verificação
+### Verificação — Fase 3
 
 - ✅ `npm run lint` + `npm run type-check` — sem erros
 - ✅ Criar sala → navega para `/room/:id` com badge de Admin
@@ -439,19 +455,20 @@ const roomId = route.params.id as string
 
 **Objetivo:** Construir a experiência completa de votação: cartas animadas, lista de jogadores, revelação de votos com estatísticas e celebrações.
 
-### Arquivos Criados
+### Arquivos Criados — Fase 4
 
 | Arquivo                               | Descrição                                           |
 | ------------------------------------- | --------------------------------------------------- |
 | `src/features/room/SubjectForm.vue`   | Formulário para o admin definir o subject da rodada |
 | `src/features/room/RoundHeader.vue`   | Header com rodada atual, subject e status           |
 | `src/features/room/PokerCard.vue`     | Carta de poker com flip 3D e estados visuais        |
+| `src/features/room/PokerTable.vue`    | Mesa oval com posicionamento radial dos jogadores   |
 | `src/features/room/VotingArea.vue`    | Grid de cartas dinâmica baseada no baralho          |
 | `src/features/room/PlayerList.vue`    | Lista de jogadores + seção de espectadores          |
 | `src/features/room/VoteReveal.vue`    | Estatísticas, distribuição e confetti               |
 | `src/features/room/RoundControls.vue` | Controles de admin (revelar / nova rodada)          |
 
-### Conceitos Praticados
+### Conceitos Praticados — Fase 4
 
 #### Animação CSS 3D — Flip de Carta
 
@@ -499,13 +516,21 @@ Diferente do `<Transition>` (um elemento), o `<TransitionGroup>` anima **múltip
 
 #### Composição de Componentes — O RoomView
 
-O `RoomView` não tem lógica visual própria — ele orquestra 7 componentes filhos usando `v-if` baseado no estado:
+O `RoomView` não tem lógica visual própria — ele orquestra **8 componentes filhos** usando `v-if` baseado no estado:
 
 ```vue
 <!-- Admin: Subject Form (quando não há rodada ou após revelar) -->
 <SubjectForm
   v-if="isAdmin && (!currentRound || currentRound.status === 'revealed')"
   @submit="handleStartRound"
+/>
+
+<!-- Mesa central com posicionamento radial -->
+<PokerTable
+  v-if="currentRound"
+  :players="players"
+  :votes="currentRound.votes"
+  :status="currentRound.status"
 />
 
 <!-- Cartas de votação (apenas durante votação e para jogadores) -->
@@ -535,7 +560,7 @@ O `watch` observa quando todos votaram e dispara a revelação automática:
 ```ts
 watch(allActiveVoted, (allVoted) => {
   if (allVoted && autoReveal.value && currentRound.value?.status === 'voting') {
-    roomStore.revealVotes()
+    revealVotes(roomId.value) // emite via Socket.IO
   }
 })
 ```
@@ -614,8 +639,9 @@ O `position: sticky` no sidebar mantém a lista de jogadores visível durante sc
 | Conceito                         | Onde                                 |
 | -------------------------------- | ------------------------------------ |
 | CSS 3D Transform (`preserve-3d`) | `PokerCard.vue`                      |
-| `<TransitionGroup>`              | `PlayerList.vue`                     |
-| Composição de componentes        | `RoomView.vue` orquestrando 7 filhos |
+| `<TransitionGroup>`              | `PlayerList.vue`, `PokerTable.vue`   |
+| Posicionamento radial (Math)     | `PokerTable.vue`                     |
+| Composição de componentes        | `RoomView.vue` orquestrando 8 filhos |
 | `v-if` com state machine         | `RoomView.vue`                       |
 | `watch` com side effects         | `RoomView.vue` (auto-reveal)         |
 | Computed chains                  | `VoteReveal.vue` (stats)             |
@@ -626,9 +652,61 @@ O `position: sticky` no sidebar mantém a lista de jogadores visível durante sc
 | Optional chaining (`?.`)         | `RoomView.vue`                       |
 | `defineEmits` tipado             | Todos os componentes de room         |
 
-### Verificação
+### Verificação — Fase 4
 
 - ✅ `npm run lint` + `npm run type-check` — sem erros
 - ✅ Fluxo completo: Subject → Votação → Revelar → Estatísticas
 - ✅ Confetti dispara ao atingir consenso
 - ✅ Layout responsivo com sidebar sticky
+
+---
+
+## Fase 5 — Otimização & Qualidade
+
+**Objetivo:** Refinar a aplicação para máxima performance, acessibilidade e robustez técnica.
+
+### Conceitos Praticados
+
+#### Performance — `v-memo` & `shallowRef`
+
+Para evitar re-renders desnecessários em listas de alta frequência (como a lista de jogadores em tempo real):
+
+```vue
+<!-- PlayerList.vue -->
+<li
+  v-for="player in activePlayers"
+  :key="player.id"
+  v-memo="[player.name, player.role, status, hasVoted(player.id), getVote(player.id)]"
+>
+  ...
+</li>
+```
+
+**Nota:** O array de dependências do `v-memo` inclui **todos** os valores reativos que afetam a renderização de cada item — nome, role, status da rodada, se votou e o valor do voto. Se nenhum desses mudar, o Vue pula completamente o re-render daquele `<li>`.
+
+E para estados complexos que não precisam de reatividade profunda (deep tracking), usamos `shallowRef`:
+
+```ts
+// src/stores/room.ts
+const currentRoom = shallowRef<Room | null>(null)
+```
+
+**Resultado:** Redução drástica no uso de CPU durante atualizações de estado intensas.
+
+#### Acessibilidade — WAI-ARIA
+
+Implementação de labels e estados para tecnologias assistivas:
+
+- `aria-busy` e `aria-disabled` em botões de loading.
+- `aria-describedby` para vincular mensagens de erro a inputs.
+- `aria-pressed` para Toggle Buttons (cartas selecionadas).
+
+#### Qualidade — Refatoração de Testes (Vitest)
+
+Substituição de tipos `any` por tipagem forte em mocks de Socket.IO e melhoria na configuração do Vitest para isolar testes unitários de E2E.
+
+### Verificação
+
+- ✅ `npm run test:unit` — 100% de sucesso com mocks tipados.
+- ✅ Lighthouse / Accessibility audit — Menus e botões totalmente semânticos.
+- ✅ Bundle analysis — Redução no tamanho inicial via Lazy Loading generalizado.
