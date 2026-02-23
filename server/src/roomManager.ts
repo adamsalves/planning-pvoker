@@ -13,6 +13,8 @@ export class RoomManager {
       adminId: adminPlayer.id,
       config,
       players: [adminPlayer],
+      subjects: [],
+      phase: 'setup',
       rounds: [],
       currentRoundIndex: -1,
     }
@@ -51,22 +53,74 @@ export class RoomManager {
     return room
   }
 
-  public startRound(roomId: string, subject: string): Room | null {
-    const room = this.rooms.get(roomId)
-    if (!room) return null
+  // --- Subject Backlog Management (setup phase) ---
 
+  public addSubjects(roomId: string, subjects: string[]): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room || room.phase !== 'setup') return null
+
+    room.subjects.push(...subjects)
+    return room
+  }
+
+  public removeSubject(roomId: string, index: number): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room || room.phase !== 'setup') return null
+    if (index < 0 || index >= room.subjects.length) return null
+
+    room.subjects.splice(index, 1)
+    return room
+  }
+
+  // --- Session Flow ---
+
+  public startSession(roomId: string): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room || room.phase !== 'setup') return null
+    if (room.subjects.length === 0) return null
+
+    // Create round for the first subject
+    const firstRound: Round = {
+      id: crypto.randomUUID(),
+      subject: room.subjects[0],
+      status: 'voting',
+      votes: {},
+    }
+
+    room.phase = 'voting'
+    room.rounds = [firstRound]
+    room.currentRoundIndex = 0
+
+    return room
+  }
+
+  public nextRound(roomId: string): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room || room.phase !== 'voting') return null
+
+    const nextSubjectIndex = room.currentRoundIndex + 1
+
+    // If there are no more subjects, complete the session
+    if (nextSubjectIndex >= room.subjects.length) {
+      room.phase = 'completed'
+      return room
+    }
+
+    // Create round for the next subject
     const newRound: Round = {
       id: crypto.randomUUID(),
-      subject,
+      subject: room.subjects[nextSubjectIndex],
       status: 'voting',
       votes: {},
     }
 
     room.rounds.push(newRound)
-    room.currentRoundIndex = room.rounds.length - 1
+    room.currentRoundIndex = nextSubjectIndex
 
     return room
   }
+
+  // --- Voting ---
 
   public castVote(roomId: string, playerId: string, value: string | number): Room | null {
     const room = this.rooms.get(roomId)
@@ -95,6 +149,20 @@ export class RoomManager {
 
     const round = room.rounds[room.currentRoundIndex]
     round.status = 'revealed'
+
+    return room
+  }
+
+  // --- Reset for new session ---
+
+  public resetSession(roomId: string): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room) return null
+
+    room.subjects = []
+    room.phase = 'setup'
+    room.rounds = []
+    room.currentRoundIndex = -1
 
     return room
   }

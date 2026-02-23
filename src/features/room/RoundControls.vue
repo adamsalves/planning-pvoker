@@ -4,13 +4,15 @@ import BaseButton from '@/components/BaseButton.vue'
 interface Props {
   status: 'waiting' | 'voting' | 'revealed'
   allVoted: boolean
+  isLastSubject: boolean
 }
 
 defineProps<Props>()
 
 const emit = defineEmits<{
   reveal: []
-  newRound: []
+  nextRound: []
+  finish: []
 }>()
 </script>
 
@@ -28,15 +30,25 @@ const emit = defineEmits<{
       <span v-if="allVoted" class="hint">(todos votaram!)</span>
     </BaseButton>
 
-    <!-- Após revelar: botão de nova rodada -->
+    <!-- Após revelar: botão de próximo ou finalizar -->
     <BaseButton
-      v-if="status === 'revealed'"
+      v-if="status === 'revealed' && !isLastSubject"
       variant="secondary"
       size="lg"
       block
-      @click="emit('newRound')"
+      @click="emit('nextRound')"
     >
-      🔄 Nova Rodada
+      ➡️ Próximo Subject
+    </BaseButton>
+
+    <BaseButton
+      v-if="status === 'revealed' && isLastSubject"
+      variant="primary"
+      size="lg"
+      block
+      @click="emit('finish')"
+    >
+      ✅ Finalizar Sessão
     </BaseButton>
   </div>
 </template>

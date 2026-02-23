@@ -2,6 +2,7 @@
 
 export type Role = 'admin' | 'member' | 'observer'
 export type DeckType = 'fibonacci' | 'tshirt' | 'sequential'
+export type RoomPhase = 'setup' | 'voting' | 'completed'
 
 export interface Player {
   id: string
@@ -26,6 +27,8 @@ export interface Room {
   adminId: string
   config: RoomConfig
   players: Player[]
+  subjects: string[]
+  phase: RoomPhase
   rounds: Round[]
   currentRoundIndex: number
 }

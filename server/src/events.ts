@@ -52,12 +52,34 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       },
     )
 
-    // ROUND MANAGEMENT
-    socket.on('start_round', (data: { roomId: string; subject: string }) => {
-      const room = roomManager.startRound(data.roomId, data.subject)
+    // SUBJECT BACKLOG MANAGEMENT (setup phase)
+    socket.on('add_subjects', (data: { roomId: string; subjects: string[] }) => {
+      const room = roomManager.addSubjects(data.roomId, data.subjects)
       if (room) notifyRoomUpdate(data.roomId)
     })
 
+    socket.on('remove_subject', (data: { roomId: string; index: number }) => {
+      const room = roomManager.removeSubject(data.roomId, data.index)
+      if (room) notifyRoomUpdate(data.roomId)
+    })
+
+    // SESSION FLOW
+    socket.on('start_session', (data: { roomId: string }) => {
+      const room = roomManager.startSession(data.roomId)
+      if (room) notifyRoomUpdate(data.roomId)
+    })
+
+    socket.on('next_round', (data: { roomId: string }) => {
+      const room = roomManager.nextRound(data.roomId)
+      if (room) notifyRoomUpdate(data.roomId)
+    })
+
+    socket.on('reset_session', (data: { roomId: string }) => {
+      const room = roomManager.resetSession(data.roomId)
+      if (room) notifyRoomUpdate(data.roomId)
+    })
+
+    // VOTING
     socket.on('cast_vote', (data: { roomId: string; playerId: string; value: string | number }) => {
       const room = roomManager.castVote(data.roomId, data.playerId, data.value)
       if (room) notifyRoomUpdate(data.roomId)

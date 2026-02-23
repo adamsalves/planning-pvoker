@@ -13,6 +13,7 @@ import PlayerList from './PlayerList.vue'
 import PokerTable from './PokerTable.vue'
 import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
+import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
 import { useHistoryStore } from '@/stores/history'
 
@@ -21,7 +22,17 @@ const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
 const historyStore = useHistoryStore()
-const { startRound, castVote, revealVotes, disconnect, joinRoom } = useSocket()
+const {
+  addSubjects,
+  removeSubject,
+  startSession,
+  nextRound,
+  resetSession,
+  castVote,
+  revealVotes,
+  disconnect,
+  joinRoom,
+} = useSocket()
 
 // Type-safe route param
 const roomId = computed(() => {
@@ -75,11 +86,22 @@ if (userStore.playerId && userStore.playerName) {
   router.push('/')
 }
 
-// Handlers
-function handleStartRound(subject: string) {
-  startRound(roomId.value, subject)
+// --- Handlers ---
+
+// Setup phase: backlog management
+function handleAddSubject(subject: string) {
+  addSubjects(roomId.value, [subject])
 }
 
+function handleRemoveSubject(index: number) {
+  removeSubject(roomId.value, index)
+}
+
+function handleStartSession() {
+  startSession(roomId.value)
+}
+
+// Voting phase
 function handleVote(value: string | number) {
   if (currentRound.value?.status !== 'voting') return
   castVote(roomId.value, userStore.playerId, value)
@@ -89,9 +111,17 @@ function handleReveal() {
   revealVotes(roomId.value)
 }
 
-function handleNewRound() {
-  // Reseta o estado para permitir nova rodada
-  // O SubjectForm aparecerá automaticamente
+function handleNextRound() {
+  nextRound(roomId.value)
+}
+
+function handleFinishSession() {
+  nextRound(roomId.value) // Advances past last, which sets phase to 'completed'
+}
+
+// Completed / Leave
+function handleNewSession() {
+  resetSession(roomId.value)
 }
 
 function handleLeave() {
@@ -127,6 +157,15 @@ function handleLeave() {
                 {{ isAdmin ? '👑 Admin' : isObserver ? '👁️ Espectador' : '🃏 Jogador' }}
               </span>
               <span class="badge badge-deck">{{ deckLabel }}</span>
+              <span class="badge badge-phase">
+                {{
+                  roomStore.isSetupPhase
+                    ? '📝 Preparação'
+                    : roomStore.isVotingPhase
+                      ? '🗳️ Votação'
+                      : '✅ Concluída'
+                }}
+              </span>
             </div>
           </div>
           <BaseButton variant="ghost" size="sm" @click="handleLeave"> Sair da Sala </BaseButton>
@@ -134,24 +173,62 @@ function handleLeave() {
       </template>
     </BaseCard>
 
-    <!-- Main Content: Two Column Layout -->
-    <div class="room-content">
-      <!-- Left: Voting Area -->
+    <!-- ======================== -->
+    <!-- PHASE: SETUP             -->
+    <!-- ======================== -->
+    <div v-if="roomStore.isSetupPhase" class="room-content">
       <div class="voting-panel">
-        <!-- Admin: Subject Form (quando não há rodada ativa ou após revelar) -->
-        <BaseCard
-          v-if="isAdmin && (!currentRound || currentRound.status === 'revealed')"
-          class="section-card"
-        >
-          <SubjectForm @submit="handleStartRound" />
+        <BaseCard class="section-card" title="📋 Planejamento da Sessão">
+          <template v-if="isAdmin">
+            <SubjectForm
+              :subjects="roomStore.subjects"
+              :player-count="players.length"
+              @add="handleAddSubject"
+              @remove="handleRemoveSubject"
+              @start="handleStartSession"
+            />
+          </template>
+          <template v-else>
+            <div class="waiting-message">
+              <p class="waiting-icon">📝</p>
+              <p>O Scrum Master está preparando os subjects para votação...</p>
+              <div v-if="roomStore.subjects.length > 0" class="preview-backlog">
+                <p class="backlog-count">
+                  {{ roomStore.subjects.length }}
+                  {{
+                    roomStore.subjects.length === 1 ? 'subject cadastrado' : 'subjects cadastrados'
+                  }}
+                </p>
+                <ul class="preview-list">
+                  <li v-for="(item, index) in roomStore.subjects" :key="index" class="preview-item">
+                    <span class="preview-index">{{ index + 1 }}.</span>
+                    {{ item }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </template>
         </BaseCard>
+      </div>
 
-        <!-- Round Header (quando há rodada ativa) -->
+      <div class="sidebar-panel">
+        <BaseCard title="Participantes" class="section-card">
+          <PlayerList :players="players" :votes="{}" :status="'waiting'" />
+        </BaseCard>
+      </div>
+    </div>
+
+    <!-- ======================== -->
+    <!-- PHASE: VOTING            -->
+    <!-- ======================== -->
+    <div v-if="roomStore.isVotingPhase" class="room-content">
+      <div class="voting-panel">
+        <!-- Round Header with progress -->
         <RoundHeader
           v-if="currentRound"
           :subject="currentRound.subject"
-          :round-number="roomStore.currentRoom!.currentRoundIndex + 1"
-          :total-rounds="roomStore.currentRoom!.rounds.length"
+          :round-number="roomStore.currentSubjectIndex"
+          :total-subjects="roomStore.totalSubjects"
           :status="currentRound.status"
         />
 
@@ -187,20 +264,21 @@ function handleLeave() {
           v-if="isAdmin && currentRound"
           :status="currentRound.status"
           :all-voted="allActiveVoted"
+          :is-last-subject="roomStore.isLastSubject"
           @reveal="handleReveal"
-          @new-round="handleNewRound"
+          @next-round="handleNextRound"
+          @finish="handleFinishSession"
         />
 
-        <!-- Empty state: sem rodada e não é admin -->
+        <!-- Waiting: não é admin e sem rodada -->
         <BaseCard v-if="!currentRound && !isAdmin" class="section-card">
           <div class="waiting-message">
             <p class="waiting-icon">⏳</p>
-            <p>Aguardando o Scrum Master iniciar uma rodada...</p>
+            <p>Aguardando o Scrum Master iniciar a votação...</p>
           </div>
         </BaseCard>
       </div>
 
-      <!-- Right: Player List -->
       <div class="sidebar-panel">
         <BaseCard title="Participantes" class="section-card">
           <PlayerList
@@ -210,6 +288,18 @@ function handleLeave() {
           />
         </BaseCard>
       </div>
+    </div>
+
+    <!-- ======================== -->
+    <!-- PHASE: COMPLETED         -->
+    <!-- ======================== -->
+    <div v-if="roomStore.isCompleted" class="room-content room-content--full">
+      <SessionSummary
+        :rounds="roomStore.currentRoom?.rounds ?? []"
+        :player-count="activePlayerCount"
+        @new-session="handleNewSession"
+        @leave="handleLeave"
+      />
     </div>
   </div>
 </template>
@@ -247,6 +337,7 @@ function handleLeave() {
   display: flex;
   gap: var(--space-2);
   margin-top: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .badge {
@@ -276,12 +367,24 @@ function handleLeave() {
   color: var(--c-text-mute);
 }
 
+.badge-phase {
+  background: var(--c-bg-mute);
+  color: var(--c-text-mute);
+}
+
 /* Two Column Layout */
 .room-content {
   display: grid;
   grid-template-columns: 1fr 300px;
   gap: var(--space-5);
   align-items: start;
+}
+
+.room-content--full {
+  grid-template-columns: 1fr;
+  max-width: 700px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .voting-panel {
@@ -315,6 +418,41 @@ function handleLeave() {
 .waiting-icon {
   font-size: 2rem;
   margin-bottom: var(--space-2);
+}
+
+/* Preview backlog (non-admin setup view) */
+.preview-backlog {
+  margin-top: var(--space-4);
+  text-align: left;
+}
+
+.backlog-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--c-primary);
+  margin-bottom: var(--space-2);
+}
+
+.preview-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.preview-item {
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--c-bg-mute);
+  border-radius: var(--radius-sm);
+}
+
+.preview-index {
+  font-weight: 600;
+  color: var(--c-primary);
+  margin-right: var(--space-1);
 }
 
 /* Responsive */

@@ -14,12 +14,13 @@ describe('Room Store', () => {
   it('syncs room state coming from server', () => {
     const store = useRoomStore()
 
-    // Server payload
     const serverRoom = {
       id: 'room-123',
       adminId: 'p1',
       config: roomConfig,
       players: [adminPlayer],
+      subjects: ['Login', 'Signup'],
+      phase: 'setup' as const,
       rounds: [],
       currentRoundIndex: -1,
     }
@@ -32,6 +33,8 @@ describe('Room Store', () => {
     expect(store.currentRoom!.config.deckType).toBe('fibonacci')
     expect(store.currentRoom!.players).toHaveLength(1)
     expect(store.currentRoom!.players[0]!.name).toBe('Admin')
+    expect(store.currentRoom!.subjects).toEqual(['Login', 'Signup'])
+    expect(store.currentRoom!.phase).toBe('setup')
   })
 
   it('computes currentRound properly', () => {
@@ -39,12 +42,13 @@ describe('Room Store', () => {
 
     expect(store.currentRound).toBeNull()
 
-    // Simulate server round start
     store.syncRoom({
       id: 'room-123',
       adminId: 'p1',
       config: roomConfig,
       players: [adminPlayer],
+      subjects: ['Login bug'],
+      phase: 'voting' as const,
       rounds: [{ id: 'rnd-1', subject: 'Login bug', status: 'voting', votes: {} }],
       currentRoundIndex: 0,
     })
@@ -52,6 +56,48 @@ describe('Room Store', () => {
     expect(store.currentRound).toBeDefined()
     expect(store.currentRound?.subject).toBe('Login bug')
     expect(store.currentRound?.status).toBe('voting')
+  })
+
+  it('computes phase-related properties', () => {
+    const store = useRoomStore()
+
+    store.syncRoom({
+      id: 'r1',
+      adminId: 'p1',
+      config: roomConfig,
+      players: [adminPlayer],
+      subjects: ['A', 'B', 'C'],
+      phase: 'setup' as const,
+      rounds: [],
+      currentRoundIndex: -1,
+    })
+
+    expect(store.isSetupPhase).toBe(true)
+    expect(store.isVotingPhase).toBe(false)
+    expect(store.isCompleted).toBe(false)
+    expect(store.totalSubjects).toBe(3)
+    expect(store.subjects).toEqual(['A', 'B', 'C'])
+  })
+
+  it('computes isLastSubject correctly', () => {
+    const store = useRoomStore()
+
+    store.syncRoom({
+      id: 'r1',
+      adminId: 'p1',
+      config: roomConfig,
+      players: [adminPlayer],
+      subjects: ['A', 'B'],
+      phase: 'voting' as const,
+      rounds: [
+        { id: 'rnd-1', subject: 'A', status: 'revealed', votes: {} },
+        { id: 'rnd-2', subject: 'B', status: 'voting', votes: {} },
+      ],
+      currentRoundIndex: 1,
+    })
+
+    expect(store.isLastSubject).toBe(true)
+    expect(store.currentSubjectIndex).toBe(2)
   })
 
   it('leaves room effectively', () => {
@@ -62,6 +108,8 @@ describe('Room Store', () => {
       adminId: 'p1',
       config: roomConfig,
       players: [adminPlayer],
+      subjects: [],
+      phase: 'setup' as const,
       rounds: [],
       currentRoundIndex: -1,
     })

@@ -38,17 +38,38 @@ export function useSocket() {
     socket?.emit('join_room', { roomId, player, config }, (response: { error?: string }) => {
       if (response.error) {
         console.error('Failed to join room:', response.error)
-        // could throw/handle navigation back home here
       }
     })
   }
 
-  function castVote(roomId: string, playerId: string, value: string | number) {
-    socket?.emit('cast_vote', { roomId, playerId, value })
+  // --- Subject Backlog (setup phase) ---
+
+  function addSubjects(roomId: string, subjects: string[]) {
+    socket?.emit('add_subjects', { roomId, subjects })
   }
 
-  function startRound(roomId: string, subject: string) {
-    socket?.emit('start_round', { roomId, subject })
+  function removeSubject(roomId: string, index: number) {
+    socket?.emit('remove_subject', { roomId, index })
+  }
+
+  // --- Session Flow ---
+
+  function startSession(roomId: string) {
+    socket?.emit('start_session', { roomId })
+  }
+
+  function nextRound(roomId: string) {
+    socket?.emit('next_round', { roomId })
+  }
+
+  function resetSession(roomId: string) {
+    socket?.emit('reset_session', { roomId })
+  }
+
+  // --- Voting ---
+
+  function castVote(roomId: string, playerId: string, value: string | number) {
+    socket?.emit('cast_vote', { roomId, playerId, value })
   }
 
   function revealVotes(roomId: string) {
@@ -66,8 +87,12 @@ export function useSocket() {
     isConnected,
     connect,
     joinRoom,
+    addSubjects,
+    removeSubject,
+    startSession,
+    nextRound,
+    resetSession,
     castVote,
-    startRound,
     revealVotes,
     disconnect,
   }

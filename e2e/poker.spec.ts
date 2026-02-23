@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Planning Poker E2E Flow', () => {
-  test('Completes a full planning poker round with multiple users', async ({ browser }) => {
+  test('Completes a full planning poker session with multiple users', async ({ browser }) => {
     // 1. Create Admin Context
     const adminContext = await browser.newContext()
     const adminPage = await adminContext.newPage()
@@ -25,6 +25,14 @@ test.describe('Planning Poker E2E Flow', () => {
     const roomId = match?.[1] || ''
     expect(roomId).not.toBe('')
 
+    // -- ADMIN ADDS SUBJECTS (setup phase) --
+    await adminPage.fill('input[placeholder="Ex: Implementar endpoint de login"]', 'Fix CSS bugs')
+    await adminPage.click('button:has-text("➕ Adicionar")')
+
+    // Verify subject was added to backlog
+    await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
+    await expect(adminPage.locator('text=Backlog (1 subjects)')).toBeVisible()
+
     // -- MEMBER JOINS ROOM --
     await memberPage.goto('/')
     await memberPage.click('button:has-text("Entrar na Sala")')
@@ -35,18 +43,23 @@ test.describe('Planning Poker E2E Flow', () => {
     // Fill Join Room form
     await memberPage.fill('input[placeholder="Ex: Maria"]', 'Dev 1')
     await memberPage.fill('input[placeholder="Ex: a1b2c3d4"]', roomId)
-    // Role defaults to member, so we just join - force click through transition end if needed
+    // Role defaults to member, so we just join
     await memberPage.click('button:has-text("🔗 Entrar na Sala")', { force: true })
 
     await memberPage.waitForURL(roomUrl)
 
-    // -- ADMIN CREATES ROUND --
-    await adminPage.fill('input[placeholder="Ex: Implementar endpoint de login"]', 'Fix CSS bugs')
-    await adminPage.click('button:has-text("▶️ Iniciar Votação")')
+    // Member should see the subjects in the setup phase
+    await expect(memberPage.locator('text=Fix CSS bugs')).toBeVisible()
 
-    // Both should see the header "Fix CSS bugs"
+    // -- ADMIN STARTS SESSION --
+    await adminPage.click('button:has-text("▶️ Iniciar Sessão de Votação")')
+
+    // Both should see the round header with "Fix CSS bugs"
     await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
     await expect(memberPage.locator('text=Fix CSS bugs')).toBeVisible()
+
+    // Both should see progress "Subject 1/1"
+    await expect(adminPage.locator('text=Subject 1/1')).toBeVisible()
 
     // -- MEMBER VOTES --
     // We assume Fibonacci deck => button for "5"
@@ -67,11 +80,18 @@ test.describe('Planning Poker E2E Flow', () => {
 
     await expect(memberPage.locator('text=Consenso!')).toBeVisible()
 
+    // -- ADMIN FINISHES SESSION (last subject) --
+    await adminPage.click('button:has-text("✅ Finalizar Sessão")')
+
+    // Should see session summary
+    await expect(adminPage.locator('text=Sessão Concluída!')).toBeVisible()
+    await expect(adminPage.locator('text=1 subject votado')).toBeVisible()
+
     // -- ADMIN LEAVES --
     await adminPage.click('text=Sair da Sala')
     await adminPage.waitForURL('/')
 
-    // Check history length
+    // Check history
     await adminPage.click('a:has-text("Histórico")')
     await adminPage.waitForURL('/history')
     await expect(adminPage.locator('text=Sala: ' + roomId)).toBeVisible()

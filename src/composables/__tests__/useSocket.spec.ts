@@ -88,16 +88,40 @@ describe('useSocket', () => {
     })
   })
 
-  it('emits start_round', () => {
-    const { startRound, connect } = useSocket()
+  it('emits start_session', () => {
+    const { startSession, connect } = useSocket()
     connect()
     const mockSocket = (io as Mock).mock.results[0]!.value
 
-    startRound('room-1', 'New Button')
+    startSession('room-1')
 
-    expect(mockSocket.emit).toHaveBeenCalledWith('start_round', {
+    expect(mockSocket.emit).toHaveBeenCalledWith('start_session', {
       roomId: 'room-1',
-      subject: 'New Button',
+    })
+  })
+
+  it('emits next_round', () => {
+    const { nextRound, connect } = useSocket()
+    connect()
+    const mockSocket = (io as Mock).mock.results[0]!.value
+
+    nextRound('room-1')
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('next_round', {
+      roomId: 'room-1',
+    })
+  })
+
+  it('emits add_subjects', () => {
+    const { addSubjects, connect } = useSocket()
+    connect()
+    const mockSocket = (io as Mock).mock.results[0]!.value
+
+    addSubjects('room-1', ['Login', 'Signup'])
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('add_subjects', {
+      roomId: 'room-1',
+      subjects: ['Login', 'Signup'],
     })
   })
 

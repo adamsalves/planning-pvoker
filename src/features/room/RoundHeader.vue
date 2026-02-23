@@ -2,7 +2,7 @@
 interface Props {
   subject: string
   roundNumber: number
-  totalRounds: number
+  totalSubjects: number
   status: 'waiting' | 'voting' | 'revealed'
 }
 
@@ -18,10 +18,18 @@ const statusLabels = {
 <template>
   <div class="round-header">
     <div class="round-info">
-      <span class="round-badge">Rodada {{ roundNumber }}/{{ totalRounds }}</span>
+      <span class="round-badge">Subject {{ roundNumber }}/{{ totalSubjects }}</span>
       <span class="round-status" :style="{ color: statusLabels[status].color }">
         {{ statusLabels[status].text }}
       </span>
+    </div>
+    <div class="progress-wrapper">
+      <div class="progress-bar">
+        <div
+          class="progress-fill"
+          :style="{ width: `${(roundNumber / totalSubjects) * 100}%` }"
+        ></div>
+      </div>
     </div>
     <h3 class="round-subject">{{ subject }}</h3>
   </div>
@@ -55,6 +63,24 @@ const statusLabels = {
 .round-status {
   font-size: var(--text-sm);
   font-weight: 500;
+}
+
+.progress-wrapper {
+  width: 100%;
+}
+
+.progress-bar {
+  height: 4px;
+  background: var(--c-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--c-primary);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-normal);
 }
 
 .round-subject {
