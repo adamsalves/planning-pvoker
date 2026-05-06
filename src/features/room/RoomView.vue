@@ -137,7 +137,6 @@ function handleLeave() {
 
   disconnect()
   roomStore.leaveRoom()
-  userStore.clearPlayer()
   router.push({ name: 'home' })
 }
 </script>

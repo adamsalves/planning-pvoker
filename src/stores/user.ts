@@ -9,6 +9,7 @@ export const useUserStore = defineStore(
     const playerName = ref('')
     const playerId = ref('')
     const playerRole = ref<PlayerRole>('member')
+    const activeRoomId = ref<string | null>(null)
 
     // Actions
     function setPlayer(name: string, id: string, role: PlayerRole) {
@@ -23,12 +24,18 @@ export const useUserStore = defineStore(
       playerRole.value = 'member'
     }
 
+    function setActiveRoom(roomId: string | null) {
+      activeRoomId.value = roomId
+    }
+
     return {
       playerName,
       playerId,
       playerRole,
+      activeRoomId,
       setPlayer,
       clearPlayer,
+      setActiveRoom,
     }
   },
   {

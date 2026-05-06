@@ -1,16 +1,32 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterView } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useRoomStore } from '@/stores/room'
+
+const roomStore = useRoomStore()
+const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
+
+const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
 </script>
 
 <template>
   <div class="layout-wrapper">
     <header class="navbar">
       <div class="navbar-content">
-        <div class="navbar-brand">
+        <RouterLink to="/" class="navbar-brand">
           <span class="logo-icon">🃏</span>
           <h1 class="logo-text">Planning Poker</h1>
-        </div>
+        </RouterLink>
         <nav class="navbar-nav">
+          <RouterLink
+            v-if="showBackToRoom"
+            :to="`/room/${currentRoom?.id}`"
+            class="nav-link nav-link-room"
+          >
+            <span class="room-icon">🎯</span>
+            Voltar à Sala
+          </RouterLink>
           <RouterLink to="/" class="nav-link">Home</RouterLink>
           <RouterLink to="/history" class="nav-link">Histórico</RouterLink>
         </nav>
@@ -61,6 +77,11 @@ import { RouterView } from 'vue-router'
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  text-decoration: none;
+}
+
+.navbar-brand:hover .logo-text {
+  color: var(--c-primary);
 }
 
 .logo-icon {
@@ -95,6 +116,20 @@ import { RouterView } from 'vue-router'
 .nav-link.router-link-active {
   color: var(--c-primary);
   background: var(--c-primary-soft);
+}
+
+.nav-link-room {
+  background: var(--c-primary);
+  color: white;
+}
+
+.nav-link-room:hover {
+  background: var(--c-primary-hover);
+  color: white;
+}
+
+.nav-link-room .room-icon {
+  margin-right: 4px;
 }
 
 .main-content {

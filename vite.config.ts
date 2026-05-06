@@ -1,3 +1,4 @@
+// oxlint-disable-next-line typescript-eslint/triple-slash-reference
 /// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url'
 
