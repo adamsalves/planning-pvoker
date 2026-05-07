@@ -1,8 +1,11 @@
 import { shallowRef, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { Room } from '@/types'
+import { useUserStore } from './user'
 
 export const useRoomStore = defineStore('room', () => {
+  const userStore = useUserStore()
+
   // State from server (Source of Truth)
   const currentRoom = shallowRef<Room | null>(null)
 
@@ -35,9 +38,9 @@ export const useRoomStore = defineStore('room', () => {
   // Apenas sincroniza o estado que vem do servidor
   function syncRoom(serverRoom: Room) {
     currentRoom.value = serverRoom
+    userStore.setActiveRoom(serverRoom.id)
   }
 
-  // O cliente decide sair
   function leaveRoom() {
     currentRoom.value = null
   }
