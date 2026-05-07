@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
@@ -51,6 +51,8 @@ const deckLabel = computed(() => {
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
 const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
+const shareStatus = ref<'idle' | 'copied' | 'error'>('idle')
+let shareFeedbackTimeout: ReturnType<typeof setTimeout> | undefined
 const selectedVote = computed(() => {
   if (!currentRound.value) return null
   return currentRound.value.votes[userStore.playerId] ?? null
@@ -71,6 +73,52 @@ watch(allActiveVoted, (allVoted) => {
   if (allVoted && autoReveal.value && currentRound.value?.status === 'voting') {
     revealVotes(roomId.value)
   }
+})
+
+const inviteUrl = computed(() => {
+  const url = new URL(import.meta.env.BASE_URL, window.location.origin)
+  url.searchParams.set('room', roomId.value)
+  return url.toString()
+})
+
+function setShareStatus(status: 'copied' | 'error') {
+  shareStatus.value = status
+  if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
+  shareFeedbackTimeout = setTimeout(() => {
+    shareStatus.value = 'idle'
+  }, 2500)
+}
+
+async function copyInviteLink() {
+  await navigator.clipboard.writeText(inviteUrl.value)
+  setShareStatus('copied')
+}
+
+async function handleShareRoom() {
+  shareStatus.value = 'idle'
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Planning Poker',
+        text: 'Entre na minha sala de Planning Poker',
+        url: inviteUrl.value,
+      })
+      return
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+    }
+  }
+
+  try {
+    await copyInviteLink()
+  } catch {
+    setShareStatus('error')
+  }
+}
+
+onUnmounted(() => {
+  if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
 })
 
 // Rejoin effect if the user refreshes the page directly on the /room/:id URL
@@ -167,7 +215,23 @@ function handleLeave() {
               </span>
             </div>
           </div>
-          <BaseButton variant="ghost" size="sm" @click="handleLeave"> Sair da Sala </BaseButton>
+          <div class="room-actions">
+            <BaseButton
+              variant="secondary"
+              size="sm"
+              :aria-label="`Compartilhar link da sala ${roomId}`"
+              @click="handleShareRoom"
+            >
+              {{
+                shareStatus === 'copied'
+                  ? 'Link copiado!'
+                  : shareStatus === 'error'
+                    ? 'Não foi possível copiar'
+                    : '🔗 Compartilhar'
+              }}
+            </BaseButton>
+            <BaseButton variant="ghost" size="sm" @click="handleLeave"> Sair da Sala </BaseButton>
+          </div>
         </div>
       </template>
     </BaseCard>
@@ -320,6 +384,14 @@ function handleLeave() {
   gap: var(--space-4);
 }
 
+.room-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 .room-title {
   font-size: var(--text-xl);
   font-weight: 700;
@@ -456,6 +528,15 @@ function handleLeave() {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .room-header {
+    flex-direction: column;
+  }
+
+  .room-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .room-content {
     grid-template-columns: 1fr;
   }

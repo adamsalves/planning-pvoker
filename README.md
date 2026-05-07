@@ -41,6 +41,8 @@ Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com
 
 O repositório é composto de **duas aplicações** que precisam rodar em paralelo.
 
+Para publicação em produção com frontend no Netlify e backend Socket.IO no Render, consulte [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md).
+
 ### Backend (Node.js)
 
 O servidor atua em memória, mantendo salas e conexões. Não há persistência em banco de dados.

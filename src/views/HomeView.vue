@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
@@ -12,6 +13,7 @@ import { DECKS, DECK_TYPES, JOINABLE_ROLES } from '@/types'
 // Tab state: 'create' ou 'join'
 const activeTab = ref<'create' | 'join'>('create')
 
+const route = useRoute()
 const { createRoom, joinRoom } = useRoom()
 
 // --- FORMULÁRIO: Criar Sala ---
@@ -78,6 +80,12 @@ const {
 const [joinPlayerName, joinPlayerNameAttrs] = defineJoinField('playerName')
 const [joinRoomCode, joinRoomCodeAttrs] = defineJoinField('roomCode')
 const [joinRole, joinRoleAttrs] = defineJoinField('role')
+
+const sharedRoomCode = Array.isArray(route.query.room) ? route.query.room[0] : route.query.room
+if (typeof sharedRoomCode === 'string' && sharedRoomCode.trim().length > 0) {
+  activeTab.value = 'join'
+  joinRoomCode.value = sharedRoomCode.trim()
+}
 
 const onJoinRoom = handleJoinSubmit((values) => {
   // values.role já é "member" | "observer" — sem cast!
