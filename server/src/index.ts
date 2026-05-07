@@ -1,19 +1,38 @@
 import express from 'express'
 import http from 'http'
 import { Server } from 'socket.io'
-import cors from 'cors'
+import cors, { CorsOptions } from 'cors'
 import { RoomManager } from './roomManager'
 import { setupSocketEvents } from './events'
 
 const app = express()
-app.use(cors())
+const clientOrigins = (process.env.CLIENT_ORIGIN ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+const allowedOrigins = ['http://localhost:5173', ...clientOrigins]
+
+function isAllowedOrigin(origin: string | undefined) {
+  return !origin || allowedOrigins.includes(origin)
+}
+
+const corsOptions: CorsOptions = {
+  origin(origin, callback) {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true)
+      return
+    }
+
+    callback(new Error(`Origin ${origin} is not allowed by CORS`))
+  },
+  methods: ['GET', 'POST'],
+}
+
+app.use(cors(corsOptions))
 
 const server = http.createServer(app)
 const io = new Server(server, {
-  cors: {
-    origin: '*', // For dev we allow any origin (Vue frontend)
-    methods: ['GET', 'POST'],
-  },
+  cors: corsOptions,
 })
 
 // Initialize central state manager
