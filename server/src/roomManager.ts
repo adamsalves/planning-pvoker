@@ -126,6 +126,10 @@ export class RoomManager {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null
 
+    // Only players present in the room who are not observers may vote
+    const player = room.players.find((p) => p.id === playerId)
+    if (!player || player.role === 'observer') return null
+
     const round = room.rounds[room.currentRoundIndex]
     if (round.status !== 'voting') return null
 
