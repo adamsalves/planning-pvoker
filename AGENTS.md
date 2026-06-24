@@ -7,19 +7,22 @@ This file defines how Ralph operates in this project.
 Run these after each task to ensure quality:
 
 ```bash
-npm run build
+npm run type-check
 npm run lint
+npm run test:unit
+```
+
+For changes under `server/` (separate package, no test suite yet):
+
+```bash
+npm --prefix server run build
 ```
 
 ## Build Instructions
 
 1. Run `npm install` to install dependencies
 2. Run `npm run build` to build (if applicable)
-3. Run `npm test` to verify
-
-
-
-
+3. Run `npm run test:unit` to verify
 
 ## Code Patterns
 
