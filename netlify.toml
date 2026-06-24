@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+# VITE_WS_URL (URL do backend Socket.IO em produção) deve ser definida em
+# Site settings → Environment variables no painel do Netlify — não commitar o
+# valor aqui. Ex.: https://<backend>.onrender.com (ver DEPLOYMENT_PLAN.md).
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
