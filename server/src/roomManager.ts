@@ -1,5 +1,11 @@
 import { Room, Player, RoomConfig, Round } from './types'
 
+// Defensive cap on a room's cumulative backlog. The per-call Zod limit
+// (MAX_SUBJECTS_PER_CALL in validation.ts) only bounds a single add_subjects
+// payload; without a total cap an admin could still grow the in-memory list
+// without bound through repeated calls.
+const MAX_SUBJECTS_TOTAL = 200
+
 export class RoomManager {
   private rooms: Map<string, Room> = new Map()
 
@@ -58,6 +64,7 @@ export class RoomManager {
   public addSubjects(roomId: string, subjects: string[]): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.phase !== 'setup') return null
+    if (room.subjects.length + subjects.length > MAX_SUBJECTS_TOTAL) return null
 
     room.subjects.push(...subjects)
     return room
@@ -125,6 +132,10 @@ export class RoomManager {
   public castVote(roomId: string, playerId: string, value: string | number): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null
+
+    // Only players present in the room who are not observers may vote
+    const player = room.players.find((p) => p.id === playerId)
+    if (!player || player.role === 'observer') return null
 
     const round = room.rounds[room.currentRoundIndex]
     if (round.status !== 'voting') return null
