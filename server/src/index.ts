@@ -67,7 +67,7 @@ const io = new Server(server, {
 const roomManager = new RoomManager()
 
 // Setup all socket handlers
-setupSocketEvents(io, roomManager)
+const disposeSocketEvents = setupSocketEvents(io, roomManager)
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -80,3 +80,13 @@ server.listen(PORT, () => {
   console.log(`🚀 Server listening on port ${PORT}`)
   console.log(`Allowed CORS origins: ${Array.from(allowedOrigins).join(', ')}`)
 })
+
+// Graceful shutdown (e.g. SIGTERM on container redeploy): clear pending grace
+// timers and close connections so the process can exit cleanly.
+const shutdown = (signal: string) => {
+  console.log(`👋 ${signal} received — shutting down`)
+  disposeSocketEvents()
+  io.close(() => process.exit(0))
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

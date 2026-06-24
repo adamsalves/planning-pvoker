@@ -12,7 +12,14 @@ import {
 export function setupSocketEvents(io: Server, roomManager: RoomManager) {
   // How long a disconnected player is kept before removal, so a page refresh or
   // brief network blip doesn't drop them (and possibly destroy the room).
-  const RECONNECT_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 30_000
+  // Configurable via env (tests use a short window). A non-negative finite value
+  // — including 0 — is honored; anything else (unset, empty, non-numeric or
+  // negative) falls back to the default. Note `Number('') === 0`, so an empty
+  // string is treated as "unset" rather than "no grace".
+  const graceFromEnv = process.env.RECONNECT_GRACE_MS
+  const parsedGrace = graceFromEnv ? Number(graceFromEnv) : NaN
+  const RECONNECT_GRACE_MS =
+    Number.isFinite(parsedGrace) && parsedGrace >= 0 ? parsedGrace : 30_000
 
   // Shared across all connections (setupSocketEvents runs once): pending removal
   // timers and the set of live socket ids per (room, player) for reconnection.
@@ -195,4 +202,13 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       }
     })
   })
+
+  // Cancels every pending grace timer. Returned so a graceful shutdown (and the
+  // test teardown) can stop scheduled removals from firing after the server is
+  // gone, instead of leaking timers past the process/server lifetime.
+  return () => {
+    for (const timer of leaveTimers.values()) clearTimeout(timer)
+    leaveTimers.clear()
+    activeSockets.clear()
+  }
 }
