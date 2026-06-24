@@ -12,7 +12,7 @@ import {
 export function setupSocketEvents(io: Server, roomManager: RoomManager) {
   // How long a disconnected player is kept before removal, so a page refresh or
   // brief network blip doesn't drop them (and possibly destroy the room).
-  const RECONNECT_GRACE_MS = 30_000
+  const RECONNECT_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 30_000
 
   // Shared across all connections (setupSocketEvents runs once): pending removal
   // timers and the set of live socket ids per (room, player) for reconnection.

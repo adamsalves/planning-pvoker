@@ -17,7 +17,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    exclude: [...configDefaults.exclude, 'e2e/*'],
+    exclude: [...configDefaults.exclude, 'e2e/*', 'server/**'],
     globals: true,
     coverage: {
       provider: 'v8',
