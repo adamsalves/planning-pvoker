@@ -60,8 +60,12 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         room = roomManager.createRoom(roomId, { ...player, role: 'admin' }, config)
         console.log(`🏰 Room Created: ${roomId}`)
       } else {
-        // Joining an existing room: only the room's admin (e.g. returning after a
-        // refresh) keeps the admin role; anyone else claiming it is downgraded.
+        // Joining an existing room. Role resolution here is intentional and final:
+        //  - the room's admin (e.g. returning after a refresh) always keeps 'admin';
+        //    the creator-admin cannot self-downgrade to observer on rejoin, by design
+        //    (admin transfer belongs to the room-lifecycle work, not this layer);
+        //  - anyone else claiming 'admin' is downgraded to 'member';
+        //  - other roles (member/observer) are preserved as sent.
         const role =
           player.id === room.adminId ? 'admin' : player.role === 'admin' ? 'member' : player.role
         roomManager.joinRoom(roomId, { ...player, role })
