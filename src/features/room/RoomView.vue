@@ -40,7 +40,12 @@ const roomId = computed(() => {
   return (Array.isArray(id) ? id[0] : id) as string
 })
 
-const isAdmin = computed(() => userStore.playerRole === 'admin')
+// Admin é derivado da fonte da verdade (servidor): quem é o adminId da sala.
+// Fallback para o role local apenas até o primeiro room_state_updated chegar.
+const isAdmin = computed(() => {
+  const room = roomStore.currentRoom
+  return room ? room.adminId === userStore.playerId : userStore.playerRole === 'admin'
+})
 const isObserver = computed(() => userStore.playerRole === 'observer')
 
 const deckLabel = computed(() => {

@@ -48,12 +48,21 @@ export class RoomManager {
     const room = this.rooms.get(roomId)
     if (!room) return null
 
+    const wasAdmin = room.adminId === playerId
     room.players = room.players.filter((p) => p.id !== playerId)
 
-    // If room becomes empty, consider destroying it (optional cleanup)
+    // If room becomes empty, destroy it
     if (room.players.length === 0) {
       this.rooms.delete(roomId)
       return null
+    }
+
+    // If the admin left, hand admin to the next remaining player so the room
+    // doesn't get stuck with nobody able to drive the session.
+    if (wasAdmin) {
+      const next = room.players[0]
+      room.adminId = next.id
+      next.role = 'admin'
     }
 
     return room

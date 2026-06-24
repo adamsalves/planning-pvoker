@@ -10,6 +10,59 @@ import {
 } from './validation'
 
 export function setupSocketEvents(io: Server, roomManager: RoomManager) {
+  // How long a disconnected player is kept before removal, so a page refresh or
+  // brief network blip doesn't drop them (and possibly destroy the room).
+  const RECONNECT_GRACE_MS = 30_000
+
+  // Shared across all connections (setupSocketEvents runs once): pending removal
+  // timers and the set of live socket ids per (room, player) for reconnection.
+  const leaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const activeSockets = new Map<string, Set<string>>()
+  const presenceKey = (roomId: string, playerId: string) => `${roomId}::${playerId}`
+
+  const notifyRoomUpdate = (roomId: string) => {
+    const room = roomManager.getRoom(roomId)
+    if (room) {
+      // Broadcast full state to everyone in the room
+      io.to(roomId).emit('room_state_updated', room)
+    }
+  }
+
+  // Marks a (room, player) present on this socket and cancels any pending removal.
+  const markPresent = (roomId: string, playerId: string, socketId: string) => {
+    const key = presenceKey(roomId, playerId)
+    let sockets = activeSockets.get(key)
+    if (!sockets) {
+      sockets = new Set()
+      activeSockets.set(key, sockets)
+    }
+    sockets.add(socketId)
+    const timer = leaveTimers.get(key)
+    if (timer) {
+      clearTimeout(timer)
+      leaveTimers.delete(key)
+    }
+  }
+
+  // Drops a socket from a (room, player); if none remain, schedules removal after
+  // the grace period (re-checking presence when the timer fires).
+  const markAbsent = (roomId: string, playerId: string, socketId: string) => {
+    const key = presenceKey(roomId, playerId)
+    const sockets = activeSockets.get(key)
+    if (sockets) {
+      sockets.delete(socketId)
+      if (sockets.size > 0) return // still connected on another socket
+      activeSockets.delete(key)
+    }
+    const timer = setTimeout(() => {
+      leaveTimers.delete(key)
+      if (activeSockets.has(key)) return // reconnected during the grace period
+      roomManager.leaveRoom(roomId, playerId)
+      notifyRoomUpdate(roomId)
+    }, RECONNECT_GRACE_MS)
+    leaveTimers.set(key, timer)
+  }
+
   io.on('connection', (socket: Socket) => {
     console.log(`⚡ Player Connected: ${socket.id}`)
 
@@ -18,14 +71,6 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     // for authorization (never trust ids coming from the payload).
     let currentRoomId: string | null = null
     let currentPlayerId: string | null = null
-
-    const notifyRoomUpdate = (roomId: string) => {
-      const room = roomManager.getRoom(roomId)
-      if (room) {
-        // Broadcast full state to everyone in the room
-        io.to(roomId).emit('room_state_updated', room)
-      }
-    }
 
     // Authorizes admin-only actions: the socket must be joined to the room
     // AND be its admin. Returns the room when allowed, otherwise null.
@@ -76,6 +121,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       currentRoomId = roomId
       currentPlayerId = player.id
       socket.join(roomId)
+      markPresent(roomId, player.id, socket.id)
 
       notifyRoomUpdate(roomId)
       callback?.({ success: true, room })
@@ -140,14 +186,12 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       if (room) notifyRoomUpdate(parsed.data.roomId)
     })
 
-    // DISCONNECT
+    // DISCONNECT — don't remove immediately; allow a grace period for reconnection
+    // (e.g. a page refresh). Removal is scheduled only if no socket comes back.
     socket.on('disconnect', () => {
       console.log(`🔌 Player Disconnected: ${socket.id}`)
       if (currentRoomId && currentPlayerId) {
-        // In a real app we might want to delay removal (reconnection grace period)
-        // Here we just remove them immediately
-        roomManager.leaveRoom(currentRoomId, currentPlayerId)
-        notifyRoomUpdate(currentRoomId)
+        markAbsent(currentRoomId, currentPlayerId, socket.id)
       }
     })
   })
