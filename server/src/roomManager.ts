@@ -199,7 +199,10 @@ export class RoomManager {
     // Check autoReveal if everyone has voted
     if (room.config.autoReveal) {
       const activePlayers = room.players.filter((p) => p.role !== 'observer')
-      const allVoted = activePlayers.every((p) => round.votes[p.id] !== undefined)
+      // Guard length: [].every() is true, which would reveal a round in an
+      // observers-only room (zero active players) without a single vote.
+      const allVoted =
+        activePlayers.length > 0 && activePlayers.every((p) => round.votes[p.id] !== undefined)
       if (allVoted) {
         round.status = 'revealed'
       }
