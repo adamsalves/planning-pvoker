@@ -9,6 +9,7 @@ const MAX_ROOM_ID = 64
 const MAX_SUBJECT = 200
 const MAX_SUBJECTS_PER_CALL = 50
 const MAX_VOTE_STR = 10
+const MAX_TOKEN = 128
 
 // Valores válidos por baralho — espelha DECKS em src/types/index.ts.
 // Usado para rejeitar votos forjados que não pertencem ao deck da sala.
@@ -39,6 +40,10 @@ export const joinRoomSchema = z.object({
   roomId,
   player: playerSchema,
   config: roomConfigSchema.optional(),
+  // Segredo de sessão por (sala, jogador), emitido no ack do join e reenviado
+  // nos rejoins. Opcional: a 1ª entrada de um jogador não tem token ainda.
+  // NUNCA é broadcastado no room_state_updated (anti-escalada de admin).
+  token: z.string().trim().min(1).max(MAX_TOKEN).optional(),
 })
 
 // start_session, next_round, reset_session, reveal_votes

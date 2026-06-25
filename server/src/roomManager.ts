@@ -9,8 +9,48 @@ const MAX_SUBJECTS_TOTAL = 200
 export class RoomManager {
   private rooms: Map<string, Room> = new Map()
 
+  // Per-(room, player) session secret. Kept OUTSIDE the Room object so it is
+  // never serialized into room_state_updated — the broadcast carries the
+  // adminId, so without a private token a member could rejoin claiming
+  // player.id === adminId and escalate to admin. The token is the proof that a
+  // socket really owns that identity. Stable across rejoins (reused, not
+  // regenerated) so a refresh or a second tab isn't locked out.
+  private tokens: Map<string, string> = new Map()
+
+  private tokenKey(roomId: string, playerId: string): string {
+    return `${roomId}::${playerId}`
+  }
+
   public getRoom(roomId: string): Room | undefined {
     return this.rooms.get(roomId)
+  }
+
+  // --- Session tokens (anti-escalation) ---
+
+  // Returns the existing token for (room, player) or mints a new one. Reusing
+  // the same token across rejoins keeps multi-tab/refresh from being rejected.
+  public getOrCreateToken(roomId: string, playerId: string): string {
+    const key = this.tokenKey(roomId, playerId)
+    const existing = this.tokens.get(key)
+    if (existing) return existing
+    const token = crypto.randomUUID()
+    this.tokens.set(key, token)
+    return token
+  }
+
+  public hasToken(roomId: string, playerId: string): boolean {
+    return this.tokens.has(this.tokenKey(roomId, playerId))
+  }
+
+  // True only when a token is supplied AND matches the stored one. A missing or
+  // wrong token returns false so callers can reject the join.
+  public verifyToken(roomId: string, playerId: string, token: string | undefined): boolean {
+    if (!token) return false
+    return this.tokens.get(this.tokenKey(roomId, playerId)) === token
+  }
+
+  public clearToken(roomId: string, playerId: string): void {
+    this.tokens.delete(this.tokenKey(roomId, playerId))
   }
 
   public createRoom(roomId: string, adminPlayer: Player, config: RoomConfig): Room {
@@ -50,6 +90,11 @@ export class RoomManager {
 
     const wasAdmin = room.adminId === playerId
     room.players = room.players.filter((p) => p.id !== playerId)
+
+    // The player is really gone now (this runs after the grace window in
+    // events.ts), so drop their session secret. During the grace window
+    // leaveRoom is NOT called, so a refreshing player keeps their token.
+    this.clearToken(roomId, playerId)
 
     // If room becomes empty, destroy it
     if (room.players.length === 0) {

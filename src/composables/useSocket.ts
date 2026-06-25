@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import type { Player, RoomConfig } from '@/types'
 import { useRoomStore } from '@/stores/room'
+import { useUserStore } from '@/stores/user'
 
 // Singleton socket instance to avoid multiple connections across composable usages
 let socket: Socket | null = null
@@ -9,6 +10,7 @@ let socket: Socket | null = null
 export function useSocket() {
   const isConnected = ref(false)
   const roomStore = useRoomStore()
+  const userStore = useUserStore()
 
   function connect() {
     if (!socket) {
@@ -33,12 +35,37 @@ export function useSocket() {
     }
   }
 
-  function joinRoom(roomId: string, player: Player, config?: RoomConfig) {
+  // Resolves on a successful join, rejects on an error ack so callers can react
+  // (navigate only on success; on the rejoin path, drop the token + go home).
+  function joinRoom(roomId: string, player: Player, config?: RoomConfig): Promise<void> {
     if (!socket) connect()
-    socket?.emit('join_room', { roomId, player, config }, (response: { error?: string }) => {
-      if (response.error) {
-        console.error('Failed to join room:', response.error)
-      }
+    const activeSocket = socket
+    if (!activeSocket) return Promise.reject(new Error('Socket indisponível'))
+
+    // Only resend the token if it belongs to THIS room; a token from a previous
+    // session would just be rejected by the server.
+    const token =
+      userStore.activeRoomId === roomId && userStore.sessionToken
+        ? userStore.sessionToken
+        : undefined
+
+    return new Promise((resolve, reject) => {
+      activeSocket.emit(
+        'join_room',
+        { roomId, player, config, token },
+        (response: { error?: string; token?: string }) => {
+          if (response?.error) {
+            console.error('Failed to join room:', response.error)
+            reject(new Error(response.error))
+            return
+          }
+          if (response?.token) {
+            userStore.setSessionToken(response.token)
+            userStore.setActiveRoom(roomId)
+          }
+          resolve()
+        },
+      )
     })
   }
 

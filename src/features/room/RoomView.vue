@@ -133,6 +133,11 @@ if (userStore.playerId && userStore.playerName) {
     id: userStore.playerId,
     name: userStore.playerName,
     role: userStore.playerRole,
+  }).catch(() => {
+    // Invalid session (stale token) or room gone: drop the token and go home so
+    // the user can re-enter cleanly instead of being stuck on a dead room.
+    userStore.setSessionToken(null)
+    router.push('/')
   })
 } else {
   // Go home to define a name

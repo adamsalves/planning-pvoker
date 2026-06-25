@@ -98,7 +98,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         callback?.({ error: 'Dados de entrada inválidos' })
         return
       }
-      const { roomId, player, config } = parsed.data
+      const { roomId, player, config, token } = parsed.data
 
       let room = roomManager.getRoom(roomId)
 
@@ -112,6 +112,19 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         room = roomManager.createRoom(roomId, { ...player, role: 'admin' }, config)
         console.log(`🏰 Room Created: ${roomId}`)
       } else {
+        // Existing room: a returning identity must prove ownership. If this
+        // player.id already holds a session token, the join MUST carry the
+        // matching one — otherwise it's someone claiming an identity that isn't
+        // theirs (e.g. setting player.id = adminId to escalate to admin).
+        // First-time joiners (no token yet) pass and get one minted below.
+        if (
+          roomManager.hasToken(roomId, player.id) &&
+          !roomManager.verifyToken(roomId, player.id, token)
+        ) {
+          console.warn(`⛔ Join denied on ${roomId}: invalid session token for ${player.id}`)
+          callback?.({ error: 'Sessão inválida' })
+          return
+        }
         // Joining an existing room. Role resolution here is intentional and final:
         //  - the room's admin (e.g. returning after a refresh) always keeps 'admin';
         //    the creator-admin cannot self-downgrade to observer on rejoin, by design
@@ -130,8 +143,12 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       socket.join(roomId)
       markPresent(roomId, player.id, socket.id)
 
+      // Mint (or reuse) the session secret and hand it back ONLY to this socket
+      // via the ack. It is intentionally absent from the room broadcast below.
+      const sessionToken = roomManager.getOrCreateToken(roomId, player.id)
+
       notifyRoomUpdate(roomId)
-      callback?.({ success: true, room })
+      callback?.({ success: true, room, token: sessionToken })
     })
 
     // SUBJECT BACKLOG MANAGEMENT (setup phase) — admin only
