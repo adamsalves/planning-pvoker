@@ -144,7 +144,10 @@ describe('RoomView.vue rejoin', () => {
     await flushPromises()
 
     const userStore = useUserStore()
-    expect(mockRouterPush).toHaveBeenCalledWith('/')
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      name: 'home',
+      query: { notice: 'session-expired' },
+    })
     expect(userStore.sessionToken).toBeNull()
   })
 })
