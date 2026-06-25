@@ -87,6 +87,10 @@ if (typeof sharedRoomCode === 'string' && sharedRoomCode.trim().length > 0) {
   joinRoomCode.value = sharedRoomCode.trim()
 }
 
+// Quando o RoomView devolve o usuário por sessão inválida/sala inexistente,
+// explica o motivo em vez de mandá-lo para a home sem contexto.
+const sessionExpired = route.query.notice === 'session-expired'
+
 const onJoinRoom = handleJoinSubmit((values) => {
   // values.role já é "member" | "observer" — sem cast!
   joinRoom(values.playerName, values.roomCode, values.role)
@@ -101,6 +105,11 @@ const onJoinRoom = handleJoinSubmit((values) => {
       <h1 class="hero-title">Planning Poker</h1>
       <p class="hero-subtitle">Estimativas ágeis com seu time, em tempo real</p>
     </div>
+
+    <!-- Aviso de sessão expirada (redirecionado do RoomView) -->
+    <p v-if="sessionExpired" class="session-notice" role="alert">
+      ⚠️ Sua sessão expirou ou a sala não está mais disponível. Entre novamente.
+    </p>
 
     <!-- Tab Switcher -->
     <div class="tab-switcher">
@@ -263,6 +272,18 @@ const onJoinRoom = handleJoinSubmit((values) => {
 .hero-subtitle {
   color: var(--c-text-mute);
   font-size: var(--text-lg);
+}
+
+/* Aviso de sessão expirada */
+.session-notice {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--c-danger);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  text-align: center;
+  animation: slideUp var(--transition-normal);
 }
 
 /* Tab Switcher */

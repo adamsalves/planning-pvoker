@@ -18,7 +18,7 @@ const member: Player = { id: 'm1', name: 'Bob', role: 'member' }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-type JoinAck = { success?: boolean; error?: string; room?: Room }
+type JoinAck = { success?: boolean; error?: string; room?: Room; token?: string }
 
 let httpServer: HttpServer
 let io: Server
@@ -87,25 +87,34 @@ function roomOf(ack: JoinAck): Room {
   return ack.room
 }
 
-// Creates room r1 (admin a1) and joins member m1.
+// Same idea for the session token: a successful join always returns one, and
+// rejoins must echo it back, so a missing token is a test-setup failure.
+function tokenOf(ack: JoinAck): string {
+  if (!ack.token) throw new Error(`expected a token in ack, got ${JSON.stringify(ack)}`)
+  return ack.token
+}
+
+// Creates room r1 (admin a1) and joins member m1. Returns the per-player
+// session tokens so callers can thread them through rejoins (once a player has
+// a token, every later join for that id must present it).
 async function adminAndMember() {
   const adminClient = await connect()
-  await join(adminClient, { roomId: 'r1', player: admin, config })
+  const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
   const memberClient = await connect()
-  await join(memberClient, { roomId: 'r1', player: member })
-  return { adminClient, memberClient }
+  const memberToken = tokenOf(await join(memberClient, { roomId: 'r1', player: member }))
+  return { adminClient, memberClient, adminToken, memberToken }
 }
 
 // Drives r1 into the voting phase with a single subject ('A'). add_subjects and
 // start_session are emitted on the same socket, so per-connection FIFO ordering
 // guarantees the subject exists before the session starts — no delay needed.
 async function startVotingRoom() {
-  const { adminClient, memberClient } = await adminAndMember()
+  const { adminClient, memberClient, adminToken, memberToken } = await adminAndMember()
   const voting = waitForRoomWhere(adminClient, (room) => room.phase === 'voting')
   adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
   adminClient.emit('start_session', { roomId: 'r1' })
   await voting
-  return { adminClient, memberClient }
+  return { adminClient, memberClient, adminToken, memberToken }
 }
 
 describe('join_room', () => {
@@ -159,13 +168,13 @@ describe('authorization (requireAdmin)', () => {
   ]
   for (const { event, payload } of setupActions) {
     it(`ignores ${event} from a non-admin (setup phase)`, async () => {
-      const { adminClient, memberClient } = await adminAndMember()
+      const { adminClient, memberClient, memberToken } = await adminAndMember()
       const seeded = waitForRoomWhere(adminClient, (room) => room.subjects.length === 1)
       adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
       await seeded
 
       memberClient.emit(event, payload)
-      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member }))
+      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
       expect(room.phase).toBe('setup')
       expect(room.subjects).toEqual(['A'])
     })
@@ -179,9 +188,9 @@ describe('authorization (requireAdmin)', () => {
   ]
   for (const { event, payload } of votingActions) {
     it(`ignores ${event} from a non-admin (voting phase)`, async () => {
-      const { memberClient } = await startVotingRoom()
+      const { memberClient, memberToken } = await startVotingRoom()
       memberClient.emit(event, payload)
-      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member }))
+      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
       expect(room.phase).toBe('voting')
       expect(room.rounds[room.currentRoundIndex].status).toBe('voting')
     })
@@ -214,10 +223,10 @@ describe('cast_vote', () => {
   })
 
   it('rejects a vote that is not in the room deck', async () => {
-    const { memberClient } = await startVotingRoom()
+    const { memberClient, memberToken } = await startVotingRoom()
     memberClient.emit('cast_vote', { roomId: 'r1', value: 999 })
     // FIFO: the re-join ack is handled after the (ignored) cast_vote.
-    const room = roomOf(await join(memberClient, { roomId: 'r1', player: member }))
+    const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
     expect(Object.keys(room.rounds[0].votes)).toHaveLength(0)
   })
 })
@@ -232,30 +241,33 @@ describe('reconnection grace period & admin transfer', () => {
   })
 
   it('cancels removal when the player reconnects within the grace window', async () => {
-    const { adminClient, memberClient } = await adminAndMember()
+    const { adminClient, memberClient, adminToken, memberToken } = await adminAndMember()
 
     memberClient.close()
     const reconnected = await connect()
-    await join(reconnected, { roomId: 'r1', player: member })
+    // Reconnecting on a fresh socket as the same player must present the token.
+    await join(reconnected, { roomId: 'r1', player: member, token: memberToken })
 
     await delay(GRACE_MS + MARGIN_MS)
-    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin }))
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
     expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
   })
 
   it('keeps a player who is still connected on another socket (multi-tab)', async () => {
     const adminClient = await connect()
-    await join(adminClient, { roomId: 'r1', player: admin, config })
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
     const tab1 = await connect()
-    await join(tab1, { roomId: 'r1', player: member })
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
     const tab2 = await connect()
-    await join(tab2, { roomId: 'r1', player: member })
+    // The second tab is the same identity, so it must reuse the token — this
+    // also proves the token does NOT lock out legitimate multi-tab sessions.
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
 
     // One tab closes, but m1 is still present on tab2 → no removal is scheduled
     // (exercises markAbsent's `sockets.size > 0` early return).
     tab1.close()
     await delay(GRACE_MS + MARGIN_MS)
-    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin }))
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
     expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
   })
 
@@ -284,5 +296,70 @@ describe('unauthenticated socket (never joined)', () => {
 
     expect(room.phase).toBe('voting') // reset_session was ignored
     expect(Object.keys(room.rounds[0].votes)).toHaveLength(0) // cast_vote was ignored
+  })
+})
+
+describe('session token (anti-escalation)', () => {
+  it('returns a session token on a successful join', async () => {
+    const client = await connect()
+    const ack = await join(client, { roomId: 'r1', player: admin, config })
+    expect(ack.success).toBe(true)
+    expect(typeof ack.token).toBe('string')
+    expect(ack.token).toBeTruthy()
+  })
+
+  it('lets a player rejoin with the matching token (refresh keeps identity)', async () => {
+    const first = await connect()
+    const token = tokenOf(await join(first, { roomId: 'r1', player: admin, config }))
+
+    // New socket, same identity + token: a refresh within the grace window.
+    const refreshed = await connect()
+    const room = roomOf(await join(refreshed, { roomId: 'r1', player: admin, token }))
+    expect(room.adminId).toBe('a1')
+    expect(room.players.find((p) => p.id === 'a1')?.role).toBe('admin')
+  })
+
+  it('rejects an impostor claiming the admin id without a token', async () => {
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+
+    // Someone tries to seize the admin identity. Without the admin's token the
+    // server must refuse — this is the escalation the token prevents.
+    const impostor = await connect()
+    const ack = await join(impostor, {
+      roomId: 'r1',
+      player: { id: 'a1', name: 'Mallory', role: 'admin' },
+    })
+    expect(ack.error).toBeDefined()
+    expect(ack.success).toBeUndefined()
+    expect(ack.room).toBeUndefined()
+
+    // The legit admin is untouched and the impostor never bound to the room.
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.adminId).toBe('a1')
+    expect(room.players.find((p) => p.id === 'a1')?.name).toBe('Ana')
+  })
+
+  it('rejects an impostor claiming the admin id with a wrong token', async () => {
+    const adminClient = await connect()
+    await join(adminClient, { roomId: 'r1', player: admin, config })
+
+    const impostor = await connect()
+    const ack = await join(impostor, {
+      roomId: 'r1',
+      player: { id: 'a1', name: 'Mallory', role: 'admin' },
+      token: 'definitely-not-the-real-token',
+    })
+    expect(ack.error).toBeDefined()
+    expect(ack.success).toBeUndefined()
+  })
+
+  it('never includes the token in the room_state_updated broadcast', async () => {
+    const adminClient = await connect()
+    const broadcast = waitForRoomWhere(adminClient, () => true)
+    await join(adminClient, { roomId: 'r1', player: admin, config })
+    const room = await broadcast
+    expect(room).not.toHaveProperty('token')
+    for (const player of room.players) expect(player).not.toHaveProperty('token')
   })
 })

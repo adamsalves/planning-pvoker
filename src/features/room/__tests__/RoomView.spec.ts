@@ -7,7 +7,8 @@ import { useUserStore } from '@/stores/user'
 import type { Room } from '@/types'
 
 const mockRouterPush = vi.fn()
-const mockSocketJoinRoom = vi.fn()
+// The rejoin effect awaits this Promise; resolve by default so mounting is a no-op.
+const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -45,11 +46,12 @@ function createRoom(): Room {
   }
 }
 
-function mountRoomView() {
+function mountRoomView(options?: { sessionToken?: string }) {
   setActivePinia(createPinia())
 
   const userStore = useUserStore()
   userStore.setPlayer('Ana', 'player-1', 'admin')
+  if (options?.sessionToken) userStore.setSessionToken(options.sessionToken)
 
   const roomStore = useRoomStore()
   roomStore.syncRoom(createRoom())
@@ -125,5 +127,27 @@ describe('RoomView.vue sharing', () => {
 
     expect(writeText).toHaveBeenCalledWith(expectedInviteUrl.toString())
     expect(wrapper.text()).toContain('Link copiado!')
+  })
+})
+
+describe('RoomView.vue rejoin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  it('drops the session token and goes home when the rejoin is rejected', async () => {
+    // Server refuses the rejoin (stale token / room gone).
+    mockSocketJoinRoom.mockRejectedValueOnce(new Error('Sessão inválida'))
+
+    mountRoomView({ sessionToken: 'stale-token' })
+    await flushPromises()
+
+    const userStore = useUserStore()
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      name: 'home',
+      query: { notice: 'session-expired' },
+    })
+    expect(userStore.sessionToken).toBeNull()
   })
 })

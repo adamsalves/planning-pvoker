@@ -133,6 +133,11 @@ if (userStore.playerId && userStore.playerName) {
     id: userStore.playerId,
     name: userStore.playerName,
     role: userStore.playerRole,
+  }).catch(() => {
+    // Invalid session (stale token) or room gone: drop the token and go home,
+    // signaling why so the user isn't bounced back without any explanation.
+    userStore.setSessionToken(null)
+    router.push({ name: 'home', query: { notice: 'session-expired' } })
   })
 } else {
   // Go home to define a name

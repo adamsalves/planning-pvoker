@@ -171,6 +171,54 @@ describe('castVote', () => {
   })
 })
 
+describe('session tokens', () => {
+  it('mints a non-empty token and reuses it on repeat calls', () => {
+    const a = rm.getOrCreateToken('r1', 'a1')
+    const b = rm.getOrCreateToken('r1', 'a1')
+    expect(a).toBeTruthy()
+    expect(b).toBe(a) // stable across rejoins (no multi-tab/refresh lockout)
+  })
+
+  it('issues distinct tokens per (room, player)', () => {
+    const a = rm.getOrCreateToken('r1', 'a1')
+    const samePlayerOtherRoom = rm.getOrCreateToken('r2', 'a1')
+    const otherPlayerSameRoom = rm.getOrCreateToken('r1', 'm1')
+    expect(samePlayerOtherRoom).not.toBe(a)
+    expect(otherPlayerSameRoom).not.toBe(a)
+  })
+
+  it('hasToken reflects whether a token was issued', () => {
+    expect(rm.hasToken('r1', 'a1')).toBe(false)
+    rm.getOrCreateToken('r1', 'a1')
+    expect(rm.hasToken('r1', 'a1')).toBe(true)
+  })
+
+  it('verifyToken accepts only the exact token', () => {
+    const token = rm.getOrCreateToken('r1', 'a1')
+    expect(rm.verifyToken('r1', 'a1', token)).toBe(true)
+    expect(rm.verifyToken('r1', 'a1', 'wrong')).toBe(false)
+    expect(rm.verifyToken('r1', 'a1', undefined)).toBe(false)
+    expect(rm.verifyToken('r1', 'unknown', token)).toBe(false)
+  })
+
+  it('clearToken removes the token', () => {
+    const token = rm.getOrCreateToken('r1', 'a1')
+    rm.clearToken('r1', 'a1')
+    expect(rm.hasToken('r1', 'a1')).toBe(false)
+    expect(rm.verifyToken('r1', 'a1', token)).toBe(false)
+  })
+
+  it('leaveRoom clears the leaving player token (but not others)', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.getOrCreateToken('r1', 'a1')
+    rm.getOrCreateToken('r1', 'm1')
+    rm.leaveRoom('r1', 'm1')
+    expect(rm.hasToken('r1', 'm1')).toBe(false)
+    expect(rm.hasToken('r1', 'a1')).toBe(true)
+  })
+})
+
 describe('revealVotes / resetSession', () => {
   it('reveal sets the current round to revealed', () => {
     rm.createRoom('r1', admin, config)

@@ -33,4 +33,19 @@ describe('HomeView.vue', () => {
     expect(roomCodeInput.exists()).toBe(true)
     expect(roomCodeInput.element.value).toBe('abc123')
   })
+
+  it('shows a notice when redirected after an invalid session', () => {
+    routeQuery = { notice: 'session-expired' }
+
+    const wrapper = mount(HomeView)
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Sua sessão expirou')
+  })
+
+  it('does not show the session notice without the query flag', () => {
+    const wrapper = mount(HomeView)
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
 })
