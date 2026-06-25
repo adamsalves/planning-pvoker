@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client'
 import type { Player, RoomConfig } from '@/types'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
+import { logger } from '@/utils/logger'
 
 // Singleton socket instance to avoid multiple connections across composable usages
 let socket: Socket | null = null
@@ -20,12 +21,12 @@ export function useSocket() {
 
       socket.on('connect', () => {
         isConnected.value = true
-        console.log('Socket connected:', socket?.id)
+        logger.debug('Socket connected:', socket?.id)
       })
 
       socket.on('disconnect', () => {
         isConnected.value = false
-        console.log('Socket disconnected')
+        logger.debug('Socket disconnected')
       })
 
       // Backend pushes room state
@@ -55,7 +56,7 @@ export function useSocket() {
         { roomId, player, config, token },
         (response: { error?: string; token?: string }) => {
           if (response?.error) {
-            console.error('Failed to join room:', response.error)
+            logger.error('Failed to join room:', response.error)
             reject(new Error(response.error))
             return
           }

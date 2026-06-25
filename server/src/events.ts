@@ -8,6 +8,7 @@ import {
   castVoteSchema,
   isValidVoteForDeck,
 } from './validation'
+import { logger } from './logger'
 
 export function setupSocketEvents(io: Server, roomManager: RoomManager) {
   // How long a disconnected player is kept before removal, so a page refresh or
@@ -71,7 +72,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
   }
 
   io.on('connection', (socket: Socket) => {
-    console.log(`⚡ Player Connected: ${socket.id}`)
+    logger.debug(`⚡ Player Connected: ${socket.id}`)
 
     // Track which room/player this socket is authenticated as.
     // Set only after a successful join_room — the single source of truth
@@ -85,7 +86,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       const room = roomManager.getRoom(roomId)
       if (!room) return null
       if (currentRoomId !== roomId || currentPlayerId !== room.adminId) {
-        console.warn(`⛔ Admin action denied on ${roomId} by socket ${socket.id}`)
+        logger.warn(`⛔ Admin action denied on ${roomId} by socket ${socket.id}`)
         return null
       }
       return room
@@ -110,7 +111,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         }
         // Create new room — the creator is always the admin
         room = roomManager.createRoom(roomId, { ...player, role: 'admin' }, config)
-        console.log(`🏰 Room Created: ${roomId}`)
+        logger.debug(`🏰 Room Created: ${roomId}`)
       } else {
         // Existing room: a returning identity must prove ownership. If this
         // player.id already holds a session token, the join MUST carry the
@@ -121,7 +122,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
           roomManager.hasToken(roomId, player.id) &&
           !roomManager.verifyToken(roomId, player.id, token)
         ) {
-          console.warn(`⛔ Join denied on ${roomId}: invalid session token for ${player.id}`)
+          logger.warn(`⛔ Join denied on ${roomId}: invalid session token for ${player.id}`)
           callback?.({ error: 'Sessão inválida' })
           return
         }
@@ -134,7 +135,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         const role =
           player.id === room.adminId ? 'admin' : player.role === 'admin' ? 'member' : player.role
         roomManager.joinRoom(roomId, { ...player, role })
-        console.log(`🙌 Player ${player.name} joined ${roomId}`)
+        logger.debug(`🙌 Player ${player.name} joined ${roomId}`)
       }
 
       // Bind the socket identity only after a valid join
@@ -213,7 +214,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     // DISCONNECT — don't remove immediately; allow a grace period for reconnection
     // (e.g. a page refresh). Removal is scheduled only if no socket comes back.
     socket.on('disconnect', () => {
-      console.log(`🔌 Player Disconnected: ${socket.id}`)
+      logger.debug(`🔌 Player Disconnected: ${socket.id}`)
       if (currentRoomId && currentPlayerId) {
         markAbsent(currentRoomId, currentPlayerId, socket.id)
       }
