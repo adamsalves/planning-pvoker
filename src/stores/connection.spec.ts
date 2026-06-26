@@ -29,6 +29,16 @@ describe('connection store', () => {
     expect(store.isWaiting).toBe(true)
   })
 
+  it('setReconnected: back online, resets attempts, and bumps the reconnect signal', () => {
+    const store = useConnectionStore()
+    store.registerFailedAttempt()
+    const before = store.reconnectNonce
+    store.setReconnected()
+    expect(store.status).toBe('connected')
+    expect(store.attempts).toBe(0)
+    expect(store.reconnectNonce).toBe(before + 1)
+  })
+
   it('flips to down only after crossing the reconnect budget', () => {
     const store = useConnectionStore()
     for (let i = 0; i < 4; i++) {

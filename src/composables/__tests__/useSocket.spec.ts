@@ -273,7 +273,7 @@ describe('useSocket connection state', () => {
     expect(connection.isWaiting).toBe(true)
   })
 
-  it('reflects manager reconnect_attempt / reconnect on the store', () => {
+  it('reflects manager reconnect_attempt / reconnect and signals a rejoin', () => {
     const connection = useConnectionStore()
     const { connect } = useSocket()
     connect()
@@ -281,7 +281,20 @@ describe('useSocket connection state', () => {
     managerHandler('reconnect_attempt')(1)
     expect(connection.status).toBe('reconnecting')
 
+    const nonceBefore = connection.reconnectNonce
     managerHandler('reconnect')(2)
     expect(connection.status).toBe('connected')
+    // The reconnect must bump the nonce so RoomView re-emits join_room.
+    expect(connection.reconnectNonce).toBe(nonceBefore + 1)
+  })
+
+  it('counts a manager reconnect_failed as a failed attempt', () => {
+    const connection = useConnectionStore()
+    const { connect } = useSocket()
+    connect()
+
+    const before = connection.attempts
+    managerHandler('reconnect_failed')()
+    expect(connection.attempts).toBe(before + 1)
   })
 })

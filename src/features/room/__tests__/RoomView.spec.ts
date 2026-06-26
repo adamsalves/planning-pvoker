@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
+import { useConnectionStore } from '@/stores/connection'
 import { JoinAckError } from '@/composables/joinErrors'
 import type { Room } from '@/types'
 
@@ -163,6 +164,19 @@ describe('RoomView.vue rejoin', () => {
     const userStore = useUserStore()
     expect(mockRouterPush).not.toHaveBeenCalled()
     expect(userStore.sessionToken).toBe('live-token')
+  })
+
+  it('re-emits join_room on a transparent reconnect (new socket id server-side)', async () => {
+    mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+    mockSocketJoinRoom.mockClear() // ignore the initial onMounted join
+
+    // A successful socket reconnect bumps the store's nonce; without re-joining,
+    // the server would drop this player after the grace window.
+    useConnectionStore().setReconnected()
+    await flushPromises()
+
+    expect(mockSocketJoinRoom).toHaveBeenCalledTimes(1)
   })
 })
 

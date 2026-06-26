@@ -44,12 +44,22 @@ export function useSocket() {
 
       // Cada tentativa de conexão que falha (cold start ou queda) conta pro budget.
       socket.on('connect_error', () => {
+        const wasDown = connectionStore.isDown
         connectionStore.registerFailedAttempt()
+        // Trace por tentativa só em DEV; ao CRUZAR o budget, um erro visível em prod
+        // (segue tentando, mas registra que a conexão está mancando p/ diagnóstico).
+        if (connectionStore.isDown && !wasDown) {
+          logger.error('Socket connection down (retry budget exceeded) — still retrying')
+        } else {
+          logger.debug('Socket connect_error — retrying')
+        }
       })
 
       // Eventos do Manager (reconexão automática) reforçam o estado central.
+      // 'reconnect' usa setReconnected p/ sinalizar o re-join da sala (ver RoomView):
+      // o socket reconectado tem id novo e o servidor indexa presença por socket.id.
       socket.io.on('reconnect_attempt', () => connectionStore.setReconnecting())
-      socket.io.on('reconnect', () => connectionStore.setConnected())
+      socket.io.on('reconnect', () => connectionStore.setReconnected())
       socket.io.on('reconnect_failed', () => connectionStore.registerFailedAttempt())
 
       // Backend pushes room state

@@ -12,6 +12,10 @@ const RECONNECT_BUDGET = 5
 export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ConnectionState>('connecting')
   const attempts = ref(0)
+  // Bumped on every successful RECONNECT (not the first connect). Consumers that
+  // hold room state (RoomView) watch it to re-emit join_room — the server binds
+  // presence to socket.id, and a reconnected socket has a brand-new id.
+  const reconnectNonce = ref(0)
 
   // Dirige o overlay: qualquer estado que não seja 'connected' está esperando.
   const isWaiting = computed(() => status.value !== 'connected')
@@ -23,12 +27,15 @@ export const useConnectionStore = defineStore('connection', () => {
     attempts.value = 0
   }
 
-  function setConnecting() {
-    status.value = 'connecting'
-  }
-
   function setReconnecting() {
     status.value = 'reconnecting'
+  }
+
+  // A successful reconnect: back online AND signal consumers to rebind (join_room).
+  function setReconnected() {
+    status.value = 'connected'
+    attempts.value = 0
+    reconnectNonce.value++
   }
 
   // Cada falha de conexão (connect_error / reconnect_failed). Ao cruzar o budget,
@@ -46,11 +53,12 @@ export const useConnectionStore = defineStore('connection', () => {
   return {
     status,
     attempts,
+    reconnectNonce,
     isWaiting,
     isDown,
     setConnected,
-    setConnecting,
     setReconnecting,
+    setReconnected,
     registerFailedAttempt,
     reset,
   }

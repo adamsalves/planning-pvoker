@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
+import { useConnectionStore } from '@/stores/connection'
 import { DECKS } from '@/types'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -22,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
+const connectionStore = useConnectionStore()
 const historyStore = useHistoryStore()
 const {
   addSubjects,
@@ -125,31 +127,42 @@ onUnmounted(() => {
   if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
 })
 
-// Rejoin effect if the user refreshes the page directly on the /room/:id URL.
-// Lives in onMounted (not the setup body) so the side-effect runs once the
-// component is actually mounted, not while it's still being set up.
+// Rejoin the active room. Runs on mount (direct hit / refresh of /room/:id) AND on
+// every transparent socket reconnect: the server binds presence to socket.id, so a
+// reconnected socket (new id) must re-announce itself or it gets dropped after the
+// grace window — while the ConnectionOverlay still shows "connected".
+function rejoinActiveRoom() {
+  if (!userStore.playerId || !userStore.playerName) return
+  // Config optionality means joining an existing room is handled by the backend
+  joinRoom(roomId.value, {
+    id: userStore.playerId,
+    name: userStore.playerName,
+    role: userStore.playerRole,
+  }).catch((err) => {
+    // A distinção-chave: SÓ um erro de ACK do servidor (sessão inválida / sala
+    // inexistente) limpa o token e volta pra Home. Falha de conexão / cold start
+    // do Render NÃO navega — o ConnectionOverlay cobre a espera e o retry do
+    // Socket.IO resolve, sem expulsar o usuário da sala.
+    if (err instanceof JoinAckError) {
+      userStore.setSessionToken(null)
+      router.push({ name: 'home', query: { notice: 'session-expired' } })
+    }
+  })
+}
+
 onMounted(() => {
-  if (userStore.playerId && userStore.playerName) {
-    // Config optionality means joining an existing room is handled by the backend
-    joinRoom(roomId.value, {
-      id: userStore.playerId,
-      name: userStore.playerName,
-      role: userStore.playerRole,
-    }).catch((err) => {
-      // A distinção-chave: SÓ um erro de ACK do servidor (sessão inválida / sala
-      // inexistente) limpa o token e volta pra Home. Falha de conexão / cold start
-      // do Render NÃO navega — o ConnectionOverlay cobre a espera e o retry do
-      // Socket.IO resolve, sem expulsar o usuário da sala.
-      if (err instanceof JoinAckError) {
-        userStore.setSessionToken(null)
-        router.push({ name: 'home', query: { notice: 'session-expired' } })
-      }
-    })
-  } else {
-    // Go home to define a name
-    router.push('/')
+  if (!userStore.playerId || !userStore.playerName) {
+    router.push('/') // no identity yet — go home to define a name
+    return
   }
+  rejoinActiveRoom()
 })
+
+// Re-announce to the server after a transparent reconnect (see rejoinActiveRoom).
+watch(
+  () => connectionStore.reconnectNonce,
+  () => rejoinActiveRoom(),
+)
 
 // --- Handlers ---
 
