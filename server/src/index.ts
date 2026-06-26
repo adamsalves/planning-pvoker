@@ -10,7 +10,9 @@ const app = express()
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://planning-pvoker.netlify.app',
+  // O site Netlify é "planningpvoker" (SEM hífen); o backend Render é
+  // "planning-pvoker" (COM hífen). Não unificar um pelo outro.
+  'https://planningpvoker.netlify.app',
   'https://planning-pvoker.onrender.com',
 ]
 const originEnvValues = [
@@ -41,7 +43,7 @@ function isAllowedOrigin(origin: string | undefined) {
   const normalizedOrigin = normalizeOrigin(origin)
   return (
     allowedOrigins.has(normalizedOrigin) ||
-    /^https:\/\/[a-z0-9-]+--planning-pvoker\.netlify\.app$/i.test(normalizedOrigin)
+    /^https:\/\/[a-z0-9-]+--planningpvoker\.netlify\.app$/i.test(normalizedOrigin)
   )
 }
 
