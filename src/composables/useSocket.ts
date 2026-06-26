@@ -3,7 +3,9 @@ import { io, Socket } from 'socket.io-client'
 import type { Player, RoomConfig } from '@/types'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
+import { useConnectionStore } from '@/stores/connection'
 import { logger } from '@/utils/logger'
+import { JoinAckError } from './joinErrors'
 
 // Singleton socket instance to avoid multiple connections across composable usages
 let socket: Socket | null = null
@@ -12,22 +14,43 @@ export function useSocket() {
   const isConnected = ref(false)
   const roomStore = useRoomStore()
   const userStore = useUserStore()
+  const connectionStore = useConnectionStore()
 
   function connect() {
     if (!socket) {
       socket = io(import.meta.env.VITE_WS_URL || 'http://localhost:3001', {
         autoConnect: true,
+        // Reconexão explícita: tenta pra sempre (o Render free hiberna). O budget
+        // de tentativas vive no connection store e só muda a percepção (overlay).
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       })
 
       socket.on('connect', () => {
         isConnected.value = true
+        connectionStore.setConnected()
         logger.debug('Socket connected:', socket?.id)
       })
 
-      socket.on('disconnect', () => {
+      socket.on('disconnect', (reason) => {
         isConnected.value = false
-        logger.debug('Socket disconnected')
+        // Saída manual (disconnect() ao deixar a sala) não é uma queda — não dispara
+        // o overlay de reconexão. Qualquer outro motivo significa "voltando".
+        if (reason !== 'io client disconnect') connectionStore.setReconnecting()
+        logger.debug('Socket disconnected:', reason)
       })
+
+      // Cada tentativa de conexão que falha (cold start ou queda) conta pro budget.
+      socket.on('connect_error', () => {
+        connectionStore.registerFailedAttempt()
+      })
+
+      // Eventos do Manager (reconexão automática) reforçam o estado central.
+      socket.io.on('reconnect_attempt', () => connectionStore.setReconnecting())
+      socket.io.on('reconnect', () => connectionStore.setConnected())
+      socket.io.on('reconnect_failed', () => connectionStore.registerFailedAttempt())
 
       // Backend pushes room state
       socket.on('room_state_updated', (roomData: import('@/types').Room) => {
@@ -56,8 +79,10 @@ export function useSocket() {
         { roomId, player, config, token },
         (response: { error?: string; token?: string }) => {
           if (response?.error) {
+            // Rejeição EXPLÍCITA do servidor (token inválido / sala inexistente).
+            // Tipada para o RoomView distinguir disto uma falha de conexão.
             logger.error('Failed to join room:', response.error)
-            reject(new Error(response.error))
+            reject(new JoinAckError(response.error))
             return
           }
           if (response?.token) {

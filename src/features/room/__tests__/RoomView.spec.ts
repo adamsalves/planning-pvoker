@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
+import { JoinAckError } from '@/composables/joinErrors'
 import type { Room } from '@/types'
 
 const mockRouterPush = vi.fn()
@@ -135,9 +136,9 @@ describe('RoomView.vue rejoin', () => {
     mockSocketJoinRoom.mockResolvedValue(undefined)
   })
 
-  it('drops the session token and goes home when the rejoin is rejected', async () => {
-    // Server refuses the rejoin (stale token / room gone).
-    mockSocketJoinRoom.mockRejectedValueOnce(new Error('Sessão inválida'))
+  it('drops the session token and goes home on a JoinAckError (real session failure)', async () => {
+    // Server explicitly refuses the rejoin (stale token / room gone).
+    mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('Sessão inválida'))
 
     mountRoomView({ sessionToken: 'stale-token' })
     await flushPromises()
@@ -148,6 +149,20 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
+  })
+
+  it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {
+    // Not a server ACK error — a transient connection problem while the Render
+    // backend wakes up. The overlay covers it and the retry resolves; the user
+    // must NOT be bounced out of the room.
+    mockSocketJoinRoom.mockRejectedValueOnce(new Error('xhr poll error'))
+
+    mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+
+    const userStore = useUserStore()
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(userStore.sessionToken).toBe('live-token')
   })
 })
 

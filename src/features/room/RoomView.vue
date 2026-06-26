@@ -15,6 +15,7 @@ import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
 import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
+import { JoinAckError } from '@/composables/joinErrors'
 import { useHistoryStore } from '@/stores/history'
 
 const route = useRoute()
@@ -134,11 +135,15 @@ onMounted(() => {
       id: userStore.playerId,
       name: userStore.playerName,
       role: userStore.playerRole,
-    }).catch(() => {
-      // Invalid session (stale token) or room gone: drop the token and go home,
-      // signaling why so the user isn't bounced back without any explanation.
-      userStore.setSessionToken(null)
-      router.push({ name: 'home', query: { notice: 'session-expired' } })
+    }).catch((err) => {
+      // A distinção-chave: SÓ um erro de ACK do servidor (sessão inválida / sala
+      // inexistente) limpa o token e volta pra Home. Falha de conexão / cold start
+      // do Render NÃO navega — o ConnectionOverlay cobre a espera e o retry do
+      // Socket.IO resolve, sem expulsar o usuário da sala.
+      if (err instanceof JoinAckError) {
+        userStore.setSessionToken(null)
+        router.push({ name: 'home', query: { notice: 'session-expired' } })
+      }
     })
   } else {
     // Go home to define a name
