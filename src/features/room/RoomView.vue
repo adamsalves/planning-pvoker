@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
@@ -67,18 +67,16 @@ const selectedVote = computed(() => {
 const activePlayerCount = computed(() => players.value.filter((p) => p.role !== 'observer').length)
 
 const allActiveVoted = computed(() => {
-  if (!currentRound.value) return false
+  const round = currentRound.value
+  if (!round) return false
   const activePlayers = players.value.filter((p) => p.role !== 'observer')
-  return activePlayers.every((p) => p.id in currentRound.value!.votes)
+  // Guard length: uma sala só de observers (zero ativos) NÃO conta como "todos
+  // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
+  return activePlayers.length > 0 && activePlayers.every((p) => p.id in round.votes)
 })
 
-// Auto-reveal quando configurado e todos votaram
-const autoReveal = computed(() => roomStore.roomConfig?.autoReveal ?? false)
-watch(allActiveVoted, (allVoted) => {
-  if (allVoted && autoReveal.value && currentRound.value?.status === 'voting') {
-    revealVotes(roomId.value)
-  }
-})
+// Auto-reveal é responsabilidade ÚNICA do servidor (roomManager.castVote);
+// o cliente não reemite reveal_votes para evitar lógica duplicada/divergente.
 
 const inviteUrl = computed(() => {
   const url = new URL(import.meta.env.BASE_URL, window.location.origin)
@@ -126,23 +124,27 @@ onUnmounted(() => {
   if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
 })
 
-// Rejoin effect if the user refreshes the page directly on the /room/:id URL
-if (userStore.playerId && userStore.playerName) {
-  // Configs optionality means joining existing room handled by backend
-  joinRoom(roomId.value, {
-    id: userStore.playerId,
-    name: userStore.playerName,
-    role: userStore.playerRole,
-  }).catch(() => {
-    // Invalid session (stale token) or room gone: drop the token and go home,
-    // signaling why so the user isn't bounced back without any explanation.
-    userStore.setSessionToken(null)
-    router.push({ name: 'home', query: { notice: 'session-expired' } })
-  })
-} else {
-  // Go home to define a name
-  router.push('/')
-}
+// Rejoin effect if the user refreshes the page directly on the /room/:id URL.
+// Lives in onMounted (not the setup body) so the side-effect runs once the
+// component is actually mounted, not while it's still being set up.
+onMounted(() => {
+  if (userStore.playerId && userStore.playerName) {
+    // Config optionality means joining an existing room is handled by the backend
+    joinRoom(roomId.value, {
+      id: userStore.playerId,
+      name: userStore.playerName,
+      role: userStore.playerRole,
+    }).catch(() => {
+      // Invalid session (stale token) or room gone: drop the token and go home,
+      // signaling why so the user isn't bounced back without any explanation.
+      userStore.setSessionToken(null)
+      router.push({ name: 'home', query: { notice: 'session-expired' } })
+    })
+  } else {
+    // Go home to define a name
+    router.push('/')
+  }
+})
 
 // --- Handlers ---
 

@@ -7,6 +7,7 @@ import { useUserStore } from '@/stores/user'
 import type { Room } from '@/types'
 
 const mockRouterPush = vi.fn()
+const mockRevealVotes = vi.fn()
 // The rejoin effect awaits this Promise; resolve by default so mounting is a no-op.
 const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 
@@ -27,11 +28,22 @@ vi.mock('@/composables/useSocket', () => ({
     nextRound: vi.fn(),
     resetSession: vi.fn(),
     castVote: vi.fn(),
-    revealVotes: vi.fn(),
+    revealVotes: mockRevealVotes,
     disconnect: vi.fn(),
     joinRoom: mockSocketJoinRoom,
   }),
 }))
+
+const childStubs = {
+  SubjectForm: true,
+  RoundHeader: true,
+  VotingArea: true,
+  PlayerList: true,
+  PokerTable: true,
+  VoteReveal: true,
+  RoundControls: true,
+  SessionSummary: true,
+}
 
 function createRoom(): Room {
   return {
@@ -56,20 +68,7 @@ function mountRoomView(options?: { sessionToken?: string }) {
   const roomStore = useRoomStore()
   roomStore.syncRoom(createRoom())
 
-  return mount(RoomView, {
-    global: {
-      stubs: {
-        SubjectForm: true,
-        RoundHeader: true,
-        VotingArea: true,
-        PlayerList: true,
-        PokerTable: true,
-        VoteReveal: true,
-        RoundControls: true,
-        SessionSummary: true,
-      },
-    },
-  })
+  return mount(RoomView, { global: { stubs: childStubs } })
 }
 
 function getShareButton(wrapper: ReturnType<typeof mountRoomView>) {
@@ -149,5 +148,44 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
+  })
+})
+
+describe('RoomView.vue auto-reveal (server is the single source)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function votingRoom(votes: Record<string, string | number>): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: true },
+      players: [{ id: 'player-1', name: 'Ana', role: 'admin' }],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  it('does not emit reveal_votes from the client when all active players have voted', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin')
+    const roomStore = useRoomStore()
+
+    // Start in voting with no votes yet, then transition to "everyone voted".
+    roomStore.syncRoom(votingRoom({}))
+    mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    // The only active player (admin) now voted. A former client-side watch would
+    // have auto-revealed here; the server is the single source now, so the client
+    // must NOT emit reveal_votes.
+    roomStore.syncRoom(votingRoom({ 'player-1': 5 }))
+    await flushPromises()
+
+    expect(mockRevealVotes).not.toHaveBeenCalled()
   })
 })
