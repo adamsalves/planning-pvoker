@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { useUserStore } from '@/stores/user'
 import type { JoinableRole, DeckType, RoomConfig } from '@/types'
 import { useSocket } from './useSocket'
+import { logger } from '@/utils/logger'
 
 export function useRoom() {
   const router = useRouter()
@@ -25,7 +26,7 @@ export function useRoom() {
       await socketJoin(roomId, { id: playerId, name: playerName, role: 'admin' }, config)
       router.push({ name: 'room', params: { id: roomId } })
     } catch (error) {
-      console.error('Could not create room:', error)
+      logger.error('Could not create room:', error)
     }
   }
 
@@ -40,7 +41,7 @@ export function useRoom() {
       await socketJoin(roomCode, { id: playerId, name: playerName, role })
       router.push({ name: 'room', params: { id: roomCode } })
     } catch (error) {
-      console.error('Could not join room:', error)
+      logger.error('Could not join room:', error)
     }
   }
 
