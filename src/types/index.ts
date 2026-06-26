@@ -13,6 +13,11 @@ export type JoinableRole = (typeof JOINABLE_ROLES)[number]
 export type RoundStatus = 'waiting' | 'voting' | 'revealed'
 export type RoomPhase = 'setup' | 'voting' | 'completed'
 
+// Estado da conexão Socket.IO (fonte única no connection store). 'connecting' =
+// primeiro contato / cold start do Render; 'reconnecting' = caiu e está voltando;
+// 'down' = passou do budget de tentativas (segue tentando, só muda a percepção).
+export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'down'
+
 export interface Player {
   id: string
   name: string

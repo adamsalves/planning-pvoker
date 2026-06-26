@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
+import { useConnectionStore } from '@/stores/connection'
 import { DECKS } from '@/types'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -15,12 +16,14 @@ import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
 import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
+import { JoinAckError } from '@/composables/joinErrors'
 import { useHistoryStore } from '@/stores/history'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
+const connectionStore = useConnectionStore()
 const historyStore = useHistoryStore()
 const {
   addSubjects,
@@ -40,7 +43,12 @@ const roomId = computed(() => {
   return (Array.isArray(id) ? id[0] : id) as string
 })
 
-const isAdmin = computed(() => userStore.playerRole === 'admin')
+// Admin é derivado da fonte da verdade (servidor): quem é o adminId da sala.
+// Fallback para o role local apenas até o primeiro room_state_updated chegar.
+const isAdmin = computed(() => {
+  const room = roomStore.currentRoom
+  return room ? room.adminId === userStore.playerId : userStore.playerRole === 'admin'
+})
 const isObserver = computed(() => userStore.playerRole === 'observer')
 
 const deckLabel = computed(() => {
@@ -62,18 +70,16 @@ const selectedVote = computed(() => {
 const activePlayerCount = computed(() => players.value.filter((p) => p.role !== 'observer').length)
 
 const allActiveVoted = computed(() => {
-  if (!currentRound.value) return false
+  const round = currentRound.value
+  if (!round) return false
   const activePlayers = players.value.filter((p) => p.role !== 'observer')
-  return activePlayers.every((p) => p.id in currentRound.value!.votes)
+  // Guard length: uma sala só de observers (zero ativos) NÃO conta como "todos
+  // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
+  return activePlayers.length > 0 && activePlayers.every((p) => p.id in round.votes)
 })
 
-// Auto-reveal quando configurado e todos votaram
-const autoReveal = computed(() => roomStore.roomConfig?.autoReveal ?? false)
-watch(allActiveVoted, (allVoted) => {
-  if (allVoted && autoReveal.value && currentRound.value?.status === 'voting') {
-    revealVotes(roomId.value)
-  }
-})
+// Auto-reveal é responsabilidade ÚNICA do servidor (roomManager.castVote);
+// o cliente não reemite reveal_votes para evitar lógica duplicada/divergente.
 
 const inviteUrl = computed(() => {
   const url = new URL(import.meta.env.BASE_URL, window.location.origin)
@@ -121,18 +127,42 @@ onUnmounted(() => {
   if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
 })
 
-// Rejoin effect if the user refreshes the page directly on the /room/:id URL
-if (userStore.playerId && userStore.playerName) {
-  // Configs optionality means joining existing room handled by backend
+// Rejoin the active room. Runs on mount (direct hit / refresh of /room/:id) AND on
+// every transparent socket reconnect: the server binds presence to socket.id, so a
+// reconnected socket (new id) must re-announce itself or it gets dropped after the
+// grace window — while the ConnectionOverlay still shows "connected".
+function rejoinActiveRoom() {
+  if (!userStore.playerId || !userStore.playerName) return
+  // Config optionality means joining an existing room is handled by the backend
   joinRoom(roomId.value, {
     id: userStore.playerId,
     name: userStore.playerName,
     role: userStore.playerRole,
+  }).catch((err) => {
+    // A distinção-chave: SÓ um erro de ACK do servidor (sessão inválida / sala
+    // inexistente) limpa o token e volta pra Home. Falha de conexão / cold start
+    // do Render NÃO navega — o ConnectionOverlay cobre a espera e o retry do
+    // Socket.IO resolve, sem expulsar o usuário da sala.
+    if (err instanceof JoinAckError) {
+      userStore.setSessionToken(null)
+      router.push({ name: 'home', query: { notice: 'session-expired' } })
+    }
   })
-} else {
-  // Go home to define a name
-  router.push('/')
 }
+
+onMounted(() => {
+  if (!userStore.playerId || !userStore.playerName) {
+    router.push('/') // no identity yet — go home to define a name
+    return
+  }
+  rejoinActiveRoom()
+})
+
+// Re-announce to the server after a transparent reconnect (see rejoinActiveRoom).
+watch(
+  () => connectionStore.reconnectNonce,
+  () => rejoinActiveRoom(),
+)
 
 // --- Handlers ---
 

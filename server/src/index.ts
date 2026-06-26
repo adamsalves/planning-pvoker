@@ -4,6 +4,7 @@ import { Server } from 'socket.io'
 import cors, { CorsOptions } from 'cors'
 import { RoomManager } from './roomManager'
 import { setupSocketEvents } from './events'
+import { logger } from './logger'
 
 const app = express()
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -67,7 +68,7 @@ const io = new Server(server, {
 const roomManager = new RoomManager()
 
 // Setup all socket handlers
-setupSocketEvents(io, roomManager)
+const disposeSocketEvents = setupSocketEvents(io, roomManager)
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -77,6 +78,16 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3001
 
 server.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`)
-  console.log(`Allowed CORS origins: ${Array.from(allowedOrigins).join(', ')}`)
+  logger.info(`🚀 Server listening on port ${PORT}`)
+  logger.info(`Allowed CORS origins: ${Array.from(allowedOrigins).join(', ')}`)
 })
+
+// Graceful shutdown (e.g. SIGTERM on container redeploy): clear pending grace
+// timers and close connections so the process can exit cleanly.
+const shutdown = (signal: string) => {
+  logger.info(`👋 ${signal} received — shutting down`)
+  disposeSocketEvents()
+  io.close(() => process.exit(0))
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

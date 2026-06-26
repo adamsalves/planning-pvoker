@@ -14,7 +14,9 @@ vi.mock('vue-router', () => ({
   }),
 }))
 
-const mockSocketJoin = vi.fn()
+// joinRoom is async now (callers await the ack before navigating), so the mock
+// resolves a Promise.
+const mockSocketJoin = vi.fn().mockResolvedValue(undefined)
 vi.mock('../useSocket', () => ({
   useSocket: () => ({
     joinRoom: mockSocketJoin,
@@ -25,13 +27,14 @@ describe('useRoom', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    mockSocketJoin.mockResolvedValue(undefined)
   })
 
-  it('creates room locally and asks socket to create room on server', () => {
+  it('creates room locally and asks socket to create room on server', async () => {
     const { createRoom } = useRoom()
     const userStore = useUserStore()
 
-    createRoom('Adam', 'fibonacci', true)
+    await createRoom('Adam', 'fibonacci', true)
 
     // Tests user creation
     expect(userStore.playerName).toBe('Adam')
@@ -49,11 +52,11 @@ describe('useRoom', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'room', params: { id: 'mocked-u' } })
   })
 
-  it('joins existing room', () => {
+  it('joins existing room', async () => {
     const { joinRoom } = useRoom()
     const userStore = useUserStore()
 
-    joinRoom('Maria', 'room-xyz', 'observer')
+    await joinRoom('Maria', 'room-xyz', 'observer')
 
     // Check user data saved locally
     expect(userStore.playerName).toBe('Maria')
@@ -69,5 +72,15 @@ describe('useRoom', () => {
 
     // Navigates
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'room', params: { id: 'room-xyz' } })
+  })
+
+  it('does not navigate when the join is rejected by the server', async () => {
+    mockSocketJoin.mockRejectedValueOnce(new Error('Sessão inválida'))
+    const { joinRoom } = useRoom()
+
+    await joinRoom('Maria', 'room-xyz', 'observer')
+
+    expect(mockSocketJoin).toHaveBeenCalled()
+    expect(mockRouterPush).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,6 @@
 {
   "name": "planning-pvoker",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,9 @@
     "format": "prettier --write --experimental-cli src/",
     "test:unit": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "validate": "oxlint . && eslint . && npm run type-check && vitest run && npm --prefix server run build && npm --prefix server test",
+    "prepare": "husky"
   },
   "dependencies": {
     "@vee-validate/zod": "^4.15.1",
@@ -48,8 +50,10 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-oxlint": "~1.46.0",
     "eslint-plugin-vue": "~10.8.0",
+    "husky": "^9.1.7",
     "jiti": "^2.6.1",
     "jsdom": "^28.1.0",
+    "lint-staged": "^17.0.8",
     "npm-run-all2": "^8.0.4",
     "oxlint": "~1.47.0",
     "prettier": "3.8.1",
@@ -61,5 +65,9 @@
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
+  },
+  "lint-staged": {
+    "*.{ts,mts,tsx,vue}": ["oxlint --fix", "eslint --fix", "prettier --write"],
+    "*.{css,md}": "prettier --write"
   }
 }

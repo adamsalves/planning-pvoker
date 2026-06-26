@@ -4,10 +4,14 @@ import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
+import { useConnectionStore } from '@/stores/connection'
+import { JoinAckError } from '@/composables/joinErrors'
 import type { Room } from '@/types'
 
 const mockRouterPush = vi.fn()
-const mockSocketJoinRoom = vi.fn()
+const mockRevealVotes = vi.fn()
+// The rejoin effect awaits this Promise; resolve by default so mounting is a no-op.
+const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -26,11 +30,22 @@ vi.mock('@/composables/useSocket', () => ({
     nextRound: vi.fn(),
     resetSession: vi.fn(),
     castVote: vi.fn(),
-    revealVotes: vi.fn(),
+    revealVotes: mockRevealVotes,
     disconnect: vi.fn(),
     joinRoom: mockSocketJoinRoom,
   }),
 }))
+
+const childStubs = {
+  SubjectForm: true,
+  RoundHeader: true,
+  VotingArea: true,
+  PlayerList: true,
+  PokerTable: true,
+  VoteReveal: true,
+  RoundControls: true,
+  SessionSummary: true,
+}
 
 function createRoom(): Room {
   return {
@@ -45,29 +60,17 @@ function createRoom(): Room {
   }
 }
 
-function mountRoomView() {
+function mountRoomView(options?: { sessionToken?: string }) {
   setActivePinia(createPinia())
 
   const userStore = useUserStore()
   userStore.setPlayer('Ana', 'player-1', 'admin')
+  if (options?.sessionToken) userStore.setSessionToken(options.sessionToken)
 
   const roomStore = useRoomStore()
   roomStore.syncRoom(createRoom())
 
-  return mount(RoomView, {
-    global: {
-      stubs: {
-        SubjectForm: true,
-        RoundHeader: true,
-        VotingArea: true,
-        PlayerList: true,
-        PokerTable: true,
-        VoteReveal: true,
-        RoundControls: true,
-        SessionSummary: true,
-      },
-    },
-  })
+  return mount(RoomView, { global: { stubs: childStubs } })
 }
 
 function getShareButton(wrapper: ReturnType<typeof mountRoomView>) {
@@ -125,5 +128,93 @@ describe('RoomView.vue sharing', () => {
 
     expect(writeText).toHaveBeenCalledWith(expectedInviteUrl.toString())
     expect(wrapper.text()).toContain('Link copiado!')
+  })
+})
+
+describe('RoomView.vue rejoin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  it('drops the session token and goes home on a JoinAckError (real session failure)', async () => {
+    // Server explicitly refuses the rejoin (stale token / room gone).
+    mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('Sessão inválida'))
+
+    mountRoomView({ sessionToken: 'stale-token' })
+    await flushPromises()
+
+    const userStore = useUserStore()
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      name: 'home',
+      query: { notice: 'session-expired' },
+    })
+    expect(userStore.sessionToken).toBeNull()
+  })
+
+  it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {
+    // Not a server ACK error — a transient connection problem while the Render
+    // backend wakes up. The overlay covers it and the retry resolves; the user
+    // must NOT be bounced out of the room.
+    mockSocketJoinRoom.mockRejectedValueOnce(new Error('xhr poll error'))
+
+    mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+
+    const userStore = useUserStore()
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(userStore.sessionToken).toBe('live-token')
+  })
+
+  it('re-emits join_room on a transparent reconnect (new socket id server-side)', async () => {
+    mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+    mockSocketJoinRoom.mockClear() // ignore the initial onMounted join
+
+    // A successful socket reconnect bumps the store's nonce; without re-joining,
+    // the server would drop this player after the grace window.
+    useConnectionStore().setReconnected()
+    await flushPromises()
+
+    expect(mockSocketJoinRoom).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('RoomView.vue auto-reveal (server is the single source)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function votingRoom(votes: Record<string, string | number>): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: true },
+      players: [{ id: 'player-1', name: 'Ana', role: 'admin' }],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  it('does not emit reveal_votes from the client when all active players have voted', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin')
+    const roomStore = useRoomStore()
+
+    // Start in voting with no votes yet, then transition to "everyone voted".
+    roomStore.syncRoom(votingRoom({}))
+    mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    // The only active player (admin) now voted. A former client-side watch would
+    // have auto-revealed here; the server is the single source now, so the client
+    // must NOT emit reveal_votes.
+    roomStore.syncRoom(votingRoom({ 'player-1': 5 }))
+    await flushPromises()
+
+    expect(mockRevealVotes).not.toHaveBeenCalled()
   })
 })

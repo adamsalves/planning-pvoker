@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    name: Client checks (type-check, lint, unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Type-check
+        run: npm run type-check
+      - name: Lint (oxlint)
+        run: npx oxlint .
+      - name: Lint (eslint)
+        run: npx eslint .
+      - name: Unit tests
+        run: npx vitest run
+
+  server:
+    name: Server build & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: server
+      - name: Build (tsc)
+        run: npm run build
+        working-directory: server
+      - name: Test (vitest)
+        run: npm test
+        working-directory: server

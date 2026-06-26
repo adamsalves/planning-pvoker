@@ -2,6 +2,10 @@ import { ref } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import type { Player, RoomConfig } from '@/types'
 import { useRoomStore } from '@/stores/room'
+import { useUserStore } from '@/stores/user'
+import { useConnectionStore } from '@/stores/connection'
+import { logger } from '@/utils/logger'
+import { JoinAckError } from './joinErrors'
 
 // Singleton socket instance to avoid multiple connections across composable usages
 let socket: Socket | null = null
@@ -9,22 +13,54 @@ let socket: Socket | null = null
 export function useSocket() {
   const isConnected = ref(false)
   const roomStore = useRoomStore()
+  const userStore = useUserStore()
+  const connectionStore = useConnectionStore()
 
   function connect() {
     if (!socket) {
       socket = io(import.meta.env.VITE_WS_URL || 'http://localhost:3001', {
         autoConnect: true,
+        // Reconexão explícita: tenta pra sempre (o Render free hiberna). O budget
+        // de tentativas vive no connection store e só muda a percepção (overlay).
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       })
 
       socket.on('connect', () => {
         isConnected.value = true
-        console.log('Socket connected:', socket?.id)
+        connectionStore.setConnected()
+        logger.debug('Socket connected:', socket?.id)
       })
 
-      socket.on('disconnect', () => {
+      socket.on('disconnect', (reason) => {
         isConnected.value = false
-        console.log('Socket disconnected')
+        // Saída manual (disconnect() ao deixar a sala) não é uma queda — não dispara
+        // o overlay de reconexão. Qualquer outro motivo significa "voltando".
+        if (reason !== 'io client disconnect') connectionStore.setReconnecting()
+        logger.debug('Socket disconnected:', reason)
       })
+
+      // Cada tentativa de conexão que falha (cold start ou queda) conta pro budget.
+      socket.on('connect_error', () => {
+        const wasDown = connectionStore.isDown
+        connectionStore.registerFailedAttempt()
+        // Trace por tentativa só em DEV; ao CRUZAR o budget, um erro visível em prod
+        // (segue tentando, mas registra que a conexão está mancando p/ diagnóstico).
+        if (connectionStore.isDown && !wasDown) {
+          logger.error('Socket connection down (retry budget exceeded) — still retrying')
+        } else {
+          logger.debug('Socket connect_error — retrying')
+        }
+      })
+
+      // Eventos do Manager (reconexão automática) reforçam o estado central.
+      // 'reconnect' usa setReconnected p/ sinalizar o re-join da sala (ver RoomView):
+      // o socket reconectado tem id novo e o servidor indexa presença por socket.id.
+      socket.io.on('reconnect_attempt', () => connectionStore.setReconnecting())
+      socket.io.on('reconnect', () => connectionStore.setReconnected())
+      socket.io.on('reconnect_failed', () => connectionStore.registerFailedAttempt())
 
       // Backend pushes room state
       socket.on('room_state_updated', (roomData: import('@/types').Room) => {
@@ -33,12 +69,39 @@ export function useSocket() {
     }
   }
 
-  function joinRoom(roomId: string, player: Player, config?: RoomConfig) {
+  // Resolves on a successful join, rejects on an error ack so callers can react
+  // (navigate only on success; on the rejoin path, drop the token + go home).
+  function joinRoom(roomId: string, player: Player, config?: RoomConfig): Promise<void> {
     if (!socket) connect()
-    socket?.emit('join_room', { roomId, player, config }, (response: { error?: string }) => {
-      if (response.error) {
-        console.error('Failed to join room:', response.error)
-      }
+    const activeSocket = socket
+    if (!activeSocket) return Promise.reject(new Error('Socket indisponível'))
+
+    // Only resend the token if it belongs to THIS room; a token from a previous
+    // session would just be rejected by the server.
+    const token =
+      userStore.activeRoomId === roomId && userStore.sessionToken
+        ? userStore.sessionToken
+        : undefined
+
+    return new Promise((resolve, reject) => {
+      activeSocket.emit(
+        'join_room',
+        { roomId, player, config, token },
+        (response: { error?: string; token?: string }) => {
+          if (response?.error) {
+            // Rejeição EXPLÍCITA do servidor (token inválido / sala inexistente).
+            // Tipada para o RoomView distinguir disto uma falha de conexão.
+            logger.error('Failed to join room:', response.error)
+            reject(new JoinAckError(response.error))
+            return
+          }
+          if (response?.token) {
+            userStore.setSessionToken(response.token)
+            userStore.setActiveRoom(roomId)
+          }
+          resolve()
+        },
+      )
     })
   }
 
