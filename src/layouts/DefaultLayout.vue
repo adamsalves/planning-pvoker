@@ -43,7 +43,7 @@ const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
 
     <footer class="footer">
       <div class="footer-content">
-        <p>Planning Poker App - Vue 3 + Pinia + Vite</p>
+        <p>Planning Poker · feito por Adams Alves</p>
       </div>
     </footer>
   </div>
