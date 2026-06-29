@@ -455,12 +455,12 @@ function handleLeave() {
 
 .badge-role.admin {
   background: rgba(245, 158, 11, 0.1);
-  color: #d97706;
+  color: var(--c-warning-text);
 }
 
 .badge-role.observer {
   background: rgba(107, 114, 128, 0.1);
-  color: #6b7280;
+  color: var(--c-text-mute);
 }
 
 .badge-deck {

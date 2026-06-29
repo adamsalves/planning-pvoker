@@ -13,6 +13,11 @@
   --c-warning: #f59e0b;
   --c-danger: #ef4444;
 
+  /* Texto/ícone semântico — escuro no light p/ contraste sobre fundo claro (F3.9) */
+  --c-success-text: #15803d;
+  --c-warning-text: #b45309;
+  --c-danger-text: #dc2626;
+
   --c-bg: #f8fafc;
   --c-bg-soft: #ffffff;
   --c-bg-mute: #f1f5f9;
@@ -69,6 +74,11 @@
    definido (o script anti-FOUC do index.html resolve "system" via matchMedia antes
    de o app montar; a store reconcilia depois), então não há fallback @media a duplicar. */
 :root[data-theme='dark'] {
+  /* Texto/ícone semântico — claro no dark p/ contraste sobre fundo escuro (F3.9) */
+  --c-success-text: #34d399;
+  --c-warning-text: #fbbf24;
+  --c-danger-text: #f87171;
+
   --c-bg: #0f172a;
   --c-bg-soft: #1e293b;
   --c-bg-mute: #334155;
