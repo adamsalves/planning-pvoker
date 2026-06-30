@@ -12,3 +12,11 @@ export class JoinAckError extends Error {
     this.name = 'JoinAckError'
   }
 }
+
+// Mapeia um erro de criar/entrar em sala para a mensagem exibida ao usuário.
+// Só um JoinAckError carrega um motivo real do servidor (ex.: "Sala não encontrada");
+// qualquer outra falha é transitória (cold start / conexão) → mensagem genérica.
+export function getJoinErrorMessage(error: unknown): string {
+  if (error instanceof JoinAckError) return error.message
+  return 'Não foi possível conectar agora. Tente novamente em instantes.'
+}

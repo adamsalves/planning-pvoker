@@ -68,6 +68,13 @@ function join(socket: ClientSocket, data: unknown): Promise<JoinAck> {
   })
 }
 
+type VoteAck = { ok?: boolean; error?: string }
+function castVote(socket: ClientSocket, data: unknown): Promise<VoteAck> {
+  return new Promise((resolve) => {
+    socket.emit('cast_vote', data, (ack: VoteAck) => resolve(ack))
+  })
+}
+
 function waitForRoomWhere(socket: ClientSocket, predicate: (room: Room) => boolean): Promise<Room> {
   return new Promise((resolve) => {
     const handler = (room: Room) => {
@@ -174,7 +181,9 @@ describe('authorization (requireAdmin)', () => {
       await seeded
 
       memberClient.emit(event, payload)
-      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
+      const room = roomOf(
+        await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+      )
       expect(room.phase).toBe('setup')
       expect(room.subjects).toEqual(['A'])
     })
@@ -190,7 +199,9 @@ describe('authorization (requireAdmin)', () => {
     it(`ignores ${event} from a non-admin (voting phase)`, async () => {
       const { memberClient, memberToken } = await startVotingRoom()
       memberClient.emit(event, payload)
-      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
+      const room = roomOf(
+        await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+      )
       expect(room.phase).toBe('voting')
       expect(room.rounds[room.currentRoundIndex].status).toBe('voting')
     })
@@ -226,8 +237,32 @@ describe('cast_vote', () => {
     const { memberClient, memberToken } = await startVotingRoom()
     memberClient.emit('cast_vote', { roomId: 'r1', value: 999 })
     // FIFO: the re-join ack is handled after the (ignored) cast_vote.
-    const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
+    const room = roomOf(
+      await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+    )
     expect(Object.keys(room.rounds[0].votes)).toHaveLength(0)
+  })
+
+  it('acks { ok: true } on a valid vote', async () => {
+    const { memberClient } = await startVotingRoom()
+    const ack = await castVote(memberClient, { roomId: 'r1', value: 5 })
+    expect(ack.ok).toBe(true)
+    expect(ack.error).toBeUndefined()
+  })
+
+  it('acks an error for a vote outside the deck (so the client can undo the optimistic vote)', async () => {
+    const { memberClient } = await startVotingRoom()
+    const ack = await castVote(memberClient, { roomId: 'r1', value: 999 })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
+  })
+
+  it('acks an error when a socket that never joined tries to vote', async () => {
+    await startVotingRoom()
+    const stranger = await connect()
+    const ack = await castVote(stranger, { roomId: 'r1', value: 5 })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
   })
 })
 
@@ -291,7 +326,10 @@ describe('unauthenticated socket (never joined)', () => {
     stranger.emit('cast_vote', { roomId: 'r1', playerId: 'm1', value: 5 })
     stranger.emit('reset_session', { roomId: 'r1' })
     const room = roomOf(
-      await join(stranger, { roomId: 'r1', player: { id: 's1', name: 'Stranger', role: 'observer' } }),
+      await join(stranger, {
+        roomId: 'r1',
+        player: { id: 's1', name: 'Stranger', role: 'observer' },
+      }),
     )
 
     expect(room.phase).toBe('voting') // reset_session was ignored

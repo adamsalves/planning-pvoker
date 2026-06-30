@@ -61,10 +61,26 @@ const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
 const shareStatus = ref<'idle' | 'copied' | 'error'>('idle')
 let shareFeedbackTimeout: ReturnType<typeof setTimeout> | undefined
-const selectedVote = computed(() => {
+// Voto otimista: a carta acende na hora do clique, sem esperar o round-trip
+// (cast_vote → room_state_updated). Reconciliado com o servidor logo abaixo.
+const optimisticVote = ref<string | number | null>(null)
+
+const serverVote = computed(() => {
   if (!currentRound.value) return null
   return currentRound.value.votes[userStore.playerId] ?? null
 })
+
+// O voto confirmado pelo servidor prevalece; enquanto não chega, mostra o otimista.
+const selectedVote = computed(() => serverVote.value ?? optimisticVote.value)
+
+// Trocar de rodada (nova rodada / reset) limpa o otimista pra não vazar entre rodadas.
+// A transição voting→revealed mantém o mesmo round.id, então a seleção persiste no reveal.
+watch(
+  () => currentRound.value?.id,
+  () => {
+    optimisticVote.value = null
+  },
+)
 
 // Apenas jogadores ativos (não observers) para contagem
 const activePlayerCount = computed(() => players.value.filter((p) => p.role !== 'observer').length)
@@ -182,7 +198,12 @@ function handleStartSession() {
 // Voting phase
 function handleVote(value: string | number) {
   if (currentRound.value?.status !== 'voting') return
-  castVote(roomId.value, userStore.playerId, value)
+  optimisticVote.value = value // acende na hora (otimista)
+  castVote(roomId.value, userStore.playerId, value).catch(() => {
+    // Servidor recusou (deck inválido / fora de votação / não autorizado): desfaz o
+    // otimista se ele ainda for este valor (o usuário pode ter votado de novo).
+    if (optimisticVote.value === value) optimisticVote.value = null
+  })
 }
 
 function handleReveal() {

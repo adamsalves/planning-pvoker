@@ -10,6 +10,11 @@ import { JoinAckError } from './joinErrors'
 // Singleton socket instance to avoid multiple connections across composable usages
 let socket: Socket | null = null
 
+// Safety-net para o join: se a conexão nunca completar (servidor fora do ar), o
+// botão de "loading" não fica preso pra sempre. O cold start do Render (~22s) fica
+// bem abaixo, então isto NÃO atrapalha a primeira conexão lenta.
+const JOIN_TIMEOUT_MS = 60_000
+
 export function useSocket() {
   const isConnected = ref(false)
   const roomStore = useRoomStore()
@@ -84,10 +89,17 @@ export function useSocket() {
         : undefined
 
     return new Promise((resolve, reject) => {
+      // Destrava o join (com erro transitório genérico — NÃO um JoinAckError, para o
+      // RoomView não expulsar pra Home) se o ack nunca chegar.
+      const timeout = setTimeout(() => {
+        reject(new Error('Tempo de conexão esgotado. Tente novamente.'))
+      }, JOIN_TIMEOUT_MS)
+
       activeSocket.emit(
         'join_room',
         { roomId, player, config, token },
         (response: { error?: string; token?: string }) => {
+          clearTimeout(timeout)
           if (response?.error) {
             // Rejeição EXPLÍCITA do servidor (token inválido / sala inexistente).
             // Tipada para o RoomView distinguir disto uma falha de conexão.
@@ -131,8 +143,24 @@ export function useSocket() {
 
   // --- Voting ---
 
-  function castVote(roomId: string, playerId: string, value: string | number) {
-    socket?.emit('cast_vote', { roomId, playerId, value })
+  // Retorna uma Promise (como joinRoom): resolve no ack de sucesso, rejeita no ack
+  // de erro — assim o RoomView desfaz o voto otimista quando o servidor recusa.
+  function castVote(roomId: string, playerId: string, value: string | number): Promise<void> {
+    if (!socket) return Promise.reject(new Error('Socket indisponível'))
+    const activeSocket = socket
+    return new Promise((resolve, reject) => {
+      activeSocket.emit(
+        'cast_vote',
+        { roomId, playerId, value },
+        (response: { ok?: boolean; error?: string } | undefined) => {
+          if (response?.error) {
+            reject(new Error(response.error))
+            return
+          }
+          resolve()
+        },
+      )
+    })
   }
 
   function revealVotes(roomId: string) {

@@ -5,9 +5,12 @@ import confetti from 'canvas-confetti'
 interface Props {
   votes: Record<string, string | number>
   playerCount: number // apenas jogadores ativos (sem observers)
+  celebrate?: boolean // dispara confetti no consenso (default true); desligado no resumo
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  celebrate: true,
+})
 
 const hasConfettiPlayed = ref(false)
 
@@ -87,14 +90,14 @@ function fireConfetti() {
 
 // Disparar confetti na primeira renderização se houver consenso
 onMounted(() => {
-  if (hasConsensus.value && !hasConfettiPlayed.value) {
+  if (props.celebrate && hasConsensus.value && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
     fireConfetti()
   }
 })
 
 watch(hasConsensus, (newVal) => {
-  if (newVal && !hasConfettiPlayed.value) {
+  if (props.celebrate && newVal && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
     fireConfetti()
   }

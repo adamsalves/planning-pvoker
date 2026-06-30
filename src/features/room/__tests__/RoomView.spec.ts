@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
+import VotingArea from '../VotingArea.vue'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
 import { useConnectionStore } from '@/stores/connection'
@@ -12,6 +13,9 @@ const mockRouterPush = vi.fn()
 const mockRevealVotes = vi.fn()
 // The rejoin effect awaits this Promise; resolve by default so mounting is a no-op.
 const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
+// castVote agora retorna Promise; resolve por padrão (sucesso) para o handleVote
+// não cair no .catch nos testes que não exercitam a rejeição.
+const mockCastVote = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -29,7 +33,7 @@ vi.mock('@/composables/useSocket', () => ({
     startSession: vi.fn(),
     nextRound: vi.fn(),
     resetSession: vi.fn(),
-    castVote: vi.fn(),
+    castVote: mockCastVote,
     revealVotes: mockRevealVotes,
     disconnect: vi.fn(),
     joinRoom: mockSocketJoinRoom,
@@ -216,5 +220,82 @@ describe('RoomView.vue auto-reveal (server is the single source)', () => {
     await flushPromises()
 
     expect(mockRevealVotes).not.toHaveBeenCalled()
+  })
+})
+
+describe('RoomView.vue optimistic vote', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+    mockCastVote.mockResolvedValue(undefined)
+  })
+
+  function votingRoom(votes: Record<string, string | number>): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [
+        { id: 'player-1', name: 'Ana', role: 'admin' },
+        { id: 'player-2', name: 'Bob', role: 'member' },
+      ],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  it('highlights the clicked card immediately, before the server confirms', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    useRoomStore().syncRoom(votingRoom({})) // ninguém votou ainda
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    expect(votingArea.exists()).toBe(true)
+    expect(votingArea.props('selectedValue')).toBeNull()
+
+    // Clique numa carta → VotingArea emite 'vote'. Nenhum room_state_updated ainda.
+    votingArea.vm.$emit('vote', 8)
+    await flushPromises()
+
+    // Otimista: a seleção reflete o clique sem esperar o round-trip do servidor.
+    expect(votingArea.props('selectedValue')).toBe(8)
+  })
+
+  it('lets the server-confirmed vote take over the optimistic one', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    const roomStore = useRoomStore()
+    roomStore.syncRoom(votingRoom({}))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    votingArea.vm.$emit('vote', 8)
+    await flushPromises()
+
+    // O servidor confirma o voto — a seleção continua, agora vinda do servidor.
+    roomStore.syncRoom(votingRoom({ 'player-2': 8 }))
+    await flushPromises()
+    expect(votingArea.props('selectedValue')).toBe(8)
+  })
+
+  it('clears the optimistic vote when the server rejects the cast', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    useRoomStore().syncRoom(votingRoom({}))
+    mockCastVote.mockRejectedValueOnce(new Error('Voto inválido para o baralho'))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    votingArea.vm.$emit('vote', 999)
+    await flushPromises()
+
+    // Servidor recusou → o otimista é desfeito (a carta volta a apagar).
+    expect(votingArea.props('selectedValue')).toBeNull()
   })
 })

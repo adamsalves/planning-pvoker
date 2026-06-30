@@ -19,8 +19,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
   // string is treated as "unset" rather than "no grace".
   const graceFromEnv = process.env.RECONNECT_GRACE_MS
   const parsedGrace = graceFromEnv ? Number(graceFromEnv) : NaN
-  const RECONNECT_GRACE_MS =
-    Number.isFinite(parsedGrace) && parsedGrace >= 0 ? parsedGrace : 30_000
+  const RECONNECT_GRACE_MS = Number.isFinite(parsedGrace) && parsedGrace >= 0 ? parsedGrace : 30_000
 
   // Shared across all connections (setupSocketEvents runs once): pending removal
   // timers and the set of live socket ids per (room, player) for reconnection.
@@ -189,19 +188,39 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       if (room) notifyRoomUpdate(parsed.data.roomId)
     })
 
-    // VOTING — identity comes from the socket, never from the payload
-    socket.on('cast_vote', (data: unknown) => {
+    // VOTING — identity comes from the socket, never from the payload.
+    // The ack callback is optional (fire-and-forget emitters still work) and lets
+    // the client reconcile its optimistic vote when the server refuses it.
+    socket.on('cast_vote', (data: unknown, callback?: (res: unknown) => void) => {
       const parsed = castVoteSchema.safeParse(data)
-      if (!parsed.success) return
-      if (!currentPlayerId || currentRoomId !== parsed.data.roomId) return
+      if (!parsed.success) {
+        callback?.({ error: 'Voto inválido' })
+        return
+      }
+      if (!currentPlayerId || currentRoomId !== parsed.data.roomId) {
+        callback?.({ error: 'Não autorizado' })
+        return
+      }
 
       const room = roomManager.getRoom(parsed.data.roomId)
-      if (!room) return
+      if (!room) {
+        callback?.({ error: 'Sala não encontrada' })
+        return
+      }
       // Reject votes that don't belong to the room's deck
-      if (!isValidVoteForDeck(room.config.deckType, parsed.data.value)) return
+      if (!isValidVoteForDeck(room.config.deckType, parsed.data.value)) {
+        callback?.({ error: 'Voto inválido para o baralho' })
+        return
+      }
 
       const updated = roomManager.castVote(parsed.data.roomId, currentPlayerId, parsed.data.value)
-      if (updated) notifyRoomUpdate(parsed.data.roomId)
+      if (updated) {
+        notifyRoomUpdate(parsed.data.roomId)
+        callback?.({ ok: true })
+      } else {
+        // observer, ou rodada fora da fase de votação
+        callback?.({ error: 'Voto não registrado' })
+      }
     })
 
     socket.on('reveal_votes', (data: unknown) => {
