@@ -27,6 +27,12 @@ const hasNumericVotes = computed(() =>
   props.session.rounds.some((round) => Object.values(round.votes).some(isNumber)),
 )
 
+// Distingue "sem votos" de "baralho não-numérico" — sem isto, uma sessão vazia
+// mostraria a mensagem de não-numérico (imprecisa).
+const hasAnyVotes = computed(() =>
+  props.session.rounds.some((round) => Object.keys(round.votes).length > 0),
+)
+
 const chartData = computed(() => {
   const labels = props.session.rounds.map((r, i) => `R${i + 1}: ${r.subject}`)
 
@@ -68,6 +74,7 @@ const chartOptions = {
 <template>
   <div class="chart-wrapper">
     <Bar v-if="hasNumericVotes" :data="chartData" :options="chartOptions" />
+    <p v-else-if="!hasAnyVotes" class="chart-empty">Ainda não há votos nesta sessão.</p>
     <p v-else class="chart-empty">Gráfico de média indisponível para baralhos não-numéricos.</p>
   </div>
 </template>

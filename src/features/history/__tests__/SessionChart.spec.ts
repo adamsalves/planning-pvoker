@@ -28,4 +28,11 @@ describe('SessionChart.vue', () => {
     expect(wrapper.find('.chart-empty').exists()).toBe(true)
     expect(wrapper.text()).toContain('não-numéricos')
   })
+
+  it('shows a neutral message for a session without any votes', () => {
+    const wrapper = mountChart(session([{ id: 'r1', subject: 'A', status: 'voting', votes: {} }]))
+
+    expect(wrapper.find('.chart-empty').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Ainda não há votos')
+  })
 })
