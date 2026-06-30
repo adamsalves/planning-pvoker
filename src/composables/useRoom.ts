@@ -26,7 +26,9 @@ export function useRoom() {
       await socketJoin(roomId, { id: playerId, name: playerName, role: 'admin' }, config)
       router.push({ name: 'room', params: { id: roomId } })
     } catch (error) {
+      // Propaga para o HomeView dar feedback (não navegamos: seguimos na Home).
       logger.error('Could not create room:', error)
+      throw error
     }
   }
 
@@ -41,7 +43,9 @@ export function useRoom() {
       await socketJoin(roomCode, { id: playerId, name: playerName, role })
       router.push({ name: 'room', params: { id: roomCode } })
     } catch (error) {
+      // Propaga para o HomeView dar feedback (ex.: "Sala não encontrada").
       logger.error('Could not join room:', error)
+      throw error
     }
   }
 

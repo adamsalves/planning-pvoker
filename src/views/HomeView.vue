@@ -8,6 +8,7 @@ import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
+import { JoinAckError } from '@/composables/joinErrors'
 import { DECKS, DECK_TYPES, JOINABLE_ROLES } from '@/types'
 
 // Tab state: 'create' ou 'join'
@@ -15,6 +16,22 @@ const activeTab = ref<'create' | 'join'>('create')
 
 const route = useRoute()
 const { createRoom, joinRoom } = useRoom()
+
+// Estado de envio compartilhado pelos dois forms (só um fica visível por vez):
+// trava o botão (evita double-submit no cold start) e guarda a mensagem de erro.
+const submitting = ref(false)
+const submitError = ref('')
+
+function getSubmitErrorMessage(error: unknown): string {
+  // Só o JoinAckError carrega um motivo do servidor (ex.: "Sala não encontrada").
+  if (error instanceof JoinAckError) return error.message
+  return 'Não foi possível conectar agora. Tente novamente em instantes.'
+}
+
+function setTab(tab: 'create' | 'join') {
+  activeTab.value = tab
+  submitError.value = ''
+}
 
 // --- FORMULÁRIO: Criar Sala ---
 // O z.enum() usa a mesma constante que define o tipo DeckType
@@ -47,9 +64,17 @@ const [createPlayerName, createPlayerNameAttrs] = defineCreateField('playerName'
 const [createDeckType, createDeckTypeAttrs] = defineCreateField('deckType')
 const [createAutoReveal, createAutoRevealAttrs] = defineCreateField('autoReveal')
 
-const onCreateRoom = handleCreateSubmit((values) => {
+const onCreateRoom = handleCreateSubmit(async (values) => {
   // values.deckType já é DeckType — sem cast!
-  createRoom(values.playerName, values.deckType, values.autoReveal)
+  submitError.value = ''
+  submitting.value = true
+  try {
+    await createRoom(values.playerName, values.deckType, values.autoReveal)
+  } catch (error) {
+    submitError.value = getSubmitErrorMessage(error)
+  } finally {
+    submitting.value = false
+  }
 })
 
 // --- FORMULÁRIO: Entrar na Sala ---
@@ -91,9 +116,17 @@ if (typeof sharedRoomCode === 'string' && sharedRoomCode.trim().length > 0) {
 // explica o motivo em vez de mandá-lo para a home sem contexto.
 const sessionExpired = route.query.notice === 'session-expired'
 
-const onJoinRoom = handleJoinSubmit((values) => {
+const onJoinRoom = handleJoinSubmit(async (values) => {
   // values.role já é "member" | "observer" — sem cast!
-  joinRoom(values.playerName, values.roomCode, values.role)
+  submitError.value = ''
+  submitting.value = true
+  try {
+    await joinRoom(values.playerName, values.roomCode, values.role)
+  } catch (error) {
+    submitError.value = getSubmitErrorMessage(error)
+  } finally {
+    submitting.value = false
+  }
 })
 </script>
 
@@ -113,13 +146,10 @@ const onJoinRoom = handleJoinSubmit((values) => {
 
     <!-- Tab Switcher -->
     <div class="tab-switcher">
-      <button
-        :class="['tab-btn', { active: activeTab === 'create' }]"
-        @click="activeTab = 'create'"
-      >
+      <button :class="['tab-btn', { active: activeTab === 'create' }]" @click="setTab('create')">
         Criar Sala
       </button>
-      <button :class="['tab-btn', { active: activeTab === 'join' }]" @click="activeTab = 'join'">
+      <button :class="['tab-btn', { active: activeTab === 'join' }]" @click="setTab('join')">
         Entrar na Sala
       </button>
     </div>
@@ -175,7 +205,10 @@ const onJoinRoom = handleJoinSubmit((values) => {
             </label>
           </div>
 
-          <BaseButton type="submit" size="lg" block> 🚀 Criar Sala </BaseButton>
+          <p v-if="submitError" class="session-notice" role="alert">⚠️ {{ submitError }}</p>
+          <BaseButton type="submit" size="lg" block :loading="submitting">
+            🚀 Criar Sala
+          </BaseButton>
         </form>
       </BaseCard>
 
@@ -231,7 +264,10 @@ const onJoinRoom = handleJoinSubmit((values) => {
             </div>
           </div>
 
-          <BaseButton type="submit" size="lg" block> 🔗 Entrar na Sala </BaseButton>
+          <p v-if="submitError" class="session-notice" role="alert">⚠️ {{ submitError }}</p>
+          <BaseButton type="submit" size="lg" block :loading="submitting">
+            🔗 Entrar na Sala
+          </BaseButton>
         </form>
       </BaseCard>
     </Transition>

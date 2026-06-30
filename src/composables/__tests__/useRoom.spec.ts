@@ -74,13 +74,23 @@ describe('useRoom', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'room', params: { id: 'room-xyz' } })
   })
 
-  it('does not navigate when the join is rejected by the server', async () => {
+  it('propagates the error and does not navigate when the join is rejected', async () => {
     mockSocketJoin.mockRejectedValueOnce(new Error('Sessão inválida'))
     const { joinRoom } = useRoom()
 
-    await joinRoom('Maria', 'room-xyz', 'observer')
+    // Propaga o erro (o HomeView dá o feedback); não navega.
+    await expect(joinRoom('Maria', 'room-xyz', 'observer')).rejects.toThrow('Sessão inválida')
 
     expect(mockSocketJoin).toHaveBeenCalled()
+    expect(mockRouterPush).not.toHaveBeenCalled()
+  })
+
+  it('propagates the error and does not navigate when create is rejected', async () => {
+    mockSocketJoin.mockRejectedValueOnce(new Error('Falha ao criar'))
+    const { createRoom } = useRoom()
+
+    await expect(createRoom('Adam', 'fibonacci', false)).rejects.toThrow('Falha ao criar')
+
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 })
