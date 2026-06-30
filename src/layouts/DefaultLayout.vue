@@ -43,7 +43,16 @@ const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
 
     <footer class="footer">
       <div class="footer-content">
-        <p>Planning Poker · feito por Adams Alves</p>
+        <p>
+          Planning Poker · feito por
+          <a
+            href="https://github.com/adamsalves"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-link"
+            >Adams Alves</a
+          >
+        </p>
       </div>
     </footer>
   </div>
@@ -152,6 +161,15 @@ const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
   text-align: center;
   color: var(--c-text-mute);
   font-size: var(--text-sm);
+}
+
+.footer-link {
+  color: var(--c-primary);
+  font-weight: 500;
+}
+
+.footer-link:hover {
+  text-decoration: underline;
 }
 
 /* Page Transitions */
