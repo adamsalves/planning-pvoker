@@ -1,0 +1,22 @@
+name: release-please
+
+# Roda na main: a partir dos Conventional Commits, mantém um "release PR" que
+# atualiza o CHANGELOG + a versão (raiz + server/package.json) e, ao ser mergeado,
+# cria a tag vX.Y.Z e a GitHub Release. A v1.0.0 foi criada manualmente (bootstrap);
+# isto automatiza de 1.0.1 em diante. Ver RELEASE.md.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

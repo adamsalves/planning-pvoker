@@ -151,7 +151,7 @@ function handleAdd() {
 
 .remove-btn:hover {
   background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  color: var(--c-danger-text);
 }
 
 .empty-backlog {
