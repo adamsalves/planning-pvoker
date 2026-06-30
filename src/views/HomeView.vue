@@ -8,7 +8,7 @@ import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
-import { JoinAckError } from '@/composables/joinErrors'
+import { getJoinErrorMessage } from '@/composables/joinErrors'
 import { DECKS, DECK_TYPES, JOINABLE_ROLES } from '@/types'
 
 // Tab state: 'create' ou 'join'
@@ -21,12 +21,6 @@ const { createRoom, joinRoom } = useRoom()
 // trava o botão (evita double-submit no cold start) e guarda a mensagem de erro.
 const submitting = ref(false)
 const submitError = ref('')
-
-function getSubmitErrorMessage(error: unknown): string {
-  // Só o JoinAckError carrega um motivo do servidor (ex.: "Sala não encontrada").
-  if (error instanceof JoinAckError) return error.message
-  return 'Não foi possível conectar agora. Tente novamente em instantes.'
-}
 
 function setTab(tab: 'create' | 'join') {
   activeTab.value = tab
@@ -71,7 +65,7 @@ const onCreateRoom = handleCreateSubmit(async (values) => {
   try {
     await createRoom(values.playerName, values.deckType, values.autoReveal)
   } catch (error) {
-    submitError.value = getSubmitErrorMessage(error)
+    submitError.value = getJoinErrorMessage(error)
   } finally {
     submitting.value = false
   }
@@ -123,7 +117,7 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   try {
     await joinRoom(values.playerName, values.roomCode, values.role)
   } catch (error) {
-    submitError.value = getSubmitErrorMessage(error)
+    submitError.value = getJoinErrorMessage(error)
   } finally {
     submitting.value = false
   }
