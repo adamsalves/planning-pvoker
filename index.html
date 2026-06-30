@@ -5,7 +5,31 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f8fafc" />
     <title>Planning Poker</title>
+    <script>
+      // Anti-FOUC: define data-theme ANTES de o app montar (evita flash do tema errado).
+      // Sempre resolve para 'light'/'dark', tornando o CSS dependente só de [data-theme]
+      // (sem fallback @media duplicado a manter em sincronia).
+      ;(function () {
+        function prefersDark() {
+          try {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches
+          } catch (e) {
+            return false
+          }
+        }
+        var pref = 'system'
+        try {
+          var stored = localStorage.getItem('theme')
+          if (stored) pref = JSON.parse(stored).preference || 'system'
+        } catch (e) {
+          /* localStorage indisponível: mantém 'system' */
+        }
+        document.documentElement.dataset.theme =
+          pref === 'dark' || (pref !== 'light' && prefersDark()) ? 'dark' : 'light'
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>
