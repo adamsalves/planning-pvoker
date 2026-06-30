@@ -35,7 +35,7 @@ const emit = defineEmits<{
             <span class="recap-subject">{{ round.subject }}</span>
           </div>
         </template>
-        <VoteReveal :votes="round.votes" :player-count="playerCount" />
+        <VoteReveal :votes="round.votes" :player-count="playerCount" :celebrate="false" />
       </BaseCard>
     </div>
 

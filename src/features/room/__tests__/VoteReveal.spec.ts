@@ -71,6 +71,20 @@ describe('VoteReveal.vue', () => {
     expect(confetti).toHaveBeenCalled()
   })
 
+  it('does not fire confetti when celebrate is false (used in the session summary)', () => {
+    vi.mocked(confetti).mockClear()
+
+    mount(VoteReveal, {
+      props: {
+        votes: { p1: 5, p2: 5, p3: 5 },
+        playerCount: 3,
+        celebrate: false,
+      },
+    })
+
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
   it('shows consensus banner', () => {
     const wrapper = mount(VoteReveal, {
       props: {
