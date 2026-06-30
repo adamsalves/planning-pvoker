@@ -18,12 +18,20 @@ const props = defineProps<{
   session: SessionHistory
 }>()
 
+// Type guard em vez de cast `as number[]` (regra do projeto: sem casts).
+const isNumber = (v: string | number): v is number => typeof v === 'number'
+
+// Baralho não-numérico (ex.: T-Shirt) não tem média que faça sentido — sem isto o
+// gráfico vira uma linha de zeros (enganosa). Detectamos e escondemos (ver template).
+const hasNumericVotes = computed(() =>
+  props.session.rounds.some((round) => Object.values(round.votes).some(isNumber)),
+)
+
 const chartData = computed(() => {
   const labels = props.session.rounds.map((r, i) => `R${i + 1}: ${r.subject}`)
 
   const data = props.session.rounds.map((round) => {
-    const votes = Object.values(round.votes)
-    const numericVotes = votes.filter((v) => typeof v === 'number') as number[]
+    const numericVotes = Object.values(round.votes).filter(isNumber)
     if (numericVotes.length === 0) return 0
     const sum = numericVotes.reduce((acc, curr) => acc + curr, 0)
     return sum / numericVotes.length
@@ -59,7 +67,8 @@ const chartOptions = {
 
 <template>
   <div class="chart-wrapper">
-    <Bar :data="chartData" :options="chartOptions" />
+    <Bar v-if="hasNumericVotes" :data="chartData" :options="chartOptions" />
+    <p v-else class="chart-empty">Gráfico de média indisponível para baralhos não-numéricos.</p>
   </div>
 </template>
 
@@ -68,5 +77,17 @@ const chartOptions = {
   position: relative;
   height: 300px;
   width: 100%;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--c-text-mute);
+  font-size: var(--text-sm);
+  text-align: center;
 }
 </style>
