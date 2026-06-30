@@ -116,12 +116,12 @@ const stats = computed(() => {
 
 .badge.success {
   background: rgba(74, 222, 128, 0.2);
-  color: #16a34a;
+  color: var(--c-success-text);
 }
 
 .badge.warning {
   background: rgba(250, 204, 21, 0.2);
-  color: #ca8a04;
+  color: var(--c-warning-text);
 }
 
 .stats-grid {
