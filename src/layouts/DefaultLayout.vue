@@ -220,6 +220,11 @@ const themeLabel = computed(() => {
   border-color: var(--c-border-hover);
 }
 
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
 /* F4.5 — navbar responsivo: empilha brand/nav e permite quebra em telas estreitas */
 @media (max-width: 640px) {
   .navbar-content {
