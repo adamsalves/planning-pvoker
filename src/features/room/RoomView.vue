@@ -198,8 +198,12 @@ function handleStartSession() {
 // Voting phase
 function handleVote(value: string | number) {
   if (currentRound.value?.status !== 'voting') return
-  optimisticVote.value = value // feedback imediato; o servidor confirma em seguida
-  castVote(roomId.value, userStore.playerId, value)
+  optimisticVote.value = value // acende na hora (otimista)
+  castVote(roomId.value, userStore.playerId, value).catch(() => {
+    // Servidor recusou (deck inválido / fora de votação / não autorizado): desfaz o
+    // otimista se ele ainda for este valor (o usuário pode ter votado de novo).
+    if (optimisticVote.value === value) optimisticVote.value = null
+  })
 }
 
 function handleReveal() {

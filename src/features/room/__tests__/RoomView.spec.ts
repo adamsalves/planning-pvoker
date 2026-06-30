@@ -13,6 +13,9 @@ const mockRouterPush = vi.fn()
 const mockRevealVotes = vi.fn()
 // The rejoin effect awaits this Promise; resolve by default so mounting is a no-op.
 const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
+// castVote agora retorna Promise; resolve por padrão (sucesso) para o handleVote
+// não cair no .catch nos testes que não exercitam a rejeição.
+const mockCastVote = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -30,7 +33,7 @@ vi.mock('@/composables/useSocket', () => ({
     startSession: vi.fn(),
     nextRound: vi.fn(),
     resetSession: vi.fn(),
-    castVote: vi.fn(),
+    castVote: mockCastVote,
     revealVotes: mockRevealVotes,
     disconnect: vi.fn(),
     joinRoom: mockSocketJoinRoom,
@@ -224,6 +227,7 @@ describe('RoomView.vue optimistic vote', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSocketJoinRoom.mockResolvedValue(undefined)
+    mockCastVote.mockResolvedValue(undefined)
   })
 
   function votingRoom(votes: Record<string, string | number>): Room {
@@ -277,5 +281,21 @@ describe('RoomView.vue optimistic vote', () => {
     roomStore.syncRoom(votingRoom({ 'player-2': 8 }))
     await flushPromises()
     expect(votingArea.props('selectedValue')).toBe(8)
+  })
+
+  it('clears the optimistic vote when the server rejects the cast', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    useRoomStore().syncRoom(votingRoom({}))
+    mockCastVote.mockRejectedValueOnce(new Error('Voto inválido para o baralho'))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    votingArea.vm.$emit('vote', 999)
+    await flushPromises()
+
+    // Servidor recusou → o otimista é desfeito (a carta volta a apagar).
+    expect(votingArea.props('selectedValue')).toBeNull()
   })
 })
