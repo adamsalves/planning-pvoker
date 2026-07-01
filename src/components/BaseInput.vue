@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 
 interface Props {
   label?: string
@@ -20,7 +20,9 @@ const props = withDefaults(defineProps<Props>(), {
 // Vue 3.4+ defineModel makes it easy to bind v-model
 const modelValue = defineModel<string | number>()
 
-const inputId = computed(() => props.id || `input-${Math.random().toString(36).substring(2, 9)}`)
+// useId() gera um id estável e único por instância (SSR-safe), sem colisão do Math.random().
+const generatedId = useId()
+const inputId = computed(() => props.id || generatedId)
 </script>
 
 <template>

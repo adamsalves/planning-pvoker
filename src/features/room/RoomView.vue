@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
 import { DECKS } from '@/types'
+import { activePlayersOf } from '@/utils/players'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import SubjectForm from './SubjectForm.vue'
@@ -83,15 +84,15 @@ watch(
 )
 
 // Apenas jogadores ativos (não observers) para contagem
-const activePlayerCount = computed(() => players.value.filter((p) => p.role !== 'observer').length)
+const activePlayerCount = computed(() => activePlayersOf(players.value).length)
 
 const allActiveVoted = computed(() => {
   const round = currentRound.value
   if (!round) return false
-  const activePlayers = players.value.filter((p) => p.role !== 'observer')
+  const active = activePlayersOf(players.value)
   // Guard length: uma sala só de observers (zero ativos) NÃO conta como "todos
   // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
-  return activePlayers.length > 0 && activePlayers.every((p) => p.id in round.votes)
+  return active.length > 0 && active.every((p) => p.id in round.votes)
 })
 
 // Auto-reveal é responsabilidade ÚNICA do servidor (roomManager.castVote);
@@ -594,17 +595,6 @@ function handleLeave() {
 
   .sidebar-panel {
     position: static;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 </style>

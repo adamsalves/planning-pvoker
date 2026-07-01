@@ -529,16 +529,4 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   opacity: 0;
   transform: translateX(-10px);
 }
-
-/* Reuse slide animation from main.css */
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 </style>

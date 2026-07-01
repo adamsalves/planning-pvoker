@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Player } from '@/types'
+import { activePlayersOf, observersOf } from '@/utils/players'
 
 interface Props {
   players: Player[]
@@ -11,8 +12,8 @@ interface Props {
 const props = defineProps<Props>()
 
 // Separar jogadores ativos dos espectadores
-const activePlayers = computed(() => props.players.filter((p) => p.role !== 'observer'))
-const observers = computed(() => props.players.filter((p) => p.role === 'observer'))
+const activePlayers = computed(() => activePlayersOf(props.players))
+const observers = computed(() => observersOf(props.players))
 
 function hasVoted(playerId: string): boolean {
   return playerId in props.votes
