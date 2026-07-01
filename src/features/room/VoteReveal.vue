@@ -65,6 +65,15 @@ const maxCount = computed(() => {
   return Math.max(...distribution.value.map((d) => d.count))
 })
 
+// Feature-detection: mesmo guard de stores/theme.ts (jsdom/SSR podem não ter matchMedia).
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
 // Confetti quando há consenso
 function fireConfetti() {
   confetti({
@@ -92,14 +101,14 @@ function fireConfetti() {
 onMounted(() => {
   if (props.celebrate && hasConsensus.value && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
-    fireConfetti()
+    if (!prefersReducedMotion()) fireConfetti()
   }
 })
 
 watch(hasConsensus, (newVal) => {
   if (props.celebrate && newVal && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
-    fireConfetti()
+    if (!prefersReducedMotion()) fireConfetti()
   }
 })
 </script>
