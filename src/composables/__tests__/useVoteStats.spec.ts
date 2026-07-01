@@ -35,6 +35,16 @@ describe('useVoteStats', () => {
     expect(s.max.value).toBe(5)
   })
 
+  it('voto 0 conta como numérico (type-guard por typeof, não truthy)', () => {
+    const s = useVoteStats({ a: 0, b: 0 })
+    expect(s.numericVotes.value).toEqual([0, 0])
+    expect(s.hasConsensus.value).toBe(true)
+    expect(s.consensusValue.value).toBe(0) // preserva 0 (não vira null pelo ??)
+    expect(s.average.value).toBe(0)
+    expect(s.min.value).toBe(0)
+    expect(s.max.value).toBe(0)
+  })
+
   it('votos mistos (num + texto) → estatísticas só dos numéricos, sem consenso', () => {
     const s = useVoteStats({ a: 1, b: 'M', c: 3 })
     expect(s.count.value).toBe(3)
@@ -94,14 +104,16 @@ describe('helpers puros', () => {
     expect(isNumericVote('M')).toBe(false)
   })
 
-  it('numericVotesOf filtra só os numéricos', () => {
+  it('numericVotesOf filtra só os numéricos (inclui 0)', () => {
     expect(numericVotesOf({ a: 1, b: 'M', c: 3 })).toEqual([1, 3])
     expect(numericVotesOf({ a: 'P', b: 'M' })).toEqual([])
+    expect(numericVotesOf({ a: 0, b: 4 })).toEqual([0, 4])
   })
 
   it('averageOf: média arredondada, null quando não há numéricos', () => {
     expect(averageOf({ a: 2, b: 4 })).toBe(3)
     expect(averageOf({ a: 1, b: 1, c: 2 })).toBe(1.3)
+    expect(averageOf({ a: 0, b: 2 })).toBe(1) // 0 entra na média
     expect(averageOf({})).toBeNull()
     expect(averageOf({ a: 'M', b: 'G' })).toBeNull()
   })

@@ -41,6 +41,10 @@ export function useVoteStats(votesSource: MaybeRefOrGetter<Votes>) {
   )
 
   // Consenso = todos os votos iguais (numéricos OU textuais) e pelo menos um voto.
+  // Unifica VoteReveal e RoundSummary e corrige um bug latente deste último: o
+  // consenso textual antigo era código morto (inalcançável após o early-return do
+  // caso "sem votos numéricos"), então o histórico nunca marcava consenso em deck
+  // textual. Agora marca.
   const hasConsensus = computed(() => {
     if (values.value.length === 0) return false
     const first = values.value[0]
