@@ -192,7 +192,7 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
                 type="checkbox"
                 v-model="createAutoReveal"
                 v-bind="createAutoRevealAttrs"
-                class="toggle-input"
+                class="toggle-input sr-only"
               />
               <span class="toggle-switch"></span>
               <span class="toggle-text">Auto-revelar quando todos votarem</span>
@@ -463,10 +463,6 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   cursor: pointer;
 }
 
-.toggle-input {
-  display: none;
-}
-
 .toggle-switch {
   position: relative;
   width: 44px;
@@ -496,6 +492,11 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
 
 .toggle-input:checked + .toggle-switch::after {
   transform: translateX(20px);
+}
+
+.toggle-input:focus-visible + .toggle-switch {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
 }
 
 .toggle-text {

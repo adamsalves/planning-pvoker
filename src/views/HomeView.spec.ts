@@ -48,4 +48,10 @@ describe('HomeView.vue', () => {
 
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
+
+  it('keeps the auto-reveal checkbox focusable instead of display:none', () => {
+    const wrapper = mount(HomeView)
+
+    expect(wrapper.find('input.toggle-input').classes()).toContain('sr-only')
+  })
 })
