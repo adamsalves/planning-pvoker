@@ -39,7 +39,8 @@ function getVote(playerId: string): string | number | undefined {
             <span class="player-avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="player-name">
               {{ player.name }}
-              <span v-if="player.role === 'admin'" class="admin-badge">👑</span>
+              <span v-if="player.role === 'admin'" class="admin-badge" aria-hidden="true">👑</span>
+              <span v-if="player.role === 'admin'" class="sr-only">(admin)</span>
             </span>
           </div>
           <div class="player-status">
@@ -50,9 +51,11 @@ function getVote(playerId: string): string | number | undefined {
                 class="voted-badge"
                 key="voted"
               >
-                ✅
+                <span aria-hidden="true">✅</span><span class="sr-only">Votou</span>
               </span>
-              <span v-else-if="status === 'voting'" class="pending-badge" key="pending"> ⏳ </span>
+              <span v-else-if="status === 'voting'" class="pending-badge" key="pending">
+                <span aria-hidden="true">⏳</span><span class="sr-only">Aguardando voto</span>
+              </span>
               <!-- Votos revelados: mostrar o valor -->
               <span
                 v-else-if="status === 'revealed' && hasVoted(player.id)"
@@ -78,7 +81,8 @@ function getVote(playerId: string): string | number | undefined {
             }}</span>
             <span class="player-name">{{ player.name }}</span>
           </div>
-          <span class="observer-badge">👁️</span>
+          <span class="observer-badge" aria-hidden="true">👁️</span>
+          <span class="sr-only">Espectador</span>
         </li>
       </ul>
     </div>

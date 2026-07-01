@@ -74,7 +74,7 @@ describe('ConnectionOverlay.vue', () => {
     expect(el.attributes('aria-busy')).toBe('true')
     // Decorative copy is aria-hidden; the announced text is stable.
     expect(wrapper.find('.overlay-message').attributes('aria-hidden')).toBe('true')
-    expect(wrapper.find('.visually-hidden').text()).toContain('Conectando ao servidor')
+    expect(wrapper.find('.sr-only').text()).toContain('Conectando ao servidor')
   })
 
   it('rotates the decorative copy over time', async () => {
@@ -99,7 +99,7 @@ describe('ConnectionOverlay.vue', () => {
     await nextTick()
 
     expect(wrapper.find('.overlay-message').text()).toContain('demorando mais que o normal')
-    expect(wrapper.find('.visually-hidden').text()).toContain('demorando mais que o normal')
+    expect(wrapper.find('.sr-only').text()).toContain('demorando mais que o normal')
     // Still a loading state, not an error: the overlay remains visible.
     expect(overlay(wrapper).exists()).toBe(true)
   })

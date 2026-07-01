@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import VoteReveal from '../VoteReveal.vue'
 import confetti from 'canvas-confetti'
@@ -9,6 +9,10 @@ vi.mock('canvas-confetti', () => ({
 }))
 
 describe('VoteReveal.vue', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('calculates average, min and max correctly', () => {
     const wrapper = mount(VoteReveal, {
       props: {
@@ -83,6 +87,29 @@ describe('VoteReveal.vue', () => {
     })
 
     expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it('does not fire confetti when the user prefers reduced motion', () => {
+    vi.mocked(confetti).mockClear()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: true,
+        media: '(prefers-reduced-motion: reduce)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
+
+    const wrapper = mount(VoteReveal, {
+      props: {
+        votes: { p1: 5, p2: 5, p3: 5 },
+        playerCount: 3,
+      },
+    })
+
+    expect(confetti).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Consenso!')
   })
 
   it('shows consensus banner', () => {

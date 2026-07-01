@@ -83,6 +83,9 @@ function getPlayerStyle(index: number) {
           <div class="player-tag">
             <span class="avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="name">{{ player.name }}</span>
+            <span v-if="status === 'voting'" class="sr-only">
+              {{ hasVoted(player.id) ? 'votou' : 'aguardando voto' }}
+            </span>
           </div>
         </div>
       </TransitionGroup>

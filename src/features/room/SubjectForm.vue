@@ -51,7 +51,14 @@ function handleAdd() {
         <li v-for="(item, index) in subjects" :key="index" class="backlog-item">
           <span class="backlog-index">{{ index + 1 }}.</span>
           <span class="backlog-text">{{ item }}</span>
-          <button class="remove-btn" @click="emit('remove', index)" title="Remover">✕</button>
+          <button
+            class="remove-btn"
+            @click="emit('remove', index)"
+            title="Remover"
+            :aria-label="`Remover ${item}`"
+          >
+            ✕
+          </button>
         </li>
       </ul>
     </div>

@@ -192,7 +192,7 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
                 type="checkbox"
                 v-model="createAutoReveal"
                 v-bind="createAutoRevealAttrs"
-                class="toggle-input"
+                class="toggle-input sr-only"
               />
               <span class="toggle-switch"></span>
               <span class="toggle-text">Auto-revelar quando todos votarem</span>
@@ -440,6 +440,14 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   background: var(--c-primary-soft);
 }
 
+/* F2.6 — indicador de foco por teclado nos cartões de deck/role: o input é .sr-only,
+   então o anel vai no cartão-pai via :has(). Só :focus-visible (teclado), não no clique. */
+.deck-option:has(input:focus-visible),
+.role-option:has(input:focus-visible) {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
 .role-icon {
   font-size: var(--text-2xl);
 }
@@ -461,10 +469,6 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   align-items: center;
   gap: var(--space-3);
   cursor: pointer;
-}
-
-.toggle-input {
-  display: none;
 }
 
 .toggle-switch {
@@ -498,22 +502,14 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   transform: translateX(20px);
 }
 
+.toggle-input:focus-visible + .toggle-switch {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
 .toggle-text {
   font-size: var(--text-sm);
   color: var(--c-text-soft);
-}
-
-/* Screen reader only */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
 }
 
 /* Tab Transition */

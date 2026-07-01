@@ -64,6 +64,16 @@ describe('SubjectForm.vue', () => {
     expect(wrapper.emitted('remove')?.[0]).toEqual([1])
   })
 
+  it('exposes a specific aria-label per backlog item on the remove button', () => {
+    const wrapper = mount(SubjectForm, {
+      props: { subjects: ['Login', 'Signup'], playerCount: 3 },
+    })
+
+    const buttons = wrapper.findAll('.remove-btn')
+    expect(buttons[0].attributes('aria-label')).toBe('Remover Login')
+    expect(buttons[1].attributes('aria-label')).toBe('Remover Signup')
+  })
+
   it('disables start button when no subjects', () => {
     const wrapper = mount(SubjectForm, {
       props: { subjects: [], playerCount: 3 },

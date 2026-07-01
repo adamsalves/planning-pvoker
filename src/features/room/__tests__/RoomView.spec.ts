@@ -299,3 +299,11 @@ describe('RoomView.vue optimistic vote', () => {
     expect(votingArea.props('selectedValue')).toBeNull()
   })
 })
+
+describe('RoomView.vue heading structure', () => {
+  it('renders the room title as the page h1 (F2.7 — navbar logo is not a heading)', () => {
+    const wrapper = mountRoomView()
+
+    expect(wrapper.find('h1.room-title').exists()).toBe(true)
+  })
+})

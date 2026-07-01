@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, nextTick, ref, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { routeTitle } from '@/router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
@@ -9,6 +10,24 @@ const roomStore = useRoomStore()
 const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
 
 const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
+
+// F2.8 — troca de rota move o foco pro <main> e anuncia o título via aria-live,
+// já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
+const route = useRoute()
+const mainRef = ref<HTMLElement | null>(null)
+
+// route.path (não route.name): troca de :id na mesma rota nomeada (ex.: sala -> outra
+// sala) também deve mover o foco — mesmo não havendo hoje nenhuma navegação assim.
+watch(
+  () => route.path,
+  async () => {
+    await nextTick()
+    mainRef.value?.focus()
+  },
+)
+
+// Título anunciado ao trocar de rota (inclui o código da Sala). Ver routeTitle no router.
+const announcedTitle = computed(() => routeTitle(route.meta, route.params))
 
 const themeStore = useThemeStore()
 const { preference: themePreference } = storeToRefs(themeStore)
@@ -32,7 +51,7 @@ const themeLabel = computed(() => {
       <div class="navbar-content">
         <RouterLink to="/" class="navbar-brand">
           <span class="logo-icon">🃏</span>
-          <h1 class="logo-text">Planning Poker</h1>
+          <span class="logo-text">Planning Poker</span>
         </RouterLink>
         <nav class="navbar-nav">
           <RouterLink
@@ -58,7 +77,10 @@ const themeLabel = computed(() => {
       </div>
     </header>
 
-    <main class="main-content">
+    <!-- Live region IRMÃ do <main> (não filha): na navegação o foco vai pro <main>; se a
+         região estivesse dentro, o leitor de tela poderia anunciar o título duas vezes. -->
+    <p class="sr-only" aria-live="polite">{{ announcedTitle }}</p>
+    <main ref="mainRef" class="main-content" tabindex="-1">
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />
@@ -172,6 +194,15 @@ const themeLabel = computed(() => {
   margin: 0 auto;
   width: 100%;
   padding: var(--space-6) var(--space-4);
+}
+
+/* F2.8: <main> recebe foco programático a cada navegação (landmark, não widget
+   interativo) — o anel de foco do navegador nesse caso só serve pra atrapalhar
+   visualmente; o benefício de a11y (reset de contexto pro leitor de tela) não
+   depende de mostrar o outline. Os elementos que o usuário realmente navega via
+   Tab mantêm seu próprio :focus-visible normalmente. */
+.main-content:focus {
+  outline: none;
 }
 
 .footer {

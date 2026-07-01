@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, onMounted, ref } from 'vue'
 import confetti from 'canvas-confetti'
+import { prefersReducedMotion } from '@/composables/matchMedia'
 
 interface Props {
   votes: Record<string, string | number>
@@ -92,14 +93,14 @@ function fireConfetti() {
 onMounted(() => {
   if (props.celebrate && hasConsensus.value && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
-    fireConfetti()
+    if (!prefersReducedMotion()) fireConfetti()
   }
 })
 
 watch(hasConsensus, (newVal) => {
   if (props.celebrate && newVal && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
-    fireConfetti()
+    if (!prefersReducedMotion()) fireConfetti()
   }
 })
 </script>
