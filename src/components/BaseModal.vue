@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useId, useSlots, watch } from 'vue'
 
 interface Props {
   modelValue: boolean // v-model bindings
   title?: string
   preventClose?: boolean // Se true, clicando fora não fecha
+  ariaLabel?: string // Nome acessível quando um slot #header customizado é usado (sem título nosso)
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -21,6 +22,13 @@ const titleId = useId()
 const dialogRef = ref<HTMLElement | null>(null)
 let previouslyFocused: HTMLElement | null = null
 
+const slots = useSlots()
+
+// Nome acessível do diálogo: aponta pro <h2> do título quando somos nós que o renderizamos;
+// com slot #header customizado (não sabemos o conteúdo), cai no aria-label vindo da prop.
+const labelledById = computed(() => (props.title && !slots.header ? titleId : undefined))
+const dialogAriaLabel = computed(() => (labelledById.value ? undefined : props.ariaLabel))
+
 const close = () => {
   if (props.preventClose) return
   emit('update:modelValue', false)
@@ -30,11 +38,18 @@ const close = () => {
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+// Descarta elementos ocultos (display:none/visibility:hidden): o browser não move foco
+// pra eles, então incluí-los faria o trap "prender" o foco num alvo que .focus() ignora.
+function isVisible(el: HTMLElement): boolean {
+  const style = window.getComputedStyle(el)
+  return style.display !== 'none' && style.visibility !== 'hidden'
+}
+
 function getFocusableElements(): HTMLElement[] {
   if (!dialogRef.value) return []
   const elements: HTMLElement[] = []
   dialogRef.value.querySelectorAll(FOCUSABLE_SELECTOR).forEach((node) => {
-    if (node instanceof HTMLElement) elements.push(node)
+    if (node instanceof HTMLElement && isVisible(node)) elements.push(node)
   })
   return elements
 }
@@ -112,7 +127,8 @@ onUnmounted(() => {
           class="modal-dialog"
           role="dialog"
           aria-modal="true"
-          :aria-labelledby="title && !$slots.header ? titleId : undefined"
+          :aria-labelledby="labelledById"
+          :aria-label="dialogAriaLabel"
           tabindex="-1"
           @click.stop
         >

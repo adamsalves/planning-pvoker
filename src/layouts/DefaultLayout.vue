@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
+import { routeTitle } from '@/router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
@@ -24,6 +25,9 @@ watch(
     mainRef.value?.focus()
   },
 )
+
+// Título anunciado ao trocar de rota (inclui o código da Sala). Ver routeTitle no router.
+const announcedTitle = computed(() => routeTitle(route.meta, route.params))
 
 const themeStore = useThemeStore()
 const { preference: themePreference } = storeToRefs(themeStore)
@@ -73,8 +77,10 @@ const themeLabel = computed(() => {
       </div>
     </header>
 
+    <!-- Live region IRMÃ do <main> (não filha): na navegação o foco vai pro <main>; se a
+         região estivesse dentro, o leitor de tela poderia anunciar o título duas vezes. -->
+    <p class="sr-only" aria-live="polite">{{ announcedTitle }}</p>
     <main ref="mainRef" class="main-content" tabindex="-1">
-      <p class="sr-only" aria-live="polite">{{ route.meta.title }}</p>
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />

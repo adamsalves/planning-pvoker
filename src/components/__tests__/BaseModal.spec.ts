@@ -116,4 +116,32 @@ describe('BaseModal.vue', () => {
 
     expect(document.activeElement).toBe(dialog)
   })
+
+  it('usa o aria-label da prop como nome acessível quando há slot #header customizado', () => {
+    wrapper = mount(BaseModal, {
+      props: { modelValue: true, ariaLabel: 'Configurações' },
+      slots: { header: '<h2>Header customizado</h2>' },
+      attachTo: document.body,
+    })
+
+    const dialog = getDialog()
+    expect(dialog.hasAttribute('aria-labelledby')).toBe(false)
+    expect(dialog.getAttribute('aria-label')).toBe('Configurações')
+  })
+
+  it('Escape fecha o diálogo (emite update:modelValue=false e close)', () => {
+    const w = mountModal()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+    expect(w.emitted('update:modelValue')).toEqual([[false]])
+    expect(w.emitted('close')).toHaveLength(1)
+  })
+
+  it('Escape não fecha quando preventClose está ativo', () => {
+    const w = mountModal({ preventClose: true })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+    expect(w.emitted('update:modelValue')).toBeUndefined()
+    expect(w.emitted('close')).toBeUndefined()
+  })
 })

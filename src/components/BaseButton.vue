@@ -148,4 +148,20 @@ const classes = computed(() => {
     transform: rotate(360deg);
   }
 }
+
+/* Reduced-motion: rotação é gatilho vestibular. Troca o giro por um pulso de opacidade
+   (seguro) — precisa de !important pra vencer o reset global de main.css, que senão
+   congelaria o spinner num ângulo fixo (animation-iteration-count: 1) e ele deixaria de
+   comunicar "carregando". */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: spinner-pulse 1.2s ease-in-out infinite !important;
+  }
+}
+
+@keyframes spinner-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
 </style>

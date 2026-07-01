@@ -46,7 +46,7 @@ const inputId = computed(() => props.id || `input-${Math.random().toString(36).s
     </div>
 
     <Transition name="fade">
-      <span v-if="error" :id="`${inputId}-error`" class="input-error-msg" aria-live="polite">{{
+      <span v-if="error" :id="`${inputId}-error`" class="input-error-msg" role="alert">{{
         error
       }}</span>
     </Transition>

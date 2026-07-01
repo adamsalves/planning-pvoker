@@ -12,14 +12,14 @@ describe('BaseInput.vue', () => {
     expect(wrapper.find('.input-error-msg').exists()).toBe(false)
   })
 
-  it('liga o input à mensagem de erro via aria-describedby e anuncia via aria-live', () => {
+  it('liga o input à mensagem de erro via aria-describedby e anuncia via role=alert', () => {
     const wrapper = mount(BaseInput, { props: { label: 'Nome', error: 'Nome é obrigatório' } })
     const input = wrapper.find('input')
     const errorMsg = wrapper.find('.input-error-msg')
 
     expect(input.attributes('aria-invalid')).toBe('true')
     expect(errorMsg.exists()).toBe(true)
-    expect(errorMsg.attributes('aria-live')).toBe('polite')
+    expect(errorMsg.attributes('role')).toBe('alert')
     expect(errorMsg.text()).toBe('Nome é obrigatório')
 
     // O id referenciado por aria-describedby precisa ser exatamente o id do span de erro.

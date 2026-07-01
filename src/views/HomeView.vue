@@ -440,6 +440,14 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   background: var(--c-primary-soft);
 }
 
+/* F2.6 — indicador de foco por teclado nos cartões de deck/role: o input é .sr-only,
+   então o anel vai no cartão-pai via :has(). Só :focus-visible (teclado), não no clique. */
+.deck-option:has(input:focus-visible),
+.role-option:has(input:focus-visible) {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
 .role-icon {
   font-size: var(--text-2xl);
 }

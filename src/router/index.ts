@@ -8,7 +8,8 @@ declare module 'vue-router' {
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  scrollBehavior: () => ({ top: 0 }),
+  // Honra a posição salva no voltar/avançar (History pode ser longa); topo nas demais.
+  scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
   routes: [
     {
       path: '/',
@@ -31,8 +32,18 @@ const router = createRouter({
   ],
 })
 
+// Título da página. Para a Sala inclui o código (:id) — senão document.title e o anúncio
+// de rota ficariam só "Sala", sem distinguir salas. Compartilhado com DefaultLayout (aria-live).
+export function routeTitle(
+  meta: { title: string },
+  params: Record<string, string | string[]>,
+): string {
+  const code = typeof params.id === 'string' ? params.id : undefined
+  return code ? `${meta.title} ${code}` : meta.title
+}
+
 router.afterEach((to) => {
-  document.title = `${to.meta.title} · Planning Poker`
+  document.title = `${routeTitle(to.meta, to.params)} · Planning Poker`
 })
 
 export default router

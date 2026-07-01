@@ -142,9 +142,9 @@ button {
 }
 
 /* Acessibilidade: conteúdo presente para leitores de tela, oculto visualmente.
-   Único ponto de definição — antes duplicado (e dividido entre .sr-only e
-   .visually-hidden) em HomeView, PlayerList, PokerTable, ConnectionOverlay e
-   DefaultLayout. */
+   Único ponto de definição — antes dividido entre .sr-only (HomeView) e
+   .visually-hidden (ConnectionOverlay); os demais consumidores (PlayerList,
+   PokerTable, DefaultLayout) passam a usar esta regra global. */
 .sr-only {
   position: absolute;
   width: 1px;
