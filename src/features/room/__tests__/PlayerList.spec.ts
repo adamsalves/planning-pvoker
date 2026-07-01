@@ -64,4 +64,31 @@ describe('PlayerList.vue', () => {
     expect(wrapper.text()).toContain('5')
     expect(wrapper.text()).not.toContain('✅')
   })
+
+  it('marks the admin crown as decorative with a sr-only alternative', () => {
+    const wrapper = mount(PlayerList, {
+      props: { players: [mockPlayers[0]!], votes: {}, status: 'waiting' },
+    })
+
+    expect(wrapper.find('.admin-badge').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.text()).toContain('(admin)')
+  })
+
+  it('marks status emoji as decorative with sr-only alternatives', () => {
+    const wrapper = mount(PlayerList, {
+      props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+    })
+
+    expect(wrapper.find('.pending-badge [aria-hidden="true"]').exists()).toBe(true)
+    expect(wrapper.find('.pending-badge .sr-only').text()).toBe('Aguardando voto')
+  })
+
+  it('marks the observer eye icon as decorative with a sr-only alternative', () => {
+    const wrapper = mount(PlayerList, {
+      props: { players: [mockPlayers[2]!], votes: {}, status: 'waiting' },
+    })
+
+    expect(wrapper.find('.observer-badge').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.text()).toContain('Espectador')
+  })
 })

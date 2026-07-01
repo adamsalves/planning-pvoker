@@ -71,6 +71,16 @@ describe('PokerTable.vue', () => {
     expect(valuesRendered).toContain('5')
   })
 
+  it('exposes a sr-only vote status per player during voting', () => {
+    const wrapper = mount(PokerTable, {
+      props: { players: mockPlayers, votes: { '1': 8 }, status: 'voting' },
+    })
+
+    const spots = wrapper.findAll('.player-spot')
+    expect(spots[0]!.find('.sr-only').text()).toContain('votou')
+    expect(spots[1]!.find('.sr-only').text()).toContain('aguardando voto')
+  })
+
   it('shows appropriate messages in the center of the table', () => {
     const wrapperWaiting = mount(PokerTable, {
       props: { players: [], votes: {}, status: 'waiting' },
