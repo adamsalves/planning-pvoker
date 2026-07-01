@@ -15,8 +15,10 @@ const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
 const route = useRoute()
 const mainRef = ref<HTMLElement | null>(null)
 
+// route.path (não route.name): troca de :id na mesma rota nomeada (ex.: sala -> outra
+// sala) também deve mover o foco — mesmo não havendo hoje nenhuma navegação assim.
 watch(
-  () => route.name,
+  () => route.path,
   async () => {
     await nextTick()
     mainRef.value?.focus()
@@ -72,7 +74,7 @@ const themeLabel = computed(() => {
     </header>
 
     <main ref="mainRef" class="main-content" tabindex="-1">
-      <p class="visually-hidden" aria-live="polite">{{ route.meta.title }}</p>
+      <p class="sr-only" aria-live="polite">{{ route.meta.title }}</p>
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />
@@ -195,18 +197,6 @@ const themeLabel = computed(() => {
    Tab mantêm seu próprio :focus-visible normalmente. */
 .main-content:focus {
   outline: none;
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .footer {
