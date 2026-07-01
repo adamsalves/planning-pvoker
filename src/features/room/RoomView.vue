@@ -247,9 +247,9 @@ function handleLeave() {
       <template #header>
         <div class="room-header">
           <div>
-            <h2 class="room-title">
+            <h1 class="room-title">
               Sala <span class="room-code">{{ roomId }}</span>
-            </h2>
+            </h1>
             <div class="room-meta">
               <span class="badge badge-role" :class="userStore.playerRole">
                 {{ isAdmin ? '👑 Admin' : isObserver ? '👁️ Espectador' : '🃏 Jogador' }}

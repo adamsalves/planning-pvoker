@@ -32,7 +32,7 @@ const themeLabel = computed(() => {
       <div class="navbar-content">
         <RouterLink to="/" class="navbar-brand">
           <span class="logo-icon">🃏</span>
-          <h1 class="logo-text">Planning Poker</h1>
+          <span class="logo-text">Planning Poker</span>
         </RouterLink>
         <nav class="navbar-nav">
           <RouterLink
