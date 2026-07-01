@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, onMounted, ref } from 'vue'
 import confetti from 'canvas-confetti'
+import { prefersReducedMotion } from '@/composables/matchMedia'
 
 interface Props {
   votes: Record<string, string | number>
@@ -64,15 +65,6 @@ const maxCount = computed(() => {
   if (distribution.value.length === 0) return 0
   return Math.max(...distribution.value.map((d) => d.count))
 })
-
-// Feature-detection: mesmo guard de stores/theme.ts (jsdom/SSR podem não ter matchMedia).
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
-}
 
 // Confetti quando há consenso
 function fireConfetti() {

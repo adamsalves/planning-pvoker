@@ -504,19 +504,6 @@ const onJoinRoom = handleJoinSubmit(async (values) => {
   color: var(--c-text-soft);
 }
 
-/* Screen reader only */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-
 /* Tab Transition */
 .tab-enter-active,
 .tab-leave-active {

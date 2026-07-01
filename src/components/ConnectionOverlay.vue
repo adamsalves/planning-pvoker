@@ -102,7 +102,7 @@ onUnmounted(() => {
           </div>
         </div>
         <p class="overlay-message" aria-hidden="true">{{ message }}</p>
-        <p class="visually-hidden">{{ ariaMessage }}</p>
+        <p class="sr-only">{{ ariaMessage }}</p>
       </div>
     </div>
   </Transition>
@@ -165,18 +165,6 @@ onUnmounted(() => {
   color: var(--c-text);
   max-width: 32ch;
   min-height: 1.6em; /* reserva a linha p/ a copy não pular ao trocar */
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 @keyframes pp-float {
