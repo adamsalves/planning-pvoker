@@ -188,6 +188,15 @@ const themeLabel = computed(() => {
   padding: var(--space-6) var(--space-4);
 }
 
+/* F2.8: <main> recebe foco programático a cada navegação (landmark, não widget
+   interativo) — o anel de foco do navegador nesse caso só serve pra atrapalhar
+   visualmente; o benefício de a11y (reset de contexto pro leitor de tela) não
+   depende de mostrar o outline. Os elementos que o usuário realmente navega via
+   Tab mantêm seu próprio :focus-visible normalmente. */
+.main-content:focus {
+  outline: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
