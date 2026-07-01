@@ -1,45 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import BaseCard from '@/components/BaseCard.vue'
 import type { Round } from '@/types'
+import { useVoteStats } from '@/composables/useVoteStats'
 
 const props = defineProps<{
   round: Round
   roundNumber: number
 }>()
 
-const activeVotes = computed(() => Object.values(props.round.votes))
-
-const numericVotes = computed(() => {
-  return activeVotes.value.filter((v) => typeof v === 'number') as number[]
-})
-
-const stats = computed(() => {
-  const votes = numericVotes.value
-  if (votes.length === 0) return { mean: 0, min: 0, max: 0, consensus: false }
-
-  const min = Math.min(...votes)
-  const max = Math.max(...votes)
-  const sum = votes.reduce((a, b) => a + b, 0)
-  const mean = sum / votes.length
-
-  // Consensus se max == min, e todos votaram algo (podem ser T-Shirts repetidas, mas aqui checamos numericos)
-  const consensus = min === max && votes.length === activeVotes.value.length
-
-  // Se tem cartas textuais MISTURADAS, o consenso textual
-  let isStringConsensus = false
-  if (numericVotes.value.length === 0 && activeVotes.value.length > 0) {
-    const firstVote = activeVotes.value[0]
-    isStringConsensus = activeVotes.value.every((v) => v === firstVote)
-  }
-
-  return {
-    mean: Number(mean.toFixed(1)),
-    min,
-    max,
-    consensus: consensus || isStringConsensus,
-  }
-})
+// Estatísticas da rodada — fonte única (useVoteStats).
+const { values, numericVotes, count, average, min, max, hasConsensus } = useVoteStats(
+  () => props.round.votes,
+)
 </script>
 
 <template>
@@ -49,30 +21,32 @@ const stats = computed(() => {
         <span class="round-number">R{{ roundNumber }}</span>
         {{ round.subject }}
       </h3>
-      <span v-if="stats.consensus" class="badge success">🤝 Consenso Atingido</span>
-      <span v-else class="badge warning">Dispersão ({{ stats.max - stats.min }})</span>
+      <span v-if="hasConsensus" class="badge success">🤝 Consenso Atingido</span>
+      <span v-else class="badge warning"
+        >Dispersão<template v-if="min !== null && max !== null"> ({{ max - min }})</template></span
+      >
     </div>
 
     <div class="stats-grid" v-if="numericVotes.length > 0">
       <div class="stat-box">
         <span class="stat-label">Média</span>
-        <span class="stat-value">{{ stats.mean }}</span>
+        <span class="stat-value">{{ average }}</span>
       </div>
       <div class="stat-box">
         <span class="stat-label">Mínimo</span>
-        <span class="stat-value">{{ stats.min }}</span>
+        <span class="stat-value">{{ min }}</span>
       </div>
       <div class="stat-box">
         <span class="stat-label">Máximo</span>
-        <span class="stat-value">{{ stats.max }}</span>
+        <span class="stat-value">{{ max }}</span>
       </div>
       <div class="stat-box">
         <span class="stat-label">Votos</span>
-        <span class="stat-value">{{ activeVotes.length }}</span>
+        <span class="stat-value">{{ count }}</span>
       </div>
     </div>
     <div v-else>
-      <p class="text-votes">Votos textuais: {{ activeVotes.join(', ') || 'Nenhum' }}</p>
+      <p class="text-votes">Votos textuais: {{ values.join(', ') || 'Nenhum' }}</p>
     </div>
   </BaseCard>
 </template>

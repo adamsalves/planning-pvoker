@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, watch, onMounted, ref } from 'vue'
+import { watch, onMounted, ref } from 'vue'
 import confetti from 'canvas-confetti'
 import { prefersReducedMotion } from '@/composables/matchMedia'
+import { useVoteStats } from '@/composables/useVoteStats'
 
 interface Props {
   votes: Record<string, string | number>
@@ -15,56 +16,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 const hasConfettiPlayed = ref(false)
 
-// Calcular estatísticas dos votos
-const numericVotes = computed(() => {
-  return Object.values(props.votes).filter((v): v is number => typeof v === 'number')
-})
-
-const average = computed(() => {
-  if (numericVotes.value.length === 0) return null
-  const sum = numericVotes.value.reduce((acc, v) => acc + v, 0)
-  return Math.round((sum / numericVotes.value.length) * 10) / 10
-})
-
-const min = computed(() => {
-  if (numericVotes.value.length === 0) return null
-  return Math.min(...numericVotes.value)
-})
-
-const max = computed(() => {
-  if (numericVotes.value.length === 0) return null
-  return Math.max(...numericVotes.value)
-})
-
-const hasConsensus = computed(() => {
-  const values = Object.values(props.votes)
-  if (values.length === 0) return false
-  return values.every((v) => v === values[0])
-})
-
-const consensusValue = computed(() => {
-  if (!hasConsensus.value) return null
-  const values = Object.values(props.votes)
-  return values[0] ?? null
-})
-
-// Vote distribution: quantas vezes cada valor aparece
-const distribution = computed(() => {
-  const dist: Record<string, number> = {}
-  for (const vote of Object.values(props.votes)) {
-    const key = String(vote)
-    dist[key] = (dist[key] || 0) + 1
-  }
-  // Ordenar por contagem desc
-  return Object.entries(dist)
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count)
-})
-
-const maxCount = computed(() => {
-  if (distribution.value.length === 0) return 0
-  return Math.max(...distribution.value.map((d) => d.count))
-})
+// Estatísticas dos votos — fonte única (useVoteStats).
+const { average, min, max, hasConsensus, consensusValue, distribution, maxCount, count } =
+  useVoteStats(() => props.votes)
 
 // Confetti quando há consenso
 function fireConfetti() {
@@ -129,7 +83,7 @@ watch(hasConsensus, (newVal) => {
       </div>
       <div class="stat-card">
         <span class="stat-label">Votos</span>
-        <span class="stat-value">{{ Object.keys(votes).length }}/{{ playerCount }}</span>
+        <span class="stat-value">{{ count }}/{{ playerCount }}</span>
       </div>
     </div>
 
