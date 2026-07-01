@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, nextTick, ref, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
@@ -9,6 +9,19 @@ const roomStore = useRoomStore()
 const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
 
 const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
+
+// F2.8 — troca de rota move o foco pro <main> e anuncia o título via aria-live,
+// já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
+const route = useRoute()
+const mainRef = ref<HTMLElement | null>(null)
+
+watch(
+  () => route.name,
+  async () => {
+    await nextTick()
+    mainRef.value?.focus()
+  },
+)
 
 const themeStore = useThemeStore()
 const { preference: themePreference } = storeToRefs(themeStore)
@@ -58,7 +71,8 @@ const themeLabel = computed(() => {
       </div>
     </header>
 
-    <main class="main-content">
+    <main ref="mainRef" class="main-content" tabindex="-1">
+      <p class="visually-hidden" aria-live="polite">{{ route.meta.title }}</p>
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />
@@ -172,6 +186,18 @@ const themeLabel = computed(() => {
   margin: 0 auto;
   width: 100%;
   padding: var(--space-6) var(--space-4);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .footer {
