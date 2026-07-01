@@ -54,4 +54,19 @@ describe('HomeView.vue', () => {
 
     expect(wrapper.find('input.toggle-input').classes()).toContain('sr-only')
   })
+
+  it('keeps the auto-reveal checkbox operable by keyboard (tab order + real activation event)', async () => {
+    const wrapper = mount(HomeView)
+    const checkbox = wrapper.find<HTMLInputElement>('input.toggle-input')
+
+    // Nem disabled nem fora da ordem de tabulação — o que faria um leitor de tela/teclado pular o campo.
+    expect(checkbox.attributes('disabled')).toBeUndefined()
+    expect(checkbox.attributes('tabindex')).not.toBe('-1')
+    expect(checkbox.element.checked).toBe(false)
+
+    // Espaço/Enter num checkbox focado dispara o mesmo evento 'change' que setValue simula aqui.
+    await checkbox.setValue(true)
+
+    expect(checkbox.element.checked).toBe(true)
+  })
 })

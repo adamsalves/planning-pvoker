@@ -96,4 +96,24 @@ describe('BaseModal.vue', () => {
 
     expect(document.activeElement).toBe(getDialog().querySelector('.modal-footer button'))
   })
+
+  it('sem nenhum elemento focável, mantém o foco no próprio diálogo e não deixa o Tab escapar', async () => {
+    // preventClose remove o botão de fechar; sem slots (default/footer), o diálogo
+    // fica sem nenhum elemento focável — cobre o branch `!first || !last` de trapFocus.
+    wrapper = mount(BaseModal, {
+      props: { modelValue: true, title: 'Sem foco', preventClose: true },
+      attachTo: document.body,
+    })
+    await nextTick()
+
+    const dialog = getDialog()
+    expect(dialog.querySelectorAll('a[href], button, input, select, textarea')).toHaveLength(0)
+    expect(document.activeElement).toBe(dialog)
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    )
+
+    expect(document.activeElement).toBe(dialog)
+  })
 })
