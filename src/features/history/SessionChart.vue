@@ -11,6 +11,7 @@ import {
   LinearScale,
 } from 'chart.js'
 import type { SessionHistory } from '@/stores/history'
+import { numericVotesOf, averageOf } from '@/composables/useVoteStats'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 
@@ -18,13 +19,10 @@ const props = defineProps<{
   session: SessionHistory
 }>()
 
-// Type guard em vez de cast `as number[]` (regra do projeto: sem casts).
-const isNumber = (v: string | number): v is number => typeof v === 'number'
-
 // Baralho não-numérico (ex.: T-Shirt) não tem média que faça sentido — sem isto o
 // gráfico vira uma linha de zeros (enganosa). Detectamos e escondemos (ver template).
 const hasNumericVotes = computed(() =>
-  props.session.rounds.some((round) => Object.values(round.votes).some(isNumber)),
+  props.session.rounds.some((round) => numericVotesOf(round.votes).length > 0),
 )
 
 // Distingue "sem votos" de "baralho não-numérico" — sem isto, uma sessão vazia
@@ -36,12 +34,8 @@ const hasAnyVotes = computed(() =>
 const chartData = computed(() => {
   const labels = props.session.rounds.map((r, i) => `R${i + 1}: ${r.subject}`)
 
-  const data = props.session.rounds.map((round) => {
-    const numericVotes = Object.values(round.votes).filter(isNumber)
-    if (numericVotes.length === 0) return 0
-    const sum = numericVotes.reduce((acc, curr) => acc + curr, 0)
-    return sum / numericVotes.length
-  })
+  // Média por rodada (fonte única); baralho não-numérico → 0 (rodada escondida pelo v-if).
+  const data = props.session.rounds.map((round) => averageOf(round.votes) ?? 0)
 
   return {
     labels,

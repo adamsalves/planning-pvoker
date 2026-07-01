@@ -37,10 +37,10 @@ const {
   joinRoom,
 } = useSocket()
 
-// Type-safe route param
+// Type-safe route param (sem cast `as` — String() normaliza string | string[]).
 const roomId = computed(() => {
   const id = route.params.id
-  return (Array.isArray(id) ? id[0] : id) as string
+  return String(Array.isArray(id) ? id[0] : id)
 })
 
 // Admin é derivado da fonte da verdade (servidor): quem é o adminId da sala.
