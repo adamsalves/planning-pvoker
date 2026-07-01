@@ -92,3 +92,17 @@
 .animate-slide-up {
   animation: slideUp var(--transition-normal);
 }
+
+/* Acessibilidade: respeita prefers-reduced-motion (F2.5). 0.01ms em vez de 0s —
+   alguns navegadores não disparam transitionend/animationend p/ duração zero, o que
+   quebraria a lógica de <Transition>/<TransitionGroup> usada em RoomView, HomeView,
+   PlayerList, PokerTable, BaseModal, ConnectionOverlay etc. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
