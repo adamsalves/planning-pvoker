@@ -8,6 +8,7 @@ import { DECKS } from '@/types'
 import { activePlayersOf } from '@/utils/players'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import RoomSetup from './RoomSetup.vue'
 import RoomVoting from './RoomVoting.vue'
 import SessionSummary from './SessionSummary.vue'
@@ -176,6 +177,14 @@ function handleNewSession() {
   resetSession(roomId.value)
 }
 
+// Confirmação de saída: o botão "Sair da Sala" do cabeçalho fica sempre visível e
+// é fácil de clicar sem querer no meio de uma sessão. A saída pela tela de sessão
+// concluída (SessionSummary) é deliberada e continua imediata.
+const showLeaveConfirm = ref(false)
+
+// Só há sessão a preservar quando alguma rodada já foi criada (setup vazio não).
+const hasRecordedRounds = computed(() => (roomStore.currentRoom?.rounds.length ?? 0) > 0)
+
 function handleLeave() {
   if (roomStore.currentRoom && roomStore.currentRoom.rounds.length > 0) {
     historyStore.saveSession({
@@ -189,7 +198,16 @@ function handleLeave() {
 
   disconnect()
   roomStore.leaveRoom()
+  // Sair encerra a sessão: descarta o token e o vínculo com a sala (senão ficam
+  // no localStorage e um rejoin futuro tentaria reusar uma sessão já abandonada).
+  userStore.setSessionToken(null)
+  userStore.setActiveRoom(null)
   router.push({ name: 'home' })
+}
+
+function confirmLeave() {
+  showLeaveConfirm.value = false
+  handleLeave()
 }
 </script>
 
@@ -234,7 +252,9 @@ function handleLeave() {
                     : '🔗 Compartilhar'
               }}
             </BaseButton>
-            <BaseButton variant="ghost" size="sm" @click="handleLeave"> Sair da Sala </BaseButton>
+            <BaseButton variant="ghost" size="sm" @click="showLeaveConfirm = true">
+              Sair da Sala
+            </BaseButton>
           </div>
         </div>
       </template>
@@ -274,6 +294,20 @@ function handleLeave() {
         @leave="handleLeave"
       />
     </div>
+
+    <!-- F3.4 — confirmação antes de sair da sala (BaseModal endurecido na F2.2) -->
+    <BaseModal v-model="showLeaveConfirm" title="Sair da sala?">
+      <p class="leave-confirm-text">
+        Você vai sair desta sala e voltar à tela inicial.
+        <template v-if="hasRecordedRounds">
+          O resumo desta sessão fica salvo no seu histórico neste dispositivo.
+        </template>
+      </p>
+      <template #footer>
+        <BaseButton variant="ghost" @click="showLeaveConfirm = false">Cancelar</BaseButton>
+        <BaseButton variant="danger" @click="confirmLeave">Sim, sair</BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -300,6 +334,12 @@ function handleLeave() {
   justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+.leave-confirm-text {
+  margin: 0;
+  color: var(--c-text-soft);
+  line-height: 1.5;
 }
 
 .room-title {
