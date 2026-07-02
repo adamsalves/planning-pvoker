@@ -248,10 +248,16 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       const { roomId } = parsed.data
       const playerId = currentPlayerId
 
-      // Forget every live socket and pending grace timer for this identity: the
-      // player is gone NOW, so the disconnect that follows must not schedule
-      // (or keep) a removal for someone already removed.
+      // Leaving is IDENTITY-WIDE: unsubscribe every live socket of this player
+      // (this one and any sibling tab) from the Socket.IO room, so no tab keeps
+      // receiving room_state_updated for a room the identity already left. Then
+      // forget presence and pending grace timers: the player is gone NOW, so
+      // the disconnect that follows must not schedule (or keep) a removal for
+      // someone already removed.
       const key = presenceKey(roomId, playerId)
+      for (const sid of activeSockets.get(key) ?? []) {
+        io.sockets.sockets.get(sid)?.leave(roomId)
+      }
       activeSockets.delete(key)
       const timer = leaveTimers.get(key)
       if (timer) {
@@ -260,7 +266,6 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       }
       currentRoomId = null
       currentPlayerId = null
-      socket.leave(roomId)
 
       roomManager.leaveRoom(roomId, playerId)
       logger.debug(`👋 Player ${playerId} left ${roomId}`)

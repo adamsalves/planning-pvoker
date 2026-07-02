@@ -403,6 +403,85 @@ describe('leave_room (explicit exit)', () => {
     expect(ack.ok).toBeUndefined()
   })
 
+  it('is identity-wide: leaving via one tab unsubscribes the sibling tab from broadcasts', async () => {
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    // The whole identity left, not just tab1's socket…
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+
+    // …and the sibling tab must not keep receiving updates for the room. Drive
+    // a broadcast and give it a beat to (not) arrive: proving a negative needs
+    // a small window after the admin — still subscribed — has received it.
+    let tab2Received = false
+    tab2.on('room_state_updated', () => {
+      tab2Received = true
+    })
+    const seeded = waitForRoomWhere(adminClient, (r) => r.subjects.length === 1)
+    adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
+    await seeded
+    await delay(50)
+    expect(tab2Received).toBe(false)
+  })
+
+  it('acks an error on a duplicated leave_room from the same socket', async () => {
+    const { adminClient, memberClient, adminToken } = await adminAndMember()
+
+    const first = await leaveRoom(memberClient, { roomId: 'r1' })
+    expect(first.ok).toBe(true)
+
+    // The socket identity was unbound by the first leave, so the duplicate is
+    // just an unauthorized emit — refused, and the room stays as it was.
+    const second = await leaveRoom(memberClient, { roomId: 'r1' })
+    expect(second.error).toBeDefined()
+    expect(second.ok).toBeUndefined()
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+  })
+
+  it('lets the same connection rejoin after leaving (leave → join on one socket)', async () => {
+    const { memberClient, memberToken } = await adminAndMember()
+    await leaveRoom(memberClient, { roomId: 'r1' })
+
+    // "Left by mistake, came straight back" without reloading: the old token
+    // was cleared by the leave, so the join carries none and a FRESH one is
+    // minted — it must not be the token the identity held before leaving.
+    const ack = await join(memberClient, { roomId: 'r1', player: member })
+    expect(ack.success).toBe(true)
+    expect(tokenOf(ack)).not.toBe(memberToken)
+    expect(
+      roomOf(ack)
+        .players.map((p) => p.id)
+        .sort(),
+    ).toEqual(['a1', 'm1'])
+  })
+
+  it('acks an error when a socket joined to another room tries to leave r1', async () => {
+    const { adminClient, adminToken } = await adminAndMember()
+
+    const outsider = await connect()
+    await join(outsider, {
+      roomId: 'r2',
+      player: { id: 'o1', name: 'Olga', role: 'member' },
+      config,
+    })
+
+    const ack = await leaveRoom(outsider, { roomId: 'r1' })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
   it('does not remove anyone else when the closing socket follows the leave', async () => {
     const { adminClient, memberClient, adminToken } = await adminAndMember()
 
