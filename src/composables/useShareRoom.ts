@@ -61,5 +61,5 @@ export function useShareRoom(roomId: MaybeRefOrGetter<string>) {
     if (feedbackTimeout) clearTimeout(feedbackTimeout)
   })
 
-  return { shareStatus, inviteUrl, shareRoom, copyInviteLink }
+  return { shareStatus, inviteUrl, shareRoom }
 }
