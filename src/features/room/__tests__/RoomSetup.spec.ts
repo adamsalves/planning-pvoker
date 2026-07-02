@@ -43,6 +43,18 @@ describe('RoomSetup.vue', () => {
     expect(wrapper.text()).toContain('Login')
   })
 
+  it('não-admin com 1 subject usa o singular', () => {
+    const wrapper = mountSetup(false, roomWith({ subjects: ['Único'] }))
+    expect(wrapper.text()).toContain('1 subject cadastrado')
+    expect(wrapper.text()).not.toContain('subjects cadastrados')
+  })
+
+  it('não-admin sem backlog não mostra o preview', () => {
+    const wrapper = mountSetup(false, roomWith({ subjects: [] }))
+    expect(wrapper.text()).toContain('O Scrum Master está preparando')
+    expect(wrapper.text()).not.toContain('cadastrado')
+  })
+
   it('re-emite add/remove/start vindos do SubjectForm', () => {
     const wrapper = mountSetup(true, roomWith())
     const form = wrapper.findComponent(SubjectForm)

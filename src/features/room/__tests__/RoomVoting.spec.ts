@@ -95,4 +95,14 @@ describe('RoomVoting.vue', () => {
     expect(wrapper.emitted('next-round')).toHaveLength(1)
     expect(wrapper.emitted('finish')).toHaveLength(1)
   })
+
+  it('sem rodada ativa e não-admin mostra a mensagem de espera do início', () => {
+    const room = votingRoom('voting')
+    room.rounds = []
+    room.currentRoundIndex = -1
+    const wrapper = mountVoting({ isAdmin: false }, room)
+
+    expect(wrapper.text()).toContain('Aguardando o Scrum Master iniciar a votação')
+    expect(wrapper.findComponent(VotingArea).exists()).toBe(false)
+  })
 })

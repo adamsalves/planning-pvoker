@@ -44,7 +44,7 @@ const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
       />
 
       <!-- Mesa central -->
-      <BaseCard v-if="currentRound" class="section-card table-wrapper">
+      <BaseCard v-if="currentRound" class="section-card">
         <PokerTable
           :players="roomStore.players"
           :votes="currentRound.votes"
