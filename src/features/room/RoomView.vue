@@ -8,13 +8,8 @@ import { DECKS } from '@/types'
 import { activePlayersOf } from '@/utils/players'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
-import SubjectForm from './SubjectForm.vue'
-import RoundHeader from './RoundHeader.vue'
-import VotingArea from './VotingArea.vue'
-import PlayerList from './PlayerList.vue'
-import PokerTable from './PokerTable.vue'
-import VoteReveal from './VoteReveal.vue'
-import RoundControls from './RoundControls.vue'
+import RoomSetup from './RoomSetup.vue'
+import RoomVoting from './RoomVoting.vue'
 import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
 import { useShareRoom } from '@/composables/useShareRoom'
@@ -245,122 +240,28 @@ function handleLeave() {
       </template>
     </BaseCard>
 
-    <!-- ======================== -->
-    <!-- PHASE: SETUP             -->
-    <!-- ======================== -->
-    <div v-if="roomStore.isSetupPhase" class="room-content">
-      <div class="voting-panel">
-        <BaseCard class="section-card" title="📋 Planejamento da Sessão">
-          <template v-if="isAdmin">
-            <SubjectForm
-              :subjects="roomStore.subjects"
-              :player-count="players.length"
-              @add="handleAddSubject"
-              @remove="handleRemoveSubject"
-              @start="handleStartSession"
-            />
-          </template>
-          <template v-else>
-            <div class="waiting-message">
-              <p class="waiting-icon">📝</p>
-              <p>O Scrum Master está preparando os subjects para votação...</p>
-              <div v-if="roomStore.subjects.length > 0" class="preview-backlog">
-                <p class="backlog-count">
-                  {{ roomStore.subjects.length }}
-                  {{
-                    roomStore.subjects.length === 1 ? 'subject cadastrado' : 'subjects cadastrados'
-                  }}
-                </p>
-                <ul class="preview-list">
-                  <li v-for="(item, index) in roomStore.subjects" :key="index" class="preview-item">
-                    <span class="preview-index">{{ index + 1 }}.</span>
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </template>
-        </BaseCard>
-      </div>
+    <!-- PHASE: SETUP -->
+    <RoomSetup
+      v-if="roomStore.isSetupPhase"
+      :is-admin="isAdmin"
+      @add="handleAddSubject"
+      @remove="handleRemoveSubject"
+      @start="handleStartSession"
+    />
 
-      <div class="sidebar-panel">
-        <BaseCard title="Participantes" class="section-card">
-          <PlayerList :players="players" :votes="{}" :status="'waiting'" />
-        </BaseCard>
-      </div>
-    </div>
-
-    <!-- ======================== -->
-    <!-- PHASE: VOTING            -->
-    <!-- ======================== -->
-    <div v-if="roomStore.isVotingPhase" class="room-content">
-      <div class="voting-panel">
-        <!-- Round Header with progress -->
-        <RoundHeader
-          v-if="currentRound"
-          :subject="currentRound.subject"
-          :round-number="roomStore.currentSubjectIndex"
-          :total-subjects="roomStore.totalSubjects"
-          :status="currentRound.status"
-        />
-
-        <!-- Poker Table (Mesa central com animações 3D) -->
-        <BaseCard v-if="currentRound" class="section-card table-wrapper">
-          <PokerTable
-            :players="players"
-            :votes="currentRound.votes"
-            :status="currentRound.status"
-          />
-        </BaseCard>
-
-        <!-- Voting Cards (jogadores podem votar) -->
-        <BaseCard v-if="currentRound?.status === 'voting' && !isObserver" class="section-card">
-          <VotingArea :deck-type="deckType" :selected-value="selectedVote" @vote="handleVote" />
-        </BaseCard>
-
-        <!-- Observer waiting message -->
-        <BaseCard v-if="currentRound?.status === 'voting' && isObserver" class="section-card">
-          <div class="observer-message">
-            <p>👁️ Você está como espectador</p>
-            <p class="observer-sub">Aguardando os jogadores votarem...</p>
-          </div>
-        </BaseCard>
-
-        <!-- Vote Reveal (após revelar) -->
-        <BaseCard v-if="currentRound?.status === 'revealed'" class="section-card">
-          <VoteReveal :votes="currentRound.votes" :player-count="activePlayerCount" />
-        </BaseCard>
-
-        <!-- Admin Controls -->
-        <RoundControls
-          v-if="isAdmin && currentRound"
-          :status="currentRound.status"
-          :all-voted="allActiveVoted"
-          :is-last-subject="roomStore.isLastSubject"
-          @reveal="handleReveal"
-          @next-round="handleNextRound"
-          @finish="handleFinishSession"
-        />
-
-        <!-- Waiting: não é admin e sem rodada -->
-        <BaseCard v-if="!currentRound && !isAdmin" class="section-card">
-          <div class="waiting-message">
-            <p class="waiting-icon">⏳</p>
-            <p>Aguardando o Scrum Master iniciar a votação...</p>
-          </div>
-        </BaseCard>
-      </div>
-
-      <div class="sidebar-panel">
-        <BaseCard title="Participantes" class="section-card">
-          <PlayerList
-            :players="players"
-            :votes="currentRound?.votes ?? {}"
-            :status="currentRound?.status ?? 'waiting'"
-          />
-        </BaseCard>
-      </div>
-    </div>
+    <!-- PHASE: VOTING -->
+    <RoomVoting
+      v-if="roomStore.isVotingPhase"
+      :is-admin="isAdmin"
+      :is-observer="isObserver"
+      :selected-vote="selectedVote"
+      :active-player-count="activePlayerCount"
+      :all-active-voted="allActiveVoted"
+      @vote="handleVote"
+      @reveal="handleReveal"
+      @next-round="handleNextRound"
+      @finish="handleFinishSession"
+    />
 
     <!-- ======================== -->
     <!-- PHASE: COMPLETED         -->
@@ -467,74 +368,6 @@ function handleLeave() {
   width: 100%;
 }
 
-.voting-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.sidebar-panel {
-  position: sticky;
-  top: 80px; /* Navbar height + padding */
-}
-
-.section-card {
-  animation: slideUp var(--transition-normal);
-}
-
-/* Messages */
-.observer-message,
-.waiting-message {
-  text-align: center;
-  padding: var(--space-6) 0;
-  color: var(--c-text-mute);
-}
-
-.observer-sub {
-  font-size: var(--text-sm);
-  margin-top: var(--space-1);
-}
-
-.waiting-icon {
-  font-size: 2rem;
-  margin-bottom: var(--space-2);
-}
-
-/* Preview backlog (non-admin setup view) */
-.preview-backlog {
-  margin-top: var(--space-4);
-  text-align: left;
-}
-
-.backlog-count {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--c-primary);
-  margin-bottom: var(--space-2);
-}
-
-.preview-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.preview-item {
-  font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-2);
-  background: var(--c-bg-mute);
-  border-radius: var(--radius-sm);
-}
-
-.preview-index {
-  font-weight: 600;
-  color: var(--c-primary);
-  margin-right: var(--space-1);
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .room-header {
@@ -544,14 +377,6 @@ function handleLeave() {
   .room-actions {
     justify-content: flex-start;
     width: 100%;
-  }
-
-  .room-content {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar-panel {
-    position: static;
   }
 }
 </style>
