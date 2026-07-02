@@ -117,6 +117,15 @@ export function useSocket() {
     })
   }
 
+  // Saída explícita da sala: pede ao servidor a remoção IMEDIATA (sem esperar o
+  // grace de reconexão de 30s) — o jogador some da lista dos outros na hora, a
+  // transferência de admin não atrasa e o token de sessão do servidor é
+  // descartado junto. Fire-and-forget: chamar disconnect() logo em seguida é
+  // seguro porque o engine.io descarrega o buffer de escrita antes de fechar.
+  function leaveRoom(roomId: string) {
+    socket?.emit('leave_room', { roomId })
+  }
+
   // --- Subject Backlog (setup phase) ---
 
   function addSubjects(roomId: string, subjects: string[]) {
@@ -178,6 +187,7 @@ export function useSocket() {
     isConnected,
     connect,
     joinRoom,
+    leaveRoom,
     addSubjects,
     removeSubject,
     startSession,

@@ -230,6 +230,44 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       if (room) notifyRoomUpdate(parsed.data.roomId)
     })
 
+    // LEAVE ROOM — explicit exit (the client's "Sair da Sala"), as opposed to the
+    // disconnect below. Removes the player IMMEDIATELY: no grace period, so the
+    // others see them go on the spot, an admin hand-off isn't delayed, and the
+    // session token is dropped right away (inside roomManager.leaveRoom) — the
+    // same identity can rejoin from scratch without tripping the token check.
+    socket.on('leave_room', (data: unknown, callback?: (res: unknown) => void) => {
+      const parsed = roomActionSchema.safeParse(data)
+      if (!parsed.success) {
+        callback?.({ error: 'Dados de entrada inválidos' })
+        return
+      }
+      if (!currentPlayerId || currentRoomId !== parsed.data.roomId) {
+        callback?.({ error: 'Não autorizado' })
+        return
+      }
+      const { roomId } = parsed.data
+      const playerId = currentPlayerId
+
+      // Forget every live socket and pending grace timer for this identity: the
+      // player is gone NOW, so the disconnect that follows must not schedule
+      // (or keep) a removal for someone already removed.
+      const key = presenceKey(roomId, playerId)
+      activeSockets.delete(key)
+      const timer = leaveTimers.get(key)
+      if (timer) {
+        clearTimeout(timer)
+        leaveTimers.delete(key)
+      }
+      currentRoomId = null
+      currentPlayerId = null
+      socket.leave(roomId)
+
+      roomManager.leaveRoom(roomId, playerId)
+      logger.debug(`👋 Player ${playerId} left ${roomId}`)
+      notifyRoomUpdate(roomId)
+      callback?.({ ok: true })
+    })
+
     // DISCONNECT — don't remove immediately; allow a grace period for reconnection
     // (e.g. a page refresh). Removal is scheduled only if no socket comes back.
     socket.on('disconnect', () => {

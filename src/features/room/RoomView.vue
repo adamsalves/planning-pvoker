@@ -33,6 +33,7 @@ const {
   revealVotes,
   disconnect,
   joinRoom,
+  leaveRoom,
 } = useSocket()
 
 // Type-safe route param (sem cast `as` — String() normaliza string | string[]).
@@ -196,6 +197,10 @@ function handleLeave() {
     })
   }
 
+  // Avisa o servidor ANTES do disconnect: remoção imediata lá (sem o grace de
+  // 30s), admin transferido na hora e o token do servidor descartado — sem isso,
+  // voltar pra sala logo após sair esbarrava em "Sessão inválida".
+  leaveRoom(roomId.value)
   disconnect()
   roomStore.leaveRoom()
   // Sair encerra a sessão: descarta o token e o vínculo com a sala (senão ficam

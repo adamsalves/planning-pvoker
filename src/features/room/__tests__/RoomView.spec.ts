@@ -19,6 +19,7 @@ const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 // não cair no .catch nos testes que não exercitam a rejeição.
 const mockCastVote = vi.fn().mockResolvedValue(undefined)
 const mockDisconnect = vi.fn()
+const mockLeaveRoom = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -40,6 +41,7 @@ vi.mock('@/composables/useSocket', () => ({
     revealVotes: mockRevealVotes,
     disconnect: mockDisconnect,
     joinRoom: mockSocketJoinRoom,
+    leaveRoom: mockLeaveRoom,
   }),
 }))
 
@@ -341,9 +343,10 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
     await getHeaderLeaveButton(wrapper).trigger('click')
 
     expect(modal.props('modelValue')).toBe(true)
-    // Ainda não saiu: sem navegação, sem desconectar, token intacto.
+    // Ainda não saiu: sem navegação, sem desconectar, sem avisar o servidor.
     expect(mockRouterPush).not.toHaveBeenCalled()
     expect(mockDisconnect).not.toHaveBeenCalled()
+    expect(mockLeaveRoom).not.toHaveBeenCalled()
     expect(useUserStore().sessionToken).toBe('live-token')
 
     wrapper.unmount() // limpa o conteúdo teleportado do modal aberto
@@ -359,6 +362,7 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
     expect(wrapper.findComponent(BaseModal).props('modelValue')).toBe(false)
     expect(mockRouterPush).not.toHaveBeenCalled()
     expect(mockDisconnect).not.toHaveBeenCalled()
+    expect(mockLeaveRoom).not.toHaveBeenCalled()
     expect(useUserStore().sessionToken).toBe('live-token')
   })
 
@@ -374,6 +378,12 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
 
     expect(mockDisconnect).toHaveBeenCalledTimes(1)
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home' })
+    // leave_room avisa o servidor (remoção imediata, sem o grace de 30s) e tem
+    // de ir ANTES do disconnect — depois dele o pacote não sai.
+    expect(mockLeaveRoom).toHaveBeenCalledWith('abc123')
+    expect(mockLeaveRoom.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDisconnect.mock.invocationCallOrder[0],
+    )
     // F3.10 — token e vínculo com a sala descartados no leave.
     expect(userStore.sessionToken).toBeNull()
     expect(userStore.activeRoomId).toBeNull()
