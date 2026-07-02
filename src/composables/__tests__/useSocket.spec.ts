@@ -125,6 +125,15 @@ describe('useSocket', () => {
     joinAck()({ success: true }) // resolve o join p/ limpar o timer de safety-net
   })
 
+  it('emits leave_room with the room id (explicit exit, no ack needed)', () => {
+    const { leaveRoom, connect } = useSocket()
+    connect()
+
+    leaveRoom('room-1')
+
+    expect(lastSocket().emit).toHaveBeenCalledWith('leave_room', { roomId: 'room-1' })
+  })
+
   it('emits cast_vote', () => {
     const { castVote, connect } = useSocket()
     connect() // initialize socket manually to capture exact call without chaining auto-connect if any
