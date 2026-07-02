@@ -3,6 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
 import VotingArea from '../VotingArea.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import BaseButton from '@/components/BaseButton.vue'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
 import { useConnectionStore } from '@/stores/connection'
@@ -16,6 +18,7 @@ const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 // castVote agora retorna Promise; resolve por padrão (sucesso) para o handleVote
 // não cair no .catch nos testes que não exercitam a rejeição.
 const mockCastVote = vi.fn().mockResolvedValue(undefined)
+const mockDisconnect = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -35,7 +38,7 @@ vi.mock('@/composables/useSocket', () => ({
     resetSession: vi.fn(),
     castVote: mockCastVote,
     revealVotes: mockRevealVotes,
-    disconnect: vi.fn(),
+    disconnect: mockDisconnect,
     joinRoom: mockSocketJoinRoom,
   }),
 }))
@@ -305,5 +308,74 @@ describe('RoomView.vue heading structure', () => {
     const wrapper = mountRoomView()
 
     expect(wrapper.find('h1.room-title').exists()).toBe(true)
+  })
+})
+
+describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  // Cabeçalho: botão não teleportado (fica no DOM do wrapper).
+  function getHeaderLeaveButton(wrapper: ReturnType<typeof mountRoomView>) {
+    const button = wrapper.findAll('button').find((item) => item.text().includes('Sair da Sala'))
+    if (!button) throw new Error('Header leave button not found')
+    return button
+  }
+
+  // Botões do modal: teleportados p/ o body → achados via árvore de componentes.
+  function getModalButton(wrapper: ReturnType<typeof mountRoomView>, label: string) {
+    const button = wrapper.findAllComponents(BaseButton).find((item) => item.text() === label)
+    if (!button) throw new Error(`Modal button "${label}" not found`)
+    return button
+  }
+
+  it('opens a confirmation modal instead of leaving immediately', async () => {
+    const wrapper = mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+
+    const modal = wrapper.findComponent(BaseModal)
+    expect(modal.props('modelValue')).toBe(false)
+
+    await getHeaderLeaveButton(wrapper).trigger('click')
+
+    expect(modal.props('modelValue')).toBe(true)
+    // Ainda não saiu: sem navegação, sem desconectar, token intacto.
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockDisconnect).not.toHaveBeenCalled()
+    expect(useUserStore().sessionToken).toBe('live-token')
+
+    wrapper.unmount() // limpa o conteúdo teleportado do modal aberto
+  })
+
+  it('cancels without leaving and keeps the session', async () => {
+    const wrapper = mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+
+    await getHeaderLeaveButton(wrapper).trigger('click')
+    await getModalButton(wrapper, 'Cancelar').trigger('click')
+
+    expect(wrapper.findComponent(BaseModal).props('modelValue')).toBe(false)
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockDisconnect).not.toHaveBeenCalled()
+    expect(useUserStore().sessionToken).toBe('live-token')
+  })
+
+  it('leaves and clears session token + active room only after confirming', async () => {
+    const wrapper = mountRoomView({ sessionToken: 'live-token' })
+    const userStore = useUserStore()
+    userStore.setActiveRoom('abc123')
+    await flushPromises()
+
+    await getHeaderLeaveButton(wrapper).trigger('click')
+    await getModalButton(wrapper, 'Sim, sair').trigger('click')
+    await flushPromises()
+
+    expect(mockDisconnect).toHaveBeenCalledTimes(1)
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home' })
+    // F3.10 — token e vínculo com a sala descartados no leave.
+    expect(userStore.sessionToken).toBeNull()
+    expect(userStore.activeRoomId).toBeNull()
   })
 })
