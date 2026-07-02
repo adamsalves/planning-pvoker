@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import CreateRoomForm from './CreateRoomForm.vue'
 import JoinRoomForm from './JoinRoomForm.vue'
+
+const { t } = useI18n()
 
 // Tab state: 'create' ou 'join'
 const activeTab = ref<'create' | 'join'>('create')
@@ -32,21 +35,21 @@ const sessionExpired = route.query.notice === 'session-expired'
     <div class="hero">
       <span class="hero-icon">🃏</span>
       <h1 class="hero-title">Planning Poker</h1>
-      <p class="hero-subtitle">Estimativas ágeis com seu time, em tempo real</p>
+      <p class="hero-subtitle">{{ t('home.subtitle') }}</p>
     </div>
 
     <!-- Aviso de sessão expirada (redirecionado do RoomView) -->
     <p v-if="sessionExpired" class="session-notice" role="alert">
-      ⚠️ Sua sessão expirou ou a sala não está mais disponível. Entre novamente.
+      ⚠️ {{ t('home.sessionExpired') }}
     </p>
 
     <!-- Tab Switcher -->
     <div class="tab-switcher">
       <button :class="['tab-btn', { active: activeTab === 'create' }]" @click="setTab('create')">
-        Criar Sala
+        {{ t('home.tabs.create') }}
       </button>
       <button :class="['tab-btn', { active: activeTab === 'join' }]" @click="setTab('join')">
-        Entrar na Sala
+        {{ t('home.tabs.join') }}
       </button>
     </div>
 

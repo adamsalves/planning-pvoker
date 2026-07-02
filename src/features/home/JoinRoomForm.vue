@@ -3,30 +3,31 @@ import { ref } from 'vue'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { useI18n } from 'vue-i18n'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
-import { getJoinErrorMessage } from '@/composables/joinErrors'
+import { getJoinErrorKey } from '@/composables/joinErrors'
 import { JOINABLE_ROLES } from '@/types'
 
 // Código pré-preenchido quando o usuário chega por link de convite (?room=...).
 // O HomeView lê a query, decide a aba e repassa o valor já normalizado aqui.
 const props = defineProps<{ initialRoomCode?: string }>()
 
+const { t } = useI18n()
 const { joinRoom } = useRoom()
 
-// Estado de envio próprio deste form (ver nota no CreateRoomForm).
+// Estado de envio próprio deste form (ver nota no CreateRoomForm). F8: guarda a
+// CHAVE i18n do erro; a tradução acontece no template.
 const submitting = ref(false)
-const submitError = ref('')
+const submitErrorKey = ref('')
 
+// F8: mensagens do schema são CHAVES i18n (ver nota no CreateRoomForm).
 const joinSchema = toTypedSchema(
   z.object({
-    playerName: z
-      .string()
-      .min(2, 'Nome deve ter pelo menos 2 caracteres')
-      .max(20, 'Nome deve ter no máximo 20 caracteres'),
-    roomCode: z.string().min(1, 'Código da sala é obrigatório'),
+    playerName: z.string().min(2, 'home.validation.nameMin').max(20, 'home.validation.nameMax'),
+    roomCode: z.string().min(1, 'home.validation.roomCodeRequired'),
     role: z.enum(JOINABLE_ROLES),
   }),
 )
@@ -46,12 +47,12 @@ const [role, roleAttrs] = defineField('role')
 
 const onSubmit = handleSubmit(async (values) => {
   // values.role já é "member" | "observer" — sem cast!
-  submitError.value = ''
+  submitErrorKey.value = ''
   submitting.value = true
   try {
     await joinRoom(values.playerName, values.roomCode, values.role)
   } catch (error) {
-    submitError.value = getJoinErrorMessage(error)
+    submitErrorKey.value = getJoinErrorKey(error)
   } finally {
     submitting.value = false
   }
@@ -64,29 +65,29 @@ const onSubmit = handleSubmit(async (values) => {
       <BaseInput
         v-model="playerName"
         v-bind="playerNameAttrs"
-        label="Seu nome"
-        placeholder="Ex: Maria"
-        :error="errors.playerName"
+        :label="t('home.nameLabel')"
+        :placeholder="t('home.namePlaceholderJoin')"
+        :error="errors.playerName ? t(errors.playerName) : undefined"
         required
       />
 
       <BaseInput
         v-model="roomCode"
         v-bind="roomCodeAttrs"
-        label="Código da sala"
-        placeholder="Ex: a1b2c3d4"
-        :error="errors.roomCode"
+        :label="t('home.roomCodeLabel')"
+        :placeholder="t('home.roomCodePlaceholder')"
+        :error="errors.roomCode ? t(errors.roomCode) : undefined"
         required
       />
 
       <div class="field-group">
-        <label class="field-label">Entrar como</label>
+        <label class="field-label">{{ t('home.joinAsLabel') }}</label>
         <div class="role-options">
           <label :class="['role-option', { selected: role === 'member' }]">
             <input type="radio" value="member" v-model="role" v-bind="roleAttrs" class="sr-only" />
             <span class="role-icon">🃏</span>
-            <span class="role-label">Jogador</span>
-            <span class="role-desc">Vota nas estimativas</span>
+            <span class="role-label">{{ t('home.roleMember') }}</span>
+            <span class="role-desc">{{ t('home.roleMemberDesc') }}</span>
           </label>
 
           <label :class="['role-option', { selected: role === 'observer' }]">
@@ -98,15 +99,15 @@ const onSubmit = handleSubmit(async (values) => {
               class="sr-only"
             />
             <span class="role-icon">👁️</span>
-            <span class="role-label">Espectador</span>
-            <span class="role-desc">Apenas assiste</span>
+            <span class="role-label">{{ t('home.roleObserver') }}</span>
+            <span class="role-desc">{{ t('home.roleObserverDesc') }}</span>
           </label>
         </div>
       </div>
 
-      <p v-if="submitError" class="session-notice" role="alert">⚠️ {{ submitError }}</p>
+      <p v-if="submitErrorKey" class="session-notice" role="alert">⚠️ {{ t(submitErrorKey) }}</p>
       <BaseButton type="submit" size="lg" block :loading="submitting">
-        🔗 Entrar na Sala
+        {{ t('home.joinButton') }}
       </BaseButton>
     </form>
   </BaseCard>

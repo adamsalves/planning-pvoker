@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { routeTitle } from '@/router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
+import { useLocaleStore } from '@/stores/locale'
+
+const { t } = useI18n()
 
 const roomStore = useRoomStore()
 const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
@@ -34,15 +38,15 @@ const { preference: themePreference } = storeToRefs(themeStore)
 const themeIcon = computed(() =>
   themePreference.value === 'light' ? '☀️' : themePreference.value === 'dark' ? '🌙' : '🌗',
 )
-const themeLabel = computed(() => {
-  const name =
-    themePreference.value === 'light'
-      ? 'claro'
-      : themePreference.value === 'dark'
-        ? 'escuro'
-        : 'automático'
-  return `Tema: ${name}. Clique para alternar.`
-})
+const themeLabel = computed(() =>
+  t('layout.theme.toggle', { name: t(`layout.theme.${themePreference.value}`) }),
+)
+
+// F8 — toggle de idioma. O botão mostra o idioma ALVO (pra onde o clique leva),
+// não o atual: "EN" convida o leitor de inglês perdido na UI em português.
+const localeStore = useLocaleStore()
+const { locale } = storeToRefs(localeStore)
+const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
 </script>
 
 <template>
@@ -60,10 +64,10 @@ const themeLabel = computed(() => {
             class="nav-link nav-link-room"
           >
             <span class="room-icon">🎯</span>
-            Voltar à Sala
+            {{ t('layout.backToRoom') }}
           </RouterLink>
-          <RouterLink to="/" class="nav-link">Home</RouterLink>
-          <RouterLink to="/history" class="nav-link">Histórico</RouterLink>
+          <RouterLink to="/" class="nav-link">{{ t('layout.home') }}</RouterLink>
+          <RouterLink to="/history" class="nav-link">{{ t('layout.history') }}</RouterLink>
           <button
             type="button"
             class="theme-toggle"
@@ -72,6 +76,15 @@ const themeLabel = computed(() => {
             @click="themeStore.cycle()"
           >
             <span aria-hidden="true">{{ themeIcon }}</span>
+          </button>
+          <button
+            type="button"
+            class="theme-toggle locale-toggle"
+            :aria-label="t('layout.localeToggle')"
+            :title="t('layout.localeToggle')"
+            @click="localeStore.toggle()"
+          >
+            {{ localeTarget }}
           </button>
         </nav>
       </div>
@@ -91,7 +104,7 @@ const themeLabel = computed(() => {
     <footer class="footer">
       <div class="footer-content">
         <p>
-          Planning Poker · feito por
+          Planning Poker · {{ t('layout.madeBy') }}
           <a
             href="https://github.com/adamsalves"
             target="_blank"
@@ -272,6 +285,13 @@ const themeLabel = computed(() => {
 .theme-toggle:focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
+}
+
+/* F8 — toggle de idioma: mesma base do theme-toggle, mas com texto ("EN"/"PT"). */
+.locale-toggle {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 /* F4.5 — navbar responsivo: empilha brand/nav e permite quebra em telas estreitas */

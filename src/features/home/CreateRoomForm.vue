@@ -3,29 +3,33 @@ import { ref } from 'vue'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { useI18n } from 'vue-i18n'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
-import { getJoinErrorMessage } from '@/composables/joinErrors'
+import { getJoinErrorKey } from '@/composables/joinErrors'
 import { DECKS, DECK_TYPES } from '@/types'
 
+const { t } = useI18n()
 const { createRoom } = useRoom()
 
 // Estado de envio próprio deste form: trava o botão (evita double-submit no cold
 // start) e guarda o erro. Antes era compartilhado no HomeView; cada form agora é
 // autocontido e cuida da própria chamada assíncrona.
+// F8: o erro é guardado como CHAVE i18n e traduzido no template — assim a
+// mensagem acompanha a troca de idioma mesmo com o erro já na tela.
 const submitting = ref(false)
-const submitError = ref('')
+const submitErrorKey = ref('')
 
 // O z.enum() usa a mesma constante que define o tipo DeckType, então o Zod infere
 // exatamente "fibonacci" | "tshirt" | "sequential" — sem necessidade de `as`.
+// F8: as mensagens do schema são CHAVES i18n (traduzidas na renderização) — o
+// schema fica estático, preservando a inferência de tipos do vee-validate, e a
+// mensagem de erro visível reage à troca de idioma.
 const createSchema = toTypedSchema(
   z.object({
-    playerName: z
-      .string()
-      .min(2, 'Nome deve ter pelo menos 2 caracteres')
-      .max(20, 'Nome deve ter no máximo 20 caracteres'),
+    playerName: z.string().min(2, 'home.validation.nameMin').max(20, 'home.validation.nameMax'),
     deckType: z.enum(DECK_TYPES),
     autoReveal: z.boolean(),
   }),
@@ -46,12 +50,12 @@ const [autoReveal, autoRevealAttrs] = defineField('autoReveal')
 
 const onSubmit = handleSubmit(async (values) => {
   // values.deckType já é DeckType — sem cast!
-  submitError.value = ''
+  submitErrorKey.value = ''
   submitting.value = true
   try {
     await createRoom(values.playerName, values.deckType, values.autoReveal)
   } catch (error) {
-    submitError.value = getJoinErrorMessage(error)
+    submitErrorKey.value = getJoinErrorKey(error)
   } finally {
     submitting.value = false
   }
@@ -64,14 +68,14 @@ const onSubmit = handleSubmit(async (values) => {
       <BaseInput
         v-model="playerName"
         v-bind="playerNameAttrs"
-        label="Seu nome"
-        placeholder="Ex: João"
-        :error="errors.playerName"
+        :label="t('home.nameLabel')"
+        :placeholder="t('home.namePlaceholderCreate')"
+        :error="errors.playerName ? t(errors.playerName) : undefined"
         required
       />
 
       <div class="field-group">
-        <label class="field-label">Tipo de Baralho</label>
+        <label class="field-label">{{ t('home.deckTypeLabel') }}</label>
         <div class="deck-options">
           <label
             v-for="(deck, key) in DECKS"
@@ -85,7 +89,7 @@ const onSubmit = handleSubmit(async (values) => {
               v-bind="deckTypeAttrs"
               class="sr-only"
             />
-            <span class="deck-label">{{ deck.label }}</span>
+            <span class="deck-label">{{ t(`decks.${key}`) }}</span>
             <span class="deck-values">{{ deck.values.join(', ') }}</span>
           </label>
         </div>
@@ -101,12 +105,14 @@ const onSubmit = handleSubmit(async (values) => {
             class="toggle-input sr-only"
           />
           <span class="toggle-switch"></span>
-          <span class="toggle-text">Auto-revelar quando todos votarem</span>
+          <span class="toggle-text">{{ t('home.autoReveal') }}</span>
         </label>
       </div>
 
-      <p v-if="submitError" class="session-notice" role="alert">⚠️ {{ submitError }}</p>
-      <BaseButton type="submit" size="lg" block :loading="submitting"> 🚀 Criar Sala </BaseButton>
+      <p v-if="submitErrorKey" class="session-notice" role="alert">⚠️ {{ t(submitErrorKey) }}</p>
+      <BaseButton type="submit" size="lg" block :loading="submitting">
+        {{ t('home.createButton') }}
+      </BaseButton>
     </form>
   </BaseCard>
 </template>
