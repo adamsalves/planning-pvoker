@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Player } from '@/types'
+import { activePlayersOf } from '@/utils/players'
 import PokerCard from './PokerCard.vue'
 
 interface Props {
@@ -12,7 +13,7 @@ interface Props {
 const props = defineProps<Props>()
 
 // Apenas mostramos jogadores ativos na mesa (espectadores não "sentam")
-const activePlayers = computed(() => props.players.filter((p) => p.role !== 'observer'))
+const activePlayers = computed(() => activePlayersOf(props.players))
 
 function hasVoted(playerId: string) {
   return playerId in props.votes
