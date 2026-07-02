@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
@@ -17,6 +17,7 @@ import VoteReveal from './VoteReveal.vue'
 import RoundControls from './RoundControls.vue'
 import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
+import { useShareRoom } from '@/composables/useShareRoom'
 import { JoinAckError } from '@/composables/joinErrors'
 import { useHistoryStore } from '@/stores/history'
 
@@ -60,8 +61,10 @@ const deckLabel = computed(() => {
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
 const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
-const shareStatus = ref<'idle' | 'copied' | 'error'>('idle')
-let shareFeedbackTimeout: ReturnType<typeof setTimeout> | undefined
+
+// Compartilhar sala (link de convite / Web Share) — lógica em useShareRoom.
+const { shareStatus, shareRoom } = useShareRoom(roomId)
+
 // Voto otimista: a carta acende na hora do clique, sem esperar o round-trip
 // (cast_vote → room_state_updated). Reconciliado com o servidor logo abaixo.
 const optimisticVote = ref<string | number | null>(null)
@@ -97,52 +100,6 @@ const allActiveVoted = computed(() => {
 
 // Auto-reveal é responsabilidade ÚNICA do servidor (roomManager.castVote);
 // o cliente não reemite reveal_votes para evitar lógica duplicada/divergente.
-
-const inviteUrl = computed(() => {
-  const url = new URL(import.meta.env.BASE_URL, window.location.origin)
-  url.searchParams.set('room', roomId.value)
-  return url.toString()
-})
-
-function setShareStatus(status: 'copied' | 'error') {
-  shareStatus.value = status
-  if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
-  shareFeedbackTimeout = setTimeout(() => {
-    shareStatus.value = 'idle'
-  }, 2500)
-}
-
-async function copyInviteLink() {
-  await navigator.clipboard.writeText(inviteUrl.value)
-  setShareStatus('copied')
-}
-
-async function handleShareRoom() {
-  shareStatus.value = 'idle'
-
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: 'Planning Poker',
-        text: 'Entre na minha sala de Planning Poker',
-        url: inviteUrl.value,
-      })
-      return
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-    }
-  }
-
-  try {
-    await copyInviteLink()
-  } catch {
-    setShareStatus('error')
-  }
-}
-
-onUnmounted(() => {
-  if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
-})
 
 // Rejoin the active room. Runs on mount (direct hit / refresh of /room/:id) AND on
 // every transparent socket reconnect: the server binds presence to socket.id, so a
@@ -272,7 +229,7 @@ function handleLeave() {
               variant="secondary"
               size="sm"
               :aria-label="`Compartilhar link da sala ${roomId}`"
-              @click="handleShareRoom"
+              @click="shareRoom"
             >
               {{
                 shareStatus === 'copied'
