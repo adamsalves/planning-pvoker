@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
 
@@ -16,6 +17,8 @@ const emit = defineEmits<{
   start: []
 }>()
 
+const { t } = useI18n()
+
 const subject = ref('')
 const error = ref('')
 
@@ -23,7 +26,7 @@ const canStart = computed(() => props.subjects.length >= 1 && props.playerCount 
 
 function handleAdd() {
   if (subject.value.trim().length < 2) {
-    error.value = 'O subject deve ter pelo menos 2 caracteres'
+    error.value = t('room.setup.subjectMin')
     return
   }
   error.value = ''
@@ -37,16 +40,16 @@ function handleAdd() {
     <form @submit.prevent="handleAdd" class="add-form">
       <BaseInput
         v-model="subject"
-        label="Adicionar subject"
-        placeholder="Ex: Implementar endpoint de login"
+        :label="t('room.setup.addSubjectLabel')"
+        :placeholder="t('room.setup.addSubjectPlaceholder')"
         :error="error"
       />
-      <BaseButton type="submit" size="md">➕ Adicionar</BaseButton>
+      <BaseButton type="submit" size="md">{{ t('room.setup.addButton') }}</BaseButton>
     </form>
 
     <!-- Subject Backlog List -->
     <div v-if="subjects.length > 0" class="backlog">
-      <p class="backlog-title">📋 Backlog ({{ subjects.length }} subjects)</p>
+      <p class="backlog-title">{{ t('room.setup.backlogTitle', { count: subjects.length }) }}</p>
       <ul class="backlog-list">
         <li v-for="(item, index) in subjects" :key="index" class="backlog-item">
           <span class="backlog-index">{{ index + 1 }}.</span>
@@ -54,8 +57,8 @@ function handleAdd() {
           <button
             class="remove-btn"
             @click="emit('remove', index)"
-            title="Remover"
-            :aria-label="`Remover ${item}`"
+            :title="t('room.setup.removeTitle')"
+            :aria-label="t('room.setup.removeSubject', { subject: item })"
           >
             ✕
           </button>
@@ -65,16 +68,16 @@ function handleAdd() {
 
     <!-- Empty state -->
     <div v-else class="empty-backlog">
-      <p>Adicione os subjects que serão votados nesta sessão</p>
+      <p>{{ t('room.setup.emptyBacklog') }}</p>
     </div>
 
     <!-- Start Session Button -->
     <div class="start-section">
       <BaseButton variant="primary" size="lg" block :disabled="!canStart" @click="emit('start')">
-        ▶️ Iniciar Sessão de Votação
+        {{ t('room.setup.startButton') }}
       </BaseButton>
       <p v-if="subjects.length > 0 && playerCount < 2" class="start-hint">
-        ⏳ Aguardando mais jogadores entrarem na sala...
+        {{ t('room.setup.waitingPlayers') }}
       </p>
     </div>
   </div>

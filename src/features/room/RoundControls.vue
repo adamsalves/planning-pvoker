@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import BaseButton from '@/components/BaseButton.vue'
 
 interface Props {
@@ -14,6 +15,8 @@ const emit = defineEmits<{
   nextRound: []
   finish: []
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -26,8 +29,8 @@ const emit = defineEmits<{
       block
       @click="emit('reveal')"
     >
-      👁️ Revelar Votos
-      <span v-if="allVoted" class="hint">(todos votaram!)</span>
+      {{ t('room.controls.reveal') }}
+      <span v-if="allVoted" class="hint">{{ t('room.controls.allVotedHint') }}</span>
     </BaseButton>
 
     <!-- Após revelar: botão de próximo ou finalizar -->
@@ -38,7 +41,7 @@ const emit = defineEmits<{
       block
       @click="emit('nextRound')"
     >
-      ➡️ Próximo Subject
+      {{ t('room.controls.next') }}
     </BaseButton>
 
     <BaseButton
@@ -48,7 +51,7 @@ const emit = defineEmits<{
       block
       @click="emit('finish')"
     >
-      ✅ Finalizar Sessão
+      {{ t('room.controls.finish') }}
     </BaseButton>
   </div>
 </template>

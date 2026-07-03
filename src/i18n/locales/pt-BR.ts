@@ -4,6 +4,13 @@
 export const ptBR = {
   common: {
     closeModal: 'Fechar janela',
+    cancel: 'Cancelar',
+  },
+  // Títulos de rota — meta.title guarda a CHAVE; routeTitle (router) traduz.
+  routes: {
+    home: 'Início',
+    room: 'Sala',
+    history: 'Histórico',
   },
   layout: {
     backToRoom: 'Voltar à Sala',
@@ -56,6 +63,130 @@ export const ptBR = {
     invalidSession: 'Sessão inválida',
     invalidPayload: 'Dados de entrada inválidos',
     joinRefused: 'Não foi possível entrar na sala.',
+  },
+  room: {
+    title: 'Sala',
+    participants: 'Participantes',
+    roles: {
+      admin: '👑 Admin',
+      player: '🃏 Jogador',
+      observer: '👁️ Espectador',
+    },
+    phases: {
+      setup: '📝 Preparação',
+      voting: '🗳️ Votação',
+      completed: '✅ Concluída',
+    },
+    share: {
+      action: '🔗 Compartilhar',
+      copied: 'Link copiado!',
+      error: 'Não foi possível copiar',
+      ariaLabel: 'Compartilhar link da sala {roomId}',
+      inviteText: 'Entre na minha sala de Planning Poker',
+    },
+    leave: {
+      button: 'Sair da Sala',
+      confirmTitle: 'Sair da sala?',
+      confirmBody: 'Você vai sair desta sala e voltar à tela inicial.',
+      confirmHistoryNote: 'O resumo desta sessão fica salvo no seu histórico neste dispositivo.',
+      confirmAction: 'Sim, sair',
+    },
+    setup: {
+      planningTitle: '📋 Planejamento da Sessão',
+      waitingForAdmin: 'O Scrum Master está preparando os subjects para votação...',
+      subjectsRegistered: '{count} subject cadastrado | {count} subjects cadastrados',
+      addSubjectLabel: 'Adicionar subject',
+      addSubjectPlaceholder: 'Ex: Implementar endpoint de login',
+      addButton: '➕ Adicionar',
+      subjectMin: 'O subject deve ter pelo menos 2 caracteres',
+      backlogTitle: '📋 Backlog ({count} subjects)',
+      removeTitle: 'Remover',
+      removeSubject: 'Remover {subject}',
+      emptyBacklog: 'Adicione os subjects que serão votados nesta sessão',
+      startButton: '▶️ Iniciar Sessão de Votação',
+      waitingPlayers: '⏳ Aguardando mais jogadores entrarem na sala...',
+    },
+    voting: {
+      selectLabel: 'Selecione sua estimativa:',
+      voteAria: 'Votar {value}',
+      observerTitle: '👁️ Você está como espectador',
+      observerWaiting: 'Aguardando os jogadores votarem...',
+      waitingForStart: 'Aguardando o Scrum Master iniciar a votação...',
+    },
+    round: {
+      badge: 'Subject {current}/{total}',
+      status: {
+        waiting: 'Aguardando subject',
+        voting: 'Votação em andamento',
+        revealed: 'Votos revelados',
+      },
+    },
+    table: {
+      waiting: 'Aguardando rodada...',
+      voting: 'Votos em andamento',
+      revealed: 'Votos revelados!',
+    },
+    players: {
+      title: 'Jogadores ({count})',
+      observersTitle: 'Espectadores ({count})',
+      adminSr: '(admin)',
+      voted: 'Votou',
+      waitingVote: 'Aguardando voto',
+      observerSr: 'Espectador',
+    },
+    reveal: {
+      consensus: 'Consenso!',
+      allVoted: 'Todos votaram',
+      distribution: 'Distribuição',
+    },
+    controls: {
+      reveal: '👁️ Revelar Votos',
+      allVotedHint: '(todos votaram!)',
+      next: '➡️ Próximo Subject',
+      finish: '✅ Finalizar Sessão',
+    },
+    summary: {
+      title: 'Sessão Concluída!',
+      subjectsVoted: '{count} subject votado | {count} subjects votados',
+      newSession: '🔄 Nova Sessão',
+    },
+  },
+  // Rótulos de estatística compartilhados (VoteReveal e RoundSummary do histórico).
+  stats: {
+    average: 'Média',
+    min: 'Mínimo',
+    max: 'Máximo',
+    votes: 'Votos',
+  },
+  history: {
+    title: 'Histórico de Sessões',
+    subtitle: 'Suas rodadas de Planning Poker anteriores',
+    emptyTitle: 'Nenhum histórico encontrado',
+    emptyBody: 'Você ainda não participou de sessões com rodadas finalizadas.',
+    roomLabel: 'Sala: {id}',
+    deckLabel: 'Baralho: {name}',
+    roundsCount: '{count} Rodada | {count} Rodadas',
+    consensus: '🤝 Consenso Atingido',
+    spread: 'Dispersão',
+    textVotes: 'Votos textuais: {values}',
+    noVotes: 'Nenhum',
+    chart: {
+      title: 'Média das Estimativas por Rodada',
+      datasetLabel: 'Média de Votos',
+      empty: 'Ainda não há votos nesta sessão.',
+      nonNumeric: 'Gráfico de média indisponível para baralhos não-numéricos.',
+    },
+  },
+  connection: {
+    rotating: {
+      shuffling: 'Embaralhando as cartas…',
+      preparing: 'Preparando a mesa…',
+      gathering: 'Reunindo o time…',
+      reviewing: 'Revisando as regras da sala…',
+    },
+    down: 'Isso está demorando mais que o normal, mas ainda estamos tentando…',
+    ariaConnecting: 'Conectando ao servidor. Aguarde um momento.',
+    ariaDown: 'A conexão está demorando mais que o normal. Ainda tentando reconectar.',
   },
 }
 

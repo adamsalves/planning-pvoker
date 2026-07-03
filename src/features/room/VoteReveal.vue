@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { watch, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import confetti from 'canvas-confetti'
 import { prefersReducedMotion } from '@/composables/matchMedia'
 import { useVoteStats } from '@/composables/useVoteStats'
@@ -13,6 +14,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   celebrate: true,
 })
+
+const { t } = useI18n()
 
 const hasConfettiPlayed = ref(false)
 
@@ -63,33 +66,33 @@ watch(hasConsensus, (newVal) => {
   <div class="vote-reveal animate-slide-up">
     <!-- Consensus Banner -->
     <div v-if="hasConsensus" class="consensus-banner">
-      🎉 <strong>Consenso!</strong> Todos votaram
+      🎉 <strong>{{ t('room.reveal.consensus') }}</strong> {{ t('room.reveal.allVoted') }}
       <span class="consensus-value">{{ consensusValue }}</span>
     </div>
 
     <!-- Stats Grid -->
     <div class="stats-grid">
       <div v-if="average !== null" class="stat-card">
-        <span class="stat-label">Média</span>
+        <span class="stat-label">{{ t('stats.average') }}</span>
         <span class="stat-value">{{ average }}</span>
       </div>
       <div v-if="min !== null" class="stat-card">
-        <span class="stat-label">Mínimo</span>
+        <span class="stat-label">{{ t('stats.min') }}</span>
         <span class="stat-value">{{ min }}</span>
       </div>
       <div v-if="max !== null" class="stat-card">
-        <span class="stat-label">Máximo</span>
+        <span class="stat-label">{{ t('stats.max') }}</span>
         <span class="stat-value">{{ max }}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Votos</span>
+        <span class="stat-label">{{ t('stats.votes') }}</span>
         <span class="stat-value">{{ count }}/{{ playerCount }}</span>
       </div>
     </div>
 
     <!-- Distribution -->
     <div v-if="distribution.length > 0" class="distribution">
-      <h4 class="distribution-title">Distribuição</h4>
+      <h4 class="distribution-title">{{ t('room.reveal.distribution') }}</h4>
       <div class="distribution-bars">
         <div v-for="item in distribution" :key="item.value" class="bar-row">
           <span class="bar-label">{{ item.value }}</span>

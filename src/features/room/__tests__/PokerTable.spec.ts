@@ -77,8 +77,8 @@ describe('PokerTable.vue', () => {
     })
 
     const spots = wrapper.findAll('.player-spot')
-    expect(spots[0]!.find('.sr-only').text()).toContain('votou')
-    expect(spots[1]!.find('.sr-only').text()).toContain('aguardando voto')
+    expect(spots[0]!.find('.sr-only').text()).toContain('Votou')
+    expect(spots[1]!.find('.sr-only').text()).toContain('Aguardando voto')
   })
 
   it('shows appropriate messages in the center of the table', () => {

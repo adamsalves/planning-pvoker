@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Player } from '@/types'
 import { activePlayersOf } from '@/utils/players'
 import PokerCard from './PokerCard.vue'
@@ -11,6 +12,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { t } = useI18n()
 
 // Apenas mostramos jogadores ativos na mesa (espectadores não "sentam")
 const activePlayers = computed(() => activePlayersOf(props.players))
@@ -49,11 +52,11 @@ function getPlayerStyle(index: number) {
     <!-- Centro da mesa (mensagem ou vazio) -->
     <div class="table-center">
       <div class="table-surface">
-        <span v-if="status === 'waiting'" class="table-message">Aguardando rodada...</span>
-        <span v-else-if="status === 'voting'" class="table-message pulsing"
-          >Votos em andamento</span
-        >
-        <span v-else class="table-message">Votos revelados!</span>
+        <span v-if="status === 'waiting'" class="table-message">{{ t('room.table.waiting') }}</span>
+        <span v-else-if="status === 'voting'" class="table-message pulsing">{{
+          t('room.table.voting')
+        }}</span>
+        <span v-else class="table-message">{{ t('room.table.revealed') }}</span>
       </div>
     </div>
 
@@ -85,7 +88,7 @@ function getPlayerStyle(index: number) {
             <span class="avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="name">{{ player.name }}</span>
             <span v-if="status === 'voting'" class="sr-only">
-              {{ hasVoted(player.id) ? 'votou' : 'aguardando voto' }}
+              {{ hasVoted(player.id) ? t('room.players.voted') : t('room.players.waitingVote') }}
             </span>
           </div>
         </div>

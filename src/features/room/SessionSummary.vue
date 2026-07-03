@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import type { Round } from '@/types'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -15,15 +16,17 @@ const emit = defineEmits<{
   newSession: []
   leave: []
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="session-summary">
     <div class="summary-header">
       <div class="check-icon">✅</div>
-      <h2 class="summary-title">Sessão Concluída!</h2>
+      <h2 class="summary-title">{{ t('room.summary.title') }}</h2>
       <p class="summary-subtitle">
-        {{ rounds.length }} {{ rounds.length === 1 ? 'subject votado' : 'subjects votados' }}
+        {{ t('room.summary.subjectsVoted', rounds.length) }}
       </p>
     </div>
 
@@ -41,9 +44,11 @@ const emit = defineEmits<{
 
     <div class="summary-actions">
       <BaseButton variant="primary" size="lg" block @click="emit('newSession')">
-        🔄 Nova Sessão
+        {{ t('room.summary.newSession') }}
       </BaseButton>
-      <BaseButton variant="ghost" size="md" block @click="emit('leave')"> Sair da Sala </BaseButton>
+      <BaseButton variant="ghost" size="md" block @click="emit('leave')">
+        {{ t('room.leave.button') }}
+      </BaseButton>
     </div>
   </div>
 </template>

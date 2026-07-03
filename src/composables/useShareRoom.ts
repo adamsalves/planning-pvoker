@@ -1,4 +1,5 @@
 import { ref, computed, onUnmounted, toValue, type MaybeRefOrGetter } from 'vue'
+import { i18n } from '@/i18n'
 
 export type ShareStatus = 'idle' | 'copied' | 'error'
 
@@ -38,9 +39,11 @@ export function useShareRoom(roomId: MaybeRefOrGetter<string>) {
 
     if (navigator.share) {
       try {
+        // i18n.global (não useI18n): o composable também roda em testes sem
+        // instância de componente; o texto é lido na hora do share, já no idioma atual.
         await navigator.share({
           title: 'Planning Poker',
-          text: 'Entre na minha sala de Planning Poker',
+          text: i18n.global.t('room.share.inviteText'),
           url: inviteUrl.value,
         })
         return
