@@ -98,7 +98,7 @@ export const en: MessageSchema = {
       addSubjectPlaceholder: 'E.g.: Implement login endpoint',
       addButton: '➕ Add',
       subjectMin: 'Subject must be at least 2 characters',
-      backlogTitle: '📋 Backlog ({count} subjects)',
+      backlogTitle: '📋 Backlog ({count} subject) | 📋 Backlog ({count} subjects)',
       removeTitle: 'Remove',
       removeSubject: 'Remove {subject}',
       emptyBacklog: 'Add the subjects to be voted on in this session',

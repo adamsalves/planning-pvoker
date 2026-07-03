@@ -39,9 +39,14 @@ const router = createRouter({
 // Para a Sala inclui o código (:id) — senão document.title e o anúncio de rota
 // ficariam só "Sala", sem distinguir salas.
 export function routeTitle(
-  meta: { title: string },
+  meta: { title?: string },
   params: Record<string, string | string[]>,
 ): string {
+  // O tipo garante title nas rotas declaradas, mas o START_LOCATION (antes da
+  // navegação inicial resolver) tem meta = {} em runtime — e t(undefined) LANÇA.
+  // Atingível no boot: a detecção de locale (pt-BR → en) dispara o watch abaixo
+  // antes de o chunk da primeira rota carregar.
+  if (typeof meta.title !== 'string') return ''
   const title = i18n.global.t(meta.title)
   const code = typeof params.id === 'string' ? params.id : undefined
   return code ? `${title} ${code}` : title
@@ -49,7 +54,9 @@ export function routeTitle(
 
 function applyDocumentTitle() {
   const route = router.currentRoute.value
-  document.title = `${routeTitle(route.meta, route.params)} · Planning Poker`
+  const title = routeTitle(route.meta, route.params)
+  if (!title) return // boot (START_LOCATION): o afterEach titula quando a rota resolver
+  document.title = `${title} · Planning Poker`
 }
 
 router.afterEach(() => applyDocumentTitle())

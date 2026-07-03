@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import router from '../index'
+import { nextTick } from 'vue'
+import router, { routeTitle } from '../index'
+import { i18n } from '@/i18n'
 
 describe('router', () => {
   beforeEach(async () => {
@@ -43,5 +45,20 @@ describe('router', () => {
   it('inclui o código da sala no title da rota room', async () => {
     await router.push({ name: 'room', params: { id: 'a1b2c3d4' } })
     expect(document.title).toBe('Sala a1b2c3d4 · Planning Poker')
+  })
+
+  it('não lança com meta sem title (START_LOCATION durante o boot)', () => {
+    // No boot, a troca de locale detectado dispara o watch antes de a navegação
+    // inicial resolver — meta é {} em runtime e t(undefined) lançaria.
+    expect(routeTitle({}, {})).toBe('')
+  })
+
+  it('re-titula a aba na troca de idioma (não só na navegação)', async () => {
+    await router.push({ name: 'room', params: { id: 'a1b2c3d4' } })
+    expect(document.title).toBe('Sala a1b2c3d4 · Planning Poker')
+
+    i18n.global.locale.value = 'en'
+    await nextTick()
+    expect(document.title).toBe('Room a1b2c3d4 · Planning Poker')
   })
 })

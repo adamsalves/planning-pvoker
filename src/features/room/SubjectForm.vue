@@ -20,16 +20,18 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const subject = ref('')
-const error = ref('')
+// CHAVE i18n, não a tradução: traduzida no template, o erro visível troca de
+// idioma ao vivo (mesmo padrão dos forms da home).
+const errorKey = ref('')
 
 const canStart = computed(() => props.subjects.length >= 1 && props.playerCount >= 2)
 
 function handleAdd() {
   if (subject.value.trim().length < 2) {
-    error.value = t('room.setup.subjectMin')
+    errorKey.value = 'room.setup.subjectMin'
     return
   }
-  error.value = ''
+  errorKey.value = ''
   emit('add', subject.value.trim())
   subject.value = ''
 }
@@ -42,14 +44,14 @@ function handleAdd() {
         v-model="subject"
         :label="t('room.setup.addSubjectLabel')"
         :placeholder="t('room.setup.addSubjectPlaceholder')"
-        :error="error"
+        :error="errorKey ? t(errorKey) : ''"
       />
       <BaseButton type="submit" size="md">{{ t('room.setup.addButton') }}</BaseButton>
     </form>
 
     <!-- Subject Backlog List -->
     <div v-if="subjects.length > 0" class="backlog">
-      <p class="backlog-title">{{ t('room.setup.backlogTitle', { count: subjects.length }) }}</p>
+      <p class="backlog-title">{{ t('room.setup.backlogTitle', subjects.length) }}</p>
       <ul class="backlog-list">
         <li v-for="(item, index) in subjects" :key="index" class="backlog-item">
           <span class="backlog-index">{{ index + 1 }}.</span>

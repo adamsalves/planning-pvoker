@@ -99,7 +99,7 @@ export const ptBR = {
       addSubjectPlaceholder: 'Ex: Implementar endpoint de login',
       addButton: '➕ Adicionar',
       subjectMin: 'O subject deve ter pelo menos 2 caracteres',
-      backlogTitle: '📋 Backlog ({count} subjects)',
+      backlogTitle: '📋 Backlog ({count} subject) | 📋 Backlog ({count} subjects)',
       removeTitle: 'Remover',
       removeSubject: 'Remover {subject}',
       emptyBacklog: 'Adicione os subjects que serão votados nesta sessão',

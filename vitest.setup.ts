@@ -1,3 +1,4 @@
+import { afterEach } from 'vitest'
 import { config } from '@vue/test-utils'
 import { i18n } from '@/i18n'
 
@@ -11,6 +12,13 @@ Object.defineProperty(window.navigator, 'language', {
 })
 
 // Toda montagem ganha o plugin do i18n (componentes chamam useI18n()); os specs
-// não precisam registrá-lo um a um. Testes que trocam o locale devem restaurar
-// 'pt-BR' ao final — a instância é o singleton do app.
+// não precisam registrá-lo um a um.
 config.global.plugins.push(i18n)
+
+// A instância é o singleton do app: um spec que troca o locale e FALHA antes de
+// restaurar vazaria 'en' para os testes seguintes e cascatearia falhas sem
+// relação com a causa raiz. Restaura incondicionalmente após cada teste.
+afterEach(() => {
+  i18n.global.locale.value = 'pt-BR'
+  document.documentElement.lang = 'pt-BR'
+})
