@@ -153,9 +153,9 @@ describe('useSocket', () => {
     connect()
     const promise = castVote('room-1', 'p1', 999)
 
-    castVoteAck()({ error: 'Voto inválido para o baralho' })
+    castVoteAck()({ error: 'invalid_vote_for_deck' })
 
-    await expect(promise).rejects.toThrow('Voto inválido')
+    await expect(promise).rejects.toThrow('invalid_vote_for_deck')
   })
 
   it('emits start_session', () => {
@@ -245,9 +245,9 @@ describe('useSocket', () => {
     const { joinRoom } = useSocket()
     const promise = joinRoom('room-1', player)
 
-    joinAck()({ error: 'Sessão inválida' })
+    joinAck()({ error: 'invalid_session' })
 
-    await expect(promise).rejects.toThrow('Sessão inválida')
+    await expect(promise).rejects.toThrow('invalid_session')
     // Typed so RoomView can tell a real server rejection from a connection failure.
     await expect(promise).rejects.toBeInstanceOf(JoinAckError)
   })

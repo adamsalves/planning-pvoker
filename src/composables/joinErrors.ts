@@ -13,14 +13,15 @@ export class JoinAckError extends Error {
   }
 }
 
-// Mensagens conhecidas do servidor → chaves de tradução. Ponte temporária do
-// F8: quando o servidor passar a ackar códigos estáveis (invalid_session,
-// room_not_found…), este mapa troca as mensagens pt-BR pelos códigos — os
-// consumidores (que só veem chaves) não mudam.
+// Códigos estáveis do servidor → chaves de tradução. O servidor acka CÓDIGOS
+// language-agnostic (ver server/src/events.ts: AckErrorCode), nunca copy pt-BR —
+// assim reescrever uma mensagem não quebra este mapa. Só os códigos que o fluxo
+// de join pode devolver ao usuário aparecem aqui; os demais (voto, etc.) o
+// cliente ignora. Código desconhecido → chave genérica de recusa abaixo.
 const SERVER_ERROR_KEYS: Record<string, string> = {
-  'Sala não encontrada': 'errors.roomNotFound',
-  'Sessão inválida': 'errors.invalidSession',
-  'Dados de entrada inválidos': 'errors.invalidPayload',
+  room_not_found: 'errors.roomNotFound',
+  invalid_session: 'errors.invalidSession',
+  invalid_payload: 'errors.invalidPayload',
 }
 
 // Mapeia um erro de criar/entrar em sala para a CHAVE i18n exibida ao usuário
