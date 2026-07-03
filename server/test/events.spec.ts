@@ -361,7 +361,7 @@ describe('leave_room (explicit exit)', () => {
 
     // Rejoin right away with the same player id and NO token. Before leave_room
     // existed, the token lingered for the whole grace window and this exact
-    // flow (leave → come straight back) was rejected with "Sessão inválida".
+    // flow (leave → come straight back) was rejected with 'invalid_session'.
     const rejoined = await connect()
     const ack = await join(rejoined, { roomId: 'r1', player: member })
     expect(ack.success).toBe(true)

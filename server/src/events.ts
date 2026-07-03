@@ -10,6 +10,24 @@ import {
 } from './validation'
 import { logger } from './logger'
 
+// Stable, language-agnostic ack error codes. The wire protocol speaks CODES, not
+// human-readable copy — the client maps each to localized text (see the frontend's
+// src/composables/joinErrors.ts). Sending pt-BR strings here would couple the server
+// to the UI's language and re-break i18n whenever a message is reworded.
+type AckErrorCode =
+  | 'invalid_payload'
+  | 'room_not_found'
+  | 'invalid_session'
+  | 'invalid_vote'
+  | 'not_authorized'
+  | 'invalid_vote_for_deck'
+  | 'vote_not_registered'
+
+// Rejects an ack with a stable error code. No-op when the emitter is
+// fire-and-forget (didn't pass a callback).
+const fail = (callback: ((res: unknown) => void) | undefined, code: AckErrorCode) =>
+  callback?.({ error: code })
+
 export function setupSocketEvents(io: Server, roomManager: RoomManager) {
   // How long a disconnected player is kept before removal, so a page refresh or
   // brief network blip doesn't drop them (and possibly destroy the room).
@@ -95,7 +113,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     socket.on('join_room', (data: unknown, callback?: (res: unknown) => void) => {
       const parsed = joinRoomSchema.safeParse(data)
       if (!parsed.success) {
-        callback?.({ error: 'Dados de entrada inválidos' })
+        fail(callback, 'invalid_payload')
         return
       }
       const { roomId, player, config, token } = parsed.data
@@ -105,7 +123,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       if (!room) {
         if (!config) {
           // Room does not exist and no config provided
-          callback?.({ error: 'Sala não encontrada' })
+          fail(callback, 'room_not_found')
           return
         }
         // Create new room — the creator is always the admin
@@ -122,7 +140,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
           !roomManager.verifyToken(roomId, player.id, token)
         ) {
           logger.warn(`⛔ Join denied on ${roomId}: invalid session token for ${player.id}`)
-          callback?.({ error: 'Sessão inválida' })
+          fail(callback, 'invalid_session')
           return
         }
         // Joining an existing room. Role resolution here is intentional and final:
@@ -194,22 +212,22 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     socket.on('cast_vote', (data: unknown, callback?: (res: unknown) => void) => {
       const parsed = castVoteSchema.safeParse(data)
       if (!parsed.success) {
-        callback?.({ error: 'Voto inválido' })
+        fail(callback, 'invalid_vote')
         return
       }
       if (!currentPlayerId || currentRoomId !== parsed.data.roomId) {
-        callback?.({ error: 'Não autorizado' })
+        fail(callback, 'not_authorized')
         return
       }
 
       const room = roomManager.getRoom(parsed.data.roomId)
       if (!room) {
-        callback?.({ error: 'Sala não encontrada' })
+        fail(callback, 'room_not_found')
         return
       }
       // Reject votes that don't belong to the room's deck
       if (!isValidVoteForDeck(room.config.deckType, parsed.data.value)) {
-        callback?.({ error: 'Voto inválido para o baralho' })
+        fail(callback, 'invalid_vote_for_deck')
         return
       }
 
@@ -219,7 +237,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         callback?.({ ok: true })
       } else {
         // observer, ou rodada fora da fase de votação
-        callback?.({ error: 'Voto não registrado' })
+        fail(callback, 'vote_not_registered')
       }
     })
 
@@ -238,11 +256,11 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     socket.on('leave_room', (data: unknown, callback?: (res: unknown) => void) => {
       const parsed = roomActionSchema.safeParse(data)
       if (!parsed.success) {
-        callback?.({ error: 'Dados de entrada inválidos' })
+        fail(callback, 'invalid_payload')
         return
       }
       if (!currentPlayerId || currentRoomId !== parsed.data.roomId) {
-        callback?.({ error: 'Não autorizado' })
+        fail(callback, 'not_authorized')
         return
       }
       const { roomId } = parsed.data

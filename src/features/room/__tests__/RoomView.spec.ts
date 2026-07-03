@@ -148,7 +148,7 @@ describe('RoomView.vue rejoin', () => {
 
   it('drops the session token and goes home on a JoinAckError (real session failure)', async () => {
     // Server explicitly refuses the rejoin (stale token / room gone).
-    mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('Sessão inválida'))
+    mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('invalid_session'))
 
     mountRoomView({ sessionToken: 'stale-token' })
     await flushPromises()
@@ -292,7 +292,7 @@ describe('RoomView.vue optimistic vote', () => {
     setActivePinia(createPinia())
     useUserStore().setPlayer('Bob', 'player-2', 'member')
     useRoomStore().syncRoom(votingRoom({}))
-    mockCastVote.mockRejectedValueOnce(new Error('Voto inválido para o baralho'))
+    mockCastVote.mockRejectedValueOnce(new Error('invalid_vote_for_deck'))
     const wrapper = mount(RoomView, { global: { stubs: childStubs } })
     await flushPromises()
 
