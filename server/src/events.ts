@@ -9,22 +9,10 @@ import {
   isValidVoteForDeck,
 } from './validation'
 import { logger } from './logger'
+import type { AckErrorCode } from './errorCodes'
 
-// Stable, language-agnostic ack error codes. The wire protocol speaks CODES, not
-// human-readable copy — the client maps each to localized text (see the frontend's
-// src/composables/joinErrors.ts). Sending pt-BR strings here would couple the server
-// to the UI's language and re-break i18n whenever a message is reworded.
-type AckErrorCode =
-  | 'invalid_payload'
-  | 'room_not_found'
-  | 'invalid_session'
-  | 'invalid_vote'
-  | 'not_authorized'
-  | 'invalid_vote_for_deck'
-  | 'vote_not_registered'
-
-// Rejects an ack with a stable error code. No-op when the emitter is
-// fire-and-forget (didn't pass a callback).
+// Rejects an ack with a stable error code (see ./errorCodes for the wire contract).
+// No-op when the emitter is fire-and-forget (didn't pass a callback).
 const fail = (callback: ((res: unknown) => void) | undefined, code: AckErrorCode) =>
   callback?.({ error: code })
 
