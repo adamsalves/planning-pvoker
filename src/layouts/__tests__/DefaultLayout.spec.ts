@@ -59,4 +59,27 @@ describe('DefaultLayout.vue', () => {
     expect(document.activeElement).toBe(w.get('main').element)
     expect(w.find('[aria-live="polite"]').text()).toBe('Sala room-b')
   })
+
+  // F8 — toggle de idioma na navbar. O i18n é o singleton do app (instalado no
+  // vitest.setup), então o teste restaura pt-BR ao final para não vazar.
+  it('switches the UI language via the navbar locale toggle', async () => {
+    const w = mountLayout()
+
+    const toggle = w.get('.locale-toggle')
+    expect(toggle.text()).toBe('EN') // mostra o idioma ALVO
+    expect(w.text()).toContain('Histórico')
+
+    await toggle.trigger('click')
+    await nextTick()
+
+    expect(toggle.text()).toBe('PT')
+    expect(w.text()).toContain('History')
+    expect(w.text()).not.toContain('Histórico')
+    expect(document.documentElement.lang).toBe('en')
+
+    await toggle.trigger('click')
+    await nextTick()
+    expect(w.text()).toContain('Histórico')
+    expect(document.documentElement.lang).toBe('pt-BR')
+  })
 })

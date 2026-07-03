@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 interface Props {
   subject: string
   roundNumber: number
@@ -8,19 +10,24 @@ interface Props {
 
 defineProps<Props>()
 
-const statusLabels = {
-  waiting: { text: 'Aguardando subject', color: 'var(--c-text-mute)' },
-  voting: { text: 'Votação em andamento', color: 'var(--c-primary)' },
-  revealed: { text: 'Votos revelados', color: 'var(--c-success)' },
+const { t } = useI18n()
+
+// Texto do status vem do catálogo (room.round.status.*); aqui só a cor por estado.
+const statusColors = {
+  waiting: 'var(--c-text-mute)',
+  voting: 'var(--c-primary)',
+  revealed: 'var(--c-success)',
 }
 </script>
 
 <template>
   <div class="round-header">
     <div class="round-info">
-      <span class="round-badge">Subject {{ roundNumber }}/{{ totalSubjects }}</span>
-      <span class="round-status" :style="{ color: statusLabels[status].color }">
-        {{ statusLabels[status].text }}
+      <span class="round-badge">{{
+        t('room.round.badge', { current: roundNumber, total: totalSubjects })
+      }}</span>
+      <span class="round-status" :style="{ color: statusColors[status] }">
+        {{ t(`room.round.status.${status}`) }}
       </span>
     </div>
     <div class="progress-wrapper">

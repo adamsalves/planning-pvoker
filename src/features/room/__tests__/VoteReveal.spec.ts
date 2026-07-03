@@ -31,6 +31,21 @@ describe('VoteReveal.vue', () => {
     expect(wrapper.text()).toContain('3/4')
   })
 
+  it('shows only the vote count when playerCount is omitted (historical recap)', () => {
+    const wrapper = mount(VoteReveal, {
+      props: {
+        votes: { p1: 5, p2: 8 },
+        celebrate: false,
+      },
+    })
+
+    // Sem denominador: o total atual de jogadores não vale para rodadas passadas
+    // (quem votou pode ter saído — "2/1" mentiria).
+    const voteStat = wrapper.findAll('.stat-card').at(-1)!
+    expect(voteStat.text()).toContain('Votos')
+    expect(voteStat.find('.stat-value').text()).toBe('2')
+  })
+
   it('renders distribution bars correctly ordered', () => {
     const wrapper = mount(VoteReveal, {
       props: {

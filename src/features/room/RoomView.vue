@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { DECKS } from '@/types'
 import { activePlayersOf } from '@/utils/players'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -17,6 +17,7 @@ import { useShareRoom } from '@/composables/useShareRoom'
 import { JoinAckError } from '@/composables/joinErrors'
 import { useHistoryStore } from '@/stores/history'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -50,12 +51,8 @@ const isAdmin = computed(() => {
 })
 const isObserver = computed(() => userStore.playerRole === 'observer')
 
-const deckLabel = computed(() => {
-  const dt = roomStore.roomConfig?.deckType
-  return dt ? DECKS[dt].label : 'Fibonacci'
-})
-
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
+const deckLabel = computed(() => t(`decks.${deckType.value}`))
 const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
 
@@ -224,20 +221,26 @@ function confirmLeave() {
         <div class="room-header">
           <div>
             <h1 class="room-title">
-              Sala <span class="room-code">{{ roomId }}</span>
+              {{ t('room.title') }} <span class="room-code">{{ roomId }}</span>
             </h1>
             <div class="room-meta">
               <span class="badge badge-role" :class="userStore.playerRole">
-                {{ isAdmin ? '👑 Admin' : isObserver ? '👁️ Espectador' : '🃏 Jogador' }}
+                {{
+                  isAdmin
+                    ? t('room.roles.admin')
+                    : isObserver
+                      ? t('room.roles.observer')
+                      : t('room.roles.player')
+                }}
               </span>
               <span class="badge badge-deck">{{ deckLabel }}</span>
               <span class="badge badge-phase">
                 {{
                   roomStore.isSetupPhase
-                    ? '📝 Preparação'
+                    ? t('room.phases.setup')
                     : roomStore.isVotingPhase
-                      ? '🗳️ Votação'
-                      : '✅ Concluída'
+                      ? t('room.phases.voting')
+                      : t('room.phases.completed')
                 }}
               </span>
             </div>
@@ -246,19 +249,19 @@ function confirmLeave() {
             <BaseButton
               variant="secondary"
               size="sm"
-              :aria-label="`Compartilhar link da sala ${roomId}`"
+              :aria-label="t('room.share.ariaLabel', { roomId })"
               @click="shareRoom"
             >
               {{
                 shareStatus === 'copied'
-                  ? 'Link copiado!'
+                  ? t('room.share.copied')
                   : shareStatus === 'error'
-                    ? 'Não foi possível copiar'
-                    : '🔗 Compartilhar'
+                    ? t('room.share.error')
+                    : t('room.share.action')
               }}
             </BaseButton>
             <BaseButton variant="ghost" size="sm" @click="showLeaveConfirm = true">
-              Sair da Sala
+              {{ t('room.leave.button') }}
             </BaseButton>
           </div>
         </div>
@@ -294,23 +297,26 @@ function confirmLeave() {
     <div v-if="roomStore.isCompleted" class="room-content room-content--full">
       <SessionSummary
         :rounds="roomStore.currentRoom?.rounds ?? []"
-        :player-count="activePlayerCount"
         @new-session="handleNewSession"
         @leave="handleLeave"
       />
     </div>
 
     <!-- F3.4 — confirmação antes de sair da sala (BaseModal endurecido na F2.2) -->
-    <BaseModal v-model="showLeaveConfirm" title="Sair da sala?">
+    <BaseModal v-model="showLeaveConfirm" :title="t('room.leave.confirmTitle')">
       <p class="leave-confirm-text">
-        Você vai sair desta sala e voltar à tela inicial.
+        {{ t('room.leave.confirmBody') }}
         <template v-if="hasRecordedRounds">
-          O resumo desta sessão fica salvo no seu histórico neste dispositivo.
+          {{ t('room.leave.confirmHistoryNote') }}
         </template>
       </p>
       <template #footer>
-        <BaseButton variant="ghost" @click="showLeaveConfirm = false">Cancelar</BaseButton>
-        <BaseButton variant="danger" @click="confirmLeave">Sim, sair</BaseButton>
+        <BaseButton variant="ghost" @click="showLeaveConfirm = false">{{
+          t('common.cancel')
+        }}</BaseButton>
+        <BaseButton variant="danger" @click="confirmLeave">{{
+          t('room.leave.confirmAction')
+        }}</BaseButton>
       </template>
     </BaseModal>
   </div>

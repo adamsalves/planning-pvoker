@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -18,6 +19,8 @@ ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 const props = defineProps<{
   session: SessionHistory
 }>()
+
+const { t } = useI18n()
 
 // Baralho não-numérico (ex.: T-Shirt) não tem média que faça sentido — sem isto o
 // gráfico vira uma linha de zeros (enganosa). Detectamos e escondemos (ver template).
@@ -41,7 +44,7 @@ const chartData = computed(() => {
     labels,
     datasets: [
       {
-        label: 'Média de Votos',
+        label: t('history.chart.datasetLabel'),
         backgroundColor: '#4ade80', // primary green
         data,
       },
@@ -49,27 +52,28 @@ const chartData = computed(() => {
   }
 })
 
-const chartOptions = {
+// Computed (não objeto estático) para o título re-renderizar na troca de idioma.
+const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
     title: {
       display: true,
-      text: 'Média das Estimativas por Rodada',
+      text: t('history.chart.title'),
     },
   },
   scales: {
     y: { beginAtZero: true },
   },
-}
+}))
 </script>
 
 <template>
   <div class="chart-wrapper">
     <Bar v-if="hasNumericVotes" :data="chartData" :options="chartOptions" />
-    <p v-else-if="!hasAnyVotes" class="chart-empty">Ainda não há votos nesta sessão.</p>
-    <p v-else class="chart-empty">Gráfico de média indisponível para baralhos não-numéricos.</p>
+    <p v-else-if="!hasAnyVotes" class="chart-empty">{{ t('history.chart.empty') }}</p>
+    <p v-else class="chart-empty">{{ t('history.chart.nonNumeric') }}</p>
   </div>
 </template>
 

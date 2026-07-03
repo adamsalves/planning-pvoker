@@ -13,10 +13,23 @@ export class JoinAckError extends Error {
   }
 }
 
-// Mapeia um erro de criar/entrar em sala para a mensagem exibida ao usuário.
-// Só um JoinAckError carrega um motivo real do servidor (ex.: "Sala não encontrada");
-// qualquer outra falha é transitória (cold start / conexão) → mensagem genérica.
-export function getJoinErrorMessage(error: unknown): string {
-  if (error instanceof JoinAckError) return error.message
-  return 'Não foi possível conectar agora. Tente novamente em instantes.'
+// Mensagens conhecidas do servidor → chaves de tradução. Ponte temporária do
+// F8: quando o servidor passar a ackar códigos estáveis (invalid_session,
+// room_not_found…), este mapa troca as mensagens pt-BR pelos códigos — os
+// consumidores (que só veem chaves) não mudam.
+const SERVER_ERROR_KEYS: Record<string, string> = {
+  'Sala não encontrada': 'errors.roomNotFound',
+  'Sessão inválida': 'errors.invalidSession',
+  'Dados de entrada inválidos': 'errors.invalidPayload',
+}
+
+// Mapeia um erro de criar/entrar em sala para a CHAVE i18n exibida ao usuário
+// (o chamador traduz com t(), assim a mensagem reage à troca de idioma).
+// Só um JoinAckError carrega um motivo real do servidor; qualquer outra falha é
+// transitória (cold start / conexão) → chave genérica de "tente de novo".
+export function getJoinErrorKey(error: unknown): string {
+  if (error instanceof JoinAckError) {
+    return SERVER_ERROR_KEYS[error.message] ?? 'errors.joinRefused'
+  }
+  return 'errors.transient'
 }

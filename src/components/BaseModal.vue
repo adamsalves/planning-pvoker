@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, useId, useSlots, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   modelValue: boolean // v-model bindings
@@ -17,6 +18,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   close: []
 }>()
+
+const { t } = useI18n()
 
 const titleId = useId()
 const dialogRef = ref<HTMLElement | null>(null)
@@ -140,7 +143,7 @@ onUnmounted(() => {
               v-if="!preventClose"
               class="modal-close-btn"
               @click="close"
-              aria-label="Close modal"
+              :aria-label="t('common.closeModal')"
             >
               &times;
             </button>

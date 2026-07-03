@@ -77,8 +77,24 @@ describe('PokerTable.vue', () => {
     })
 
     const spots = wrapper.findAll('.player-spot')
-    expect(spots[0]!.find('.sr-only').text()).toContain('votou')
-    expect(spots[1]!.find('.sr-only').text()).toContain('aguardando voto')
+    expect(spots[0]!.find('.sr-only').text()).toContain('Votou')
+    expect(spots[1]!.find('.sr-only').text()).toContain('Aguardando voto')
+  })
+
+  it('announces the revealed vote value via sr-only and hides the decorative card', () => {
+    const wrapper = mount(PokerTable, {
+      props: { players: mockPlayers, votes: { '1': 8 }, status: 'revealed' },
+    })
+
+    // O valor revelado é anunciado no name tag ("Votou 8")...
+    const spots = wrapper.findAll('.player-spot')
+    expect(spots[0]!.find('.sr-only').text()).toBe('Votou 8')
+    // ...e quem não votou não ganha anúncio nenhum
+    expect(spots[1]!.find('.sr-only').exists()).toBe(false)
+
+    // A carta da mesa é decorativa: botão desabilitado sem ação, fora da árvore de a11y
+    const card = wrapper.findComponent(PokerCard)
+    expect(card.attributes('aria-hidden')).toBe('true')
   })
 
   it('shows appropriate messages in the center of the table', () => {

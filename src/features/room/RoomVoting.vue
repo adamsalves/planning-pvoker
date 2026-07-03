@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '@/stores/room'
 import BaseCard from '@/components/BaseCard.vue'
 import RoundHeader from './RoundHeader.vue'
@@ -26,6 +27,7 @@ defineEmits<{
   finish: []
 }>()
 
+const { t } = useI18n()
 const roomStore = useRoomStore()
 const currentRound = computed(() => roomStore.currentRound)
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
@@ -64,8 +66,8 @@ const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
       <!-- Mensagem para o espectador -->
       <BaseCard v-if="currentRound?.status === 'voting' && isObserver" class="section-card">
         <div class="observer-message">
-          <p>👁️ Você está como espectador</p>
-          <p class="observer-sub">Aguardando os jogadores votarem...</p>
+          <p>{{ t('room.voting.observerTitle') }}</p>
+          <p class="observer-sub">{{ t('room.voting.observerWaiting') }}</p>
         </div>
       </BaseCard>
 
@@ -89,13 +91,13 @@ const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
       <BaseCard v-if="!currentRound && !isAdmin" class="section-card">
         <div class="waiting-message">
           <p class="waiting-icon">⏳</p>
-          <p>Aguardando o Scrum Master iniciar a votação...</p>
+          <p>{{ t('room.voting.waitingForStart') }}</p>
         </div>
       </BaseCard>
     </div>
 
     <div class="sidebar-panel">
-      <BaseCard title="Participantes" class="section-card">
+      <BaseCard :title="t('room.participants')" class="section-card">
         <PlayerList
           :players="roomStore.players"
           :votes="currentRound?.votes ?? {}"

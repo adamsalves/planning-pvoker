@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import BaseCard from '@/components/BaseCard.vue'
 import type { Round } from '@/types'
 import { useVoteStats } from '@/composables/useVoteStats'
@@ -7,6 +8,8 @@ const props = defineProps<{
   round: Round
   roundNumber: number
 }>()
+
+const { t } = useI18n()
 
 // Estatísticas da rodada — fonte única (useVoteStats).
 const { values, numericVotes, count, average, min, max, hasConsensus } = useVoteStats(
@@ -21,32 +24,35 @@ const { values, numericVotes, count, average, min, max, hasConsensus } = useVote
         <span class="round-number">R{{ roundNumber }}</span>
         {{ round.subject }}
       </h3>
-      <span v-if="hasConsensus" class="badge success">🤝 Consenso Atingido</span>
+      <span v-if="hasConsensus" class="badge success">{{ t('history.consensus') }}</span>
       <span v-else class="badge warning"
-        >Dispersão<template v-if="min !== null && max !== null"> ({{ max - min }})</template></span
+        >{{ t('history.spread')
+        }}<template v-if="min !== null && max !== null"> ({{ max - min }})</template></span
       >
     </div>
 
     <div class="stats-grid" v-if="numericVotes.length > 0">
       <div class="stat-box">
-        <span class="stat-label">Média</span>
+        <span class="stat-label">{{ t('stats.average') }}</span>
         <span class="stat-value">{{ average }}</span>
       </div>
       <div class="stat-box">
-        <span class="stat-label">Mínimo</span>
+        <span class="stat-label">{{ t('stats.min') }}</span>
         <span class="stat-value">{{ min }}</span>
       </div>
       <div class="stat-box">
-        <span class="stat-label">Máximo</span>
+        <span class="stat-label">{{ t('stats.max') }}</span>
         <span class="stat-value">{{ max }}</span>
       </div>
       <div class="stat-box">
-        <span class="stat-label">Votos</span>
+        <span class="stat-label">{{ t('stats.votes') }}</span>
         <span class="stat-value">{{ count }}</span>
       </div>
     </div>
     <div v-else>
-      <p class="text-votes">Votos textuais: {{ values.join(', ') || 'Nenhum' }}</p>
+      <p class="text-votes">
+        {{ t('history.textVotes', { values: values.join(', ') || t('history.noVotes') }) }}
+      </p>
     </div>
   </BaseCard>
 </template>

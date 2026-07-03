@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '@/stores/room'
 import BaseCard from '@/components/BaseCard.vue'
 import SubjectForm from './SubjectForm.vue'
@@ -15,13 +16,14 @@ defineEmits<{
   start: []
 }>()
 
+const { t } = useI18n()
 const roomStore = useRoomStore()
 </script>
 
 <template>
   <div class="room-content">
     <div class="voting-panel">
-      <BaseCard class="section-card" title="📋 Planejamento da Sessão">
+      <BaseCard class="section-card" :title="t('room.setup.planningTitle')">
         <template v-if="isAdmin">
           <SubjectForm
             :subjects="roomStore.subjects"
@@ -34,13 +36,10 @@ const roomStore = useRoomStore()
         <template v-else>
           <div class="waiting-message">
             <p class="waiting-icon">📝</p>
-            <p>O Scrum Master está preparando os subjects para votação...</p>
+            <p>{{ t('room.setup.waitingForAdmin') }}</p>
             <div v-if="roomStore.subjects.length > 0" class="preview-backlog">
               <p class="backlog-count">
-                {{ roomStore.subjects.length }}
-                {{
-                  roomStore.subjects.length === 1 ? 'subject cadastrado' : 'subjects cadastrados'
-                }}
+                {{ t('room.setup.subjectsRegistered', roomStore.subjects.length) }}
               </p>
               <ul class="preview-list">
                 <li v-for="(item, index) in roomStore.subjects" :key="index" class="preview-item">
@@ -55,7 +54,7 @@ const roomStore = useRoomStore()
     </div>
 
     <div class="sidebar-panel">
-      <BaseCard title="Participantes" class="section-card">
+      <BaseCard :title="t('room.participants')" class="section-card">
         <PlayerList :players="roomStore.players" :votes="{}" status="waiting" />
       </BaseCard>
     </div>

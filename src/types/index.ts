@@ -52,18 +52,15 @@ export interface Room {
   currentRoundIndex: number
 }
 
-// Deck definitions
-export const DECKS: Record<DeckType, { label: string; values: (string | number)[] }> = {
+// Deck definitions — o rótulo exibido vem do catálogo i18n (chaves `decks.*`).
+export const DECKS: Record<DeckType, { values: (string | number)[] }> = {
   fibonacci: {
-    label: 'Fibonacci',
     values: [1, 2, 3, 5, 8, 13, 21, '☕'],
   },
   tshirt: {
-    label: 'T-Shirt Sizes',
     values: ['PP', 'P', 'M', 'G', 'GG', 'XGG', '☕'],
   },
   sequential: {
-    label: 'Sequencial',
     values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '☕'],
   },
 }

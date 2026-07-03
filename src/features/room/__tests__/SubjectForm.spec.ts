@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import SubjectForm from '../SubjectForm.vue'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
+import { i18n } from '@/i18n'
 
 describe('SubjectForm.vue', () => {
   const defaultProps = {
@@ -24,6 +26,29 @@ describe('SubjectForm.vue', () => {
     const input = wrapper.findComponent(BaseInput)
     expect(input.props('error')).toBe('O subject deve ter pelo menos 2 caracteres')
     expect(wrapper.emitted('add')).toBeUndefined()
+  })
+
+  it('re-traduz o erro de validação visível na troca de idioma', async () => {
+    const wrapper = mount(SubjectForm, { props: defaultProps })
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const input = wrapper.findComponent(BaseInput)
+    expect(input.props('error')).toBe('O subject deve ter pelo menos 2 caracteres')
+
+    // O erro é guardado como CHAVE e traduzido no render — trocar o idioma com o
+    // erro na tela deve re-traduzi-lo (restauração do locale = afterEach global).
+    i18n.global.locale.value = 'en'
+    await nextTick()
+    expect(input.props('error')).toBe('Subject must be at least 2 characters')
+  })
+
+  it('usa singular no backlog com 1 subject', () => {
+    const wrapper = mount(SubjectForm, {
+      props: { subjects: ['Login'], playerCount: 3 },
+    })
+
+    expect(wrapper.text()).toContain('Backlog (1 subject)')
+    expect(wrapper.text()).not.toContain('Backlog (1 subjects)')
   })
 
   it('emits "add" event with trimmed subject and clears input', async () => {
