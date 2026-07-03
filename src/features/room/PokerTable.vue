@@ -69,7 +69,9 @@ function getPlayerStyle(index: number) {
           class="player-spot"
           :style="getPlayerStyle(index)"
         >
-          <!-- Card Area -->
+          <!-- Card Area — decorativa p/ leitores de tela: a carta é um botão desabilitado
+               sem ação (aria-label "Votar" enganaria) e o status/valor do voto já é
+               anunciado pelo sr-only do name tag abaixo. -->
           <div class="card-area">
             <Transition name="card-drop">
               <PokerCard
@@ -77,6 +79,7 @@ function getPlayerStyle(index: number) {
                 :value="status === 'revealed' ? (votes[player.id] ?? '') : ''"
                 :face-down="status === 'voting'"
                 disabled
+                aria-hidden="true"
                 class="table-card"
               />
               <div v-else class="empty-card-slot"></div>
@@ -89,6 +92,9 @@ function getPlayerStyle(index: number) {
             <span class="name">{{ player.name }}</span>
             <span v-if="status === 'voting'" class="sr-only">
               {{ hasVoted(player.id) ? t('room.players.voted') : t('room.players.waitingVote') }}
+            </span>
+            <span v-else-if="status === 'revealed' && hasVoted(player.id)" class="sr-only">
+              {{ t('room.players.votedValue', { value: votes[player.id] }) }}
             </span>
           </div>
         </div>

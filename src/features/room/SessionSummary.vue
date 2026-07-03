@@ -7,7 +7,6 @@ import VoteReveal from './VoteReveal.vue'
 
 interface Props {
   rounds: Round[]
-  playerCount: number
 }
 
 defineProps<Props>()
@@ -38,7 +37,9 @@ const { t } = useI18n()
             <span class="recap-subject">{{ round.subject }}</span>
           </div>
         </template>
-        <VoteReveal :votes="round.votes" :player-count="playerCount" :celebrate="false" />
+        <!-- Sem player-count: recap histórico — o total atual de jogadores não
+             corresponde a quem votou na rodada (ex.: alguém saiu depois de votar). -->
+        <VoteReveal :votes="round.votes" :celebrate="false" />
       </BaseCard>
     </div>
 

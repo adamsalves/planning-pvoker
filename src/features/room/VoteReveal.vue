@@ -7,7 +7,9 @@ import { useVoteStats } from '@/composables/useVoteStats'
 
 interface Props {
   votes: Record<string, string | number>
-  playerCount: number // apenas jogadores ativos (sem observers)
+  // Apenas jogadores ativos AGORA (sem observers). Omitir em recaps de rodadas
+  // passadas: quem votou pode já ter saído e o denominador atual mentiria ("2/1").
+  playerCount?: number
   celebrate?: boolean // dispara confetti no consenso (default true); desligado no resumo
 }
 
@@ -86,7 +88,9 @@ watch(hasConsensus, (newVal) => {
       </div>
       <div class="stat-card">
         <span class="stat-label">{{ t('stats.votes') }}</span>
-        <span class="stat-value">{{ count }}/{{ playerCount }}</span>
+        <span class="stat-value">{{
+          playerCount != null ? `${count}/${playerCount}` : count
+        }}</span>
       </div>
     </div>
 

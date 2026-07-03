@@ -297,7 +297,6 @@ function confirmLeave() {
     <div v-if="roomStore.isCompleted" class="room-content room-content--full">
       <SessionSummary
         :rounds="roomStore.currentRoom?.rounds ?? []"
-        :player-count="activePlayerCount"
         @new-session="handleNewSession"
         @leave="handleLeave"
       />

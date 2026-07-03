@@ -131,6 +131,7 @@ export const ptBR = {
       observersTitle: 'Espectadores ({count})',
       adminSr: '(admin)',
       voted: 'Votou',
+      votedValue: 'Votou {value}',
       waitingVote: 'Aguardando voto',
       observerSr: 'Espectador',
     },

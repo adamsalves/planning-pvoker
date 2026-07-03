@@ -130,6 +130,7 @@ export const en: MessageSchema = {
       observersTitle: 'Observers ({count})',
       adminSr: '(admin)',
       voted: 'Voted',
+      votedValue: 'Voted {value}',
       waitingVote: 'Waiting for vote',
       observerSr: 'Observer',
     },
