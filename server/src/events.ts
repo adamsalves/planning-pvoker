@@ -1,4 +1,4 @@
-import { Server, Socket } from 'socket.io'
+import { Server, Socket, DefaultEventsMap } from 'socket.io'
 import { RoomManager } from './roomManager'
 import {
   joinRoomSchema,
@@ -10,13 +10,19 @@ import {
 } from './validation'
 import { logger } from './logger'
 import type { AckErrorCode } from './errorCodes'
+import type { SocketData } from './types'
+
+// Server/Socket typed with SocketData so the authenticated identity lives on
+// `socket.data` (idiomatic Socket.IO), fully typed — no `any`, no closures.
+export type AppServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>
+type AppSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>
 
 // Rejects an ack with a stable error code (see ./errorCodes for the wire contract).
 // No-op when the emitter is fire-and-forget (didn't pass a callback).
 const fail = (callback: ((res: unknown) => void) | undefined, code: AckErrorCode) =>
   callback?.({ error: code })
 
-export function setupSocketEvents(io: Server, roomManager: RoomManager) {
+export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
   // How long a disconnected player is kept before removal, so a page refresh or
   // brief network blip doesn't drop them (and possibly destroy the room).
   // Configurable via env (tests use a short window). A non-negative finite value
@@ -76,21 +82,21 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     leaveTimers.set(key, timer)
   }
 
-  io.on('connection', (socket: Socket) => {
+  io.on('connection', (socket: AppSocket) => {
     logger.debug(`⚡ Player Connected: ${socket.id}`)
 
-    // Track which room/player this socket is authenticated as.
-    // Set only after a successful join_room — the single source of truth
-    // for authorization (never trust ids coming from the payload).
-    let currentRoomId: string | null = null
-    let currentPlayerId: string | null = null
+    // Authenticated identity lives on socket.data — set only after a successful
+    // join_room (the single source of truth for authorization; ids from payloads
+    // are never trusted). Initialized to null so runtime matches the SocketData type.
+    socket.data.roomId = null
+    socket.data.playerId = null
 
     // Authorizes admin-only actions: the socket must be joined to the room
     // AND be its admin. Returns the room when allowed, otherwise null.
     const requireAdmin = (roomId: string) => {
       const room = roomManager.getRoom(roomId)
       if (!room) return null
-      if (currentRoomId !== roomId || currentPlayerId !== room.adminId) {
+      if (socket.data.roomId !== roomId || socket.data.playerId !== room.adminId) {
         logger.warn(`⛔ Admin action denied on ${roomId} by socket ${socket.id}`)
         return null
       }
@@ -144,8 +150,8 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       }
 
       // Bind the socket identity only after a valid join
-      currentRoomId = roomId
-      currentPlayerId = player.id
+      socket.data.roomId = roomId
+      socket.data.playerId = player.id
       socket.join(roomId)
       markPresent(roomId, player.id, socket.id)
 
@@ -203,10 +209,12 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         fail(callback, 'invalid_vote')
         return
       }
-      if (!currentPlayerId || currentRoomId !== parsed.data.roomId) {
+      if (!socket.data.playerId || socket.data.roomId !== parsed.data.roomId) {
         fail(callback, 'not_authorized')
         return
       }
+      // Capture now: narrowing on socket.data.playerId would be reset by the calls below.
+      const playerId = socket.data.playerId
 
       const room = roomManager.getRoom(parsed.data.roomId)
       if (!room) {
@@ -219,7 +227,7 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         return
       }
 
-      const updated = roomManager.castVote(parsed.data.roomId, currentPlayerId, parsed.data.value)
+      const updated = roomManager.castVote(parsed.data.roomId, playerId, parsed.data.value)
       if (updated) {
         notifyRoomUpdate(parsed.data.roomId)
         callback?.({ ok: true })
@@ -247,12 +255,26 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         fail(callback, 'invalid_payload')
         return
       }
-      if (!currentPlayerId || currentRoomId !== parsed.data.roomId) {
+      const { roomId, playerId } = socket.data
+      if (!playerId || roomId !== parsed.data.roomId) {
         fail(callback, 'not_authorized')
         return
       }
-      const { roomId } = parsed.data
-      const playerId = currentPlayerId
+
+      const key = presenceKey(roomId, playerId)
+
+      // Stale-sibling guard: only a socket that STILL holds this identity's
+      // presence may remove the player. If a sibling tab already left (clearing
+      // presence) and the identity may have rejoined on a fresh socket, this
+      // socket's id is no longer in the presence set — so its now-stale leave must
+      // NOT evict the rejoined player. Drop our dangling identity and ack ok (the
+      // leave already effectively happened via the sibling).
+      if (!activeSockets.get(key)?.has(socket.id)) {
+        socket.data.roomId = null
+        socket.data.playerId = null
+        callback?.({ ok: true })
+        return
+      }
 
       // Leaving is IDENTITY-WIDE: unsubscribe every live socket of this player
       // (this one and any sibling tab) from the Socket.IO room, so no tab keeps
@@ -260,7 +282,6 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
       // forget presence and pending grace timers: the player is gone NOW, so
       // the disconnect that follows must not schedule (or keep) a removal for
       // someone already removed.
-      const key = presenceKey(roomId, playerId)
       for (const sid of activeSockets.get(key) ?? []) {
         io.sockets.sockets.get(sid)?.leave(roomId)
       }
@@ -270,8 +291,8 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
         clearTimeout(timer)
         leaveTimers.delete(key)
       }
-      currentRoomId = null
-      currentPlayerId = null
+      socket.data.roomId = null
+      socket.data.playerId = null
 
       roomManager.leaveRoom(roomId, playerId)
       logger.debug(`👋 Player ${playerId} left ${roomId}`)
@@ -283,8 +304,9 @@ export function setupSocketEvents(io: Server, roomManager: RoomManager) {
     // (e.g. a page refresh). Removal is scheduled only if no socket comes back.
     socket.on('disconnect', () => {
       logger.debug(`🔌 Player Disconnected: ${socket.id}`)
-      if (currentRoomId && currentPlayerId) {
-        markAbsent(currentRoomId, currentPlayerId, socket.id)
+      const { roomId, playerId } = socket.data
+      if (roomId && playerId) {
+        markAbsent(roomId, playerId, socket.id)
       }
     })
   })

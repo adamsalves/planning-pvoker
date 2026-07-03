@@ -3,7 +3,7 @@ import http from 'http'
 import { Server } from 'socket.io'
 import cors, { CorsOptions } from 'cors'
 import { RoomManager } from './roomManager'
-import { setupSocketEvents } from './events'
+import { setupSocketEvents, type AppServer } from './events'
 import { logger } from './logger'
 
 const app = express()
@@ -62,7 +62,7 @@ const corsOptions: CorsOptions = {
 app.use(cors(corsOptions))
 
 const server = http.createServer(app)
-const io = new Server(server, {
+const io: AppServer = new Server(server, {
   cors: corsOptions,
 })
 

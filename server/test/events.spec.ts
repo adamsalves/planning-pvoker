@@ -494,6 +494,34 @@ describe('leave_room (explicit exit)', () => {
     const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
     expect(room.players.map((p) => p.id)).toEqual(['a1'])
   })
+
+  it('ignores a stale leave from a sibling socket after the identity rejoined', async () => {
+    // Two sibling tabs for member m1 (shared session → same id + token).
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    // tab1 leaves — identity-wide, so m1 is removed and the token dropped. tab2's
+    // socket still (stalely) believes it is m1@r1.
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    // m1 comes back on a brand-new socket (no token — the leave cleared it).
+    const rejoined = await connect()
+    const reAck = await join(rejoined, { roomId: 'r1', player: member })
+    expect(reAck.success).toBe(true)
+
+    // The STALE sibling now emits leave_room. Its socket id is no longer the
+    // identity's live presence, so the leave must be a no-op — it must NOT evict
+    // the freshly rejoined m1. (Without the presence guard, this evicts m1.)
+    const staleAck = await leaveRoom(tab2, { roomId: 'r1' })
+    expect(staleAck.ok).toBe(true) // acked, but changed nothing
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
 })
 
 describe('unauthenticated socket (never joined)', () => {
