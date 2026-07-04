@@ -32,3 +32,12 @@ export interface Room {
   rounds: Round[]
   currentRoundIndex: number
 }
+
+// Per-socket authenticated identity, stored on `socket.data` (the idiomatic
+// Socket.IO place) instead of ad-hoc handler closures. Set only after a valid
+// join_room — the single source of truth for authorization; ids from payloads
+// are never trusted. Both null until a successful join.
+export interface SocketData {
+  roomId: string | null
+  playerId: string | null
+}
