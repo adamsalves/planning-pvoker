@@ -68,11 +68,16 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
   const markAbsent = (roomId: string, playerId: string, socketId: string) => {
     const key = presenceKey(roomId, playerId)
     const sockets = activeSockets.get(key)
-    if (sockets) {
-      sockets.delete(socketId)
-      if (sockets.size > 0) return // still connected on another socket
-      activeSockets.delete(key)
-    }
+    // Only a socket tracked as live presence can trigger a removal. If this
+    // identity has no presence entry — e.g. a stale sibling disconnecting after
+    // an identity-wide leave_room already cleared it — there is nothing to
+    // schedule; doing so would also overwrite (and orphan) any grace timer
+    // already pending for this key, leaking it past dispose().
+    if (!sockets?.has(socketId)) return
+    sockets.delete(socketId)
+    if (sockets.size > 0) return // still connected on another socket
+    activeSockets.delete(key)
+
     const timer = setTimeout(() => {
       leaveTimers.delete(key)
       if (activeSockets.has(key)) return // reconnected during the grace period
@@ -209,14 +214,13 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
         fail(callback, 'invalid_vote')
         return
       }
-      if (!socket.data.playerId || socket.data.roomId !== parsed.data.roomId) {
+      const { roomId, playerId } = socket.data
+      if (!playerId || roomId !== parsed.data.roomId) {
         fail(callback, 'not_authorized')
         return
       }
-      // Capture now: narrowing on socket.data.playerId would be reset by the calls below.
-      const playerId = socket.data.playerId
 
-      const room = roomManager.getRoom(parsed.data.roomId)
+      const room = roomManager.getRoom(roomId)
       if (!room) {
         fail(callback, 'room_not_found')
         return
@@ -227,9 +231,9 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
         return
       }
 
-      const updated = roomManager.castVote(parsed.data.roomId, playerId, parsed.data.value)
+      const updated = roomManager.castVote(roomId, playerId, parsed.data.value)
       if (updated) {
-        notifyRoomUpdate(parsed.data.roomId)
+        notifyRoomUpdate(roomId)
         callback?.({ ok: true })
       } else {
         // observer, ou rodada fora da fase de votação

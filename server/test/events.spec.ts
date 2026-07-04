@@ -521,6 +521,70 @@ describe('leave_room (explicit exit)', () => {
 
     const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
     expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+
+    // The rejoined m1 is still a fully live member: the stale no-op didn't drop
+    // its room subscription, so it keeps receiving broadcasts.
+    const seen = waitForRoomWhere(rejoined, (r) => r.subjects.includes('S1'))
+    adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['S1'] })
+    expect((await seen).players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
+  it('a stale sibling that disconnects after the identity rejoined keeps the rejoined player', async () => {
+    // Same shape as the stale-leave test, but the stale sibling DISCONNECTS
+    // (closes) instead of emitting leave_room. Its socket was never part of the
+    // rejoined identity's presence, so the disconnect must not schedule a grace
+    // removal for the freshly rejoined m1.
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    const rejoined = await connect()
+    expect((await join(rejoined, { roomId: 'r1', player: member })).success).toBe(true)
+
+    // The stale sibling drops off. m1's only live presence is the rejoined
+    // socket, so markAbsent finds tab2 absent from the set and schedules nothing.
+    tab2.close()
+    await delay(GRACE_MS + MARGIN_MS)
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
+  it('a stale sibling that disconnects after an identity-wide leave schedules no spurious removal', async () => {
+    // After an identity-wide leave, a still-connected sibling is stale: its
+    // socket.data names an identity whose presence was already cleared. When it
+    // later disconnects (no rejoin in between), markAbsent must not schedule a
+    // redundant grace removal — otherwise a spurious room_state_updated fires
+    // after the window and the orphaned timer escapes dispose().
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    // Identity-wide leave: m1 removed, presence for r1::m1 cleared; tab2 stays
+    // connected but stale, and nothing rejoins.
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    // Any removal the stale disconnect schedules would broadcast to the admin,
+    // who is still subscribed.
+    let broadcasts = 0
+    adminClient.on('room_state_updated', () => {
+      broadcasts++
+    })
+
+    tab2.close()
+    await delay(GRACE_MS + MARGIN_MS)
+    expect(broadcasts).toBe(0)
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
   })
 })
 

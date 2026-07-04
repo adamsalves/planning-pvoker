@@ -1,10 +1,11 @@
 import express from 'express'
 import http from 'http'
-import { Server } from 'socket.io'
+import { Server, type DefaultEventsMap } from 'socket.io'
 import cors, { CorsOptions } from 'cors'
 import { RoomManager } from './roomManager'
-import { setupSocketEvents, type AppServer } from './events'
+import { setupSocketEvents } from './events'
 import { logger } from './logger'
+import type { SocketData } from './types'
 
 const app = express()
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -62,7 +63,7 @@ const corsOptions: CorsOptions = {
 app.use(cors(corsOptions))
 
 const server = http.createServer(app)
-const io: AppServer = new Server(server, {
+const io = new Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>(server, {
   cors: corsOptions,
 })
 
