@@ -389,3 +389,70 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
     expect(userStore.activeRoomId).toBeNull()
   })
 })
+
+describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function mountVotingRoom() {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin')
+    const room = createRoom()
+    room.phase = 'voting'
+    room.subjects = ['Login', 'Checkout']
+    room.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+      { id: 'r-2', subject: 'Checkout', status: 'voting', votes: {} },
+    ]
+    room.currentRoundIndex = 1
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  it('shows a Voting/Summary tablist during the voting phase, with the revealed-round count', () => {
+    const wrapper = mountVotingRoom()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs).toHaveLength(2)
+    expect(tabs[0].text()).toContain('Votação')
+    expect(tabs[1].text()).toContain('Resumo')
+    // Só a rodada revelada conta — a rodada em votação não entra no resumo.
+    expect(tabs[1].text()).toContain('(1)')
+  })
+
+  it('defaults to the voting panel and switches to the summary on click', async () => {
+    const wrapper = mountVotingRoom()
+    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+
+    expect(tab(0).attributes('aria-selected')).toBe('true')
+    expect(tab(1).attributes('aria-selected')).toBe('false')
+    // v-show esconde o painel inativo (display:none inline no root do componente).
+    expect(wrapper.get('#room-panel-summary').attributes('style')).toContain('display: none')
+
+    await tab(1).trigger('click')
+
+    expect(tab(0).attributes('aria-selected')).toBe('false')
+    expect(tab(1).attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('#room-panel-voting').attributes('style')).toContain('display: none')
+    expect(wrapper.get('#room-panel-summary').attributes('style') ?? '').not.toContain(
+      'display: none',
+    )
+  })
+
+  it('switches tabs with Arrow keys (WAI-ARIA keyboard support)', async () => {
+    const wrapper = mountVotingRoom()
+    const tablist = wrapper.get('[role="tablist"]')
+
+    await tablist.trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+
+    await tablist.trigger('keydown', { key: 'ArrowLeft' })
+    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('does not render the tablist outside the voting phase', () => {
+    const wrapper = mountRoomView() // sala em fase de setup
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+  })
+})

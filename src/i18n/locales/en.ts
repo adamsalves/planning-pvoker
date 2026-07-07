@@ -76,6 +76,11 @@ export const en: MessageSchema = {
       voting: '🗳️ Voting',
       completed: '✅ Completed',
     },
+    tabs: {
+      voting: 'Voting',
+      summary: 'Summary',
+      ariaLabel: 'Room view',
+    },
     share: {
       action: '🔗 Share',
       copied: 'Link copied!',
@@ -149,6 +154,9 @@ export const en: MessageSchema = {
       title: 'Session Completed!',
       subjectsVoted: '{count} subject voted | {count} subjects voted',
       newSession: '🔄 New Session',
+      roundLabel: 'Round {number}',
+      liveEmpty: 'No rounds finished yet',
+      liveEmptyHint: 'Rounds show up here as soon as they are revealed.',
     },
   },
   stats: {
