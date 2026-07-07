@@ -146,6 +146,11 @@ function rejoinActiveRoom() {
     // Socket.IO resolve, sem expulsar o usuário da sala.
     if (err instanceof JoinAckError) {
       userStore.setSessionToken(null)
+      // A sala REALMENTE não existe mais (reset/cold-start): descarta o estado
+      // obsoleto além do token. Sem isso, o `currentRoom` preso faria a Home
+      // mostrar o aviso "sessão expirou" JUNTO com o banner/link "Voltar à Sala"
+      // (F5.4) — um retorno quebrado que só reentra no erro.
+      roomStore.leaveRoom()
       router.push({ name: 'home', query: { notice: 'session-expired' } })
     }
   })

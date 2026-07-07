@@ -147,11 +147,11 @@ describe('RoomView.vue rejoin', () => {
     mockSocketJoinRoom.mockResolvedValue(undefined)
   })
 
-  it('drops the session token and goes home on a JoinAckError (real session failure)', async () => {
+  it('drops the session token AND the stale room, then goes home on a JoinAckError', async () => {
     // Server explicitly refuses the rejoin (stale token / room gone).
     mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('invalid_session'))
 
-    mountRoomView({ sessionToken: 'stale-token' })
+    mountRoomView({ sessionToken: 'stale-token' }) // mountRoomView já sincroniza uma sala
     await flushPromises()
 
     const userStore = useUserStore()
@@ -160,6 +160,9 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
+    // currentRoom precisa ser limpo: senão a Home mostraria o banner "Voltar à Sala"
+    // (F5.4) junto do aviso "sessão expirou" — um retorno quebrado.
+    expect(useRoomStore().currentRoom).toBeNull()
   })
 
   it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {
