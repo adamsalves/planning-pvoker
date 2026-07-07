@@ -4,6 +4,8 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import DefaultLayout from '../DefaultLayout.vue'
+import { useRoomStore } from '@/stores/room'
+import type { Room, RoomPhase } from '@/types'
 
 let wrapper: VueWrapper | undefined
 
@@ -13,6 +15,23 @@ function mountLayout() {
     global: { plugins: [router], stubs: { RouterView: true } },
   })
   return wrapper
+}
+
+function makeRoom(phase: RoomPhase): Room {
+  return {
+    id: 'abc123',
+    adminId: 'p1',
+    config: { deckType: 'fibonacci', autoReveal: false },
+    players: [],
+    subjects: [],
+    phase,
+    rounds: [],
+    currentRoundIndex: -1,
+  }
+}
+
+function backToRoomLink(w: VueWrapper) {
+  return w.findAll('a').find((a) => a.classes().includes('nav-link-room'))
 }
 
 describe('DefaultLayout.vue', () => {
@@ -81,5 +100,36 @@ describe('DefaultLayout.vue', () => {
     await nextTick()
     expect(w.text()).toContain('Histórico')
     expect(document.documentElement.lang).toBe('pt-BR')
+  })
+
+  // F5.1/F5.2 — visibilidade e rótulo do "Voltar à Sala".
+  it('does not show "Voltar à Sala" when there is no active room', () => {
+    const w = mountLayout()
+    expect(backToRoomLink(w)).toBeUndefined()
+  })
+
+  it('hides "Voltar à Sala" while on the room route itself (F5.1)', async () => {
+    useRoomStore().syncRoom(makeRoom('voting'))
+    await router.push({ name: 'room', params: { id: 'abc123' } })
+    const w = mountLayout()
+    expect(backToRoomLink(w)).toBeUndefined()
+  })
+
+  it('shows "Voltar à Sala" from Home while a session is in progress (F5.1/F5.2)', () => {
+    useRoomStore().syncRoom(makeRoom('voting'))
+    const w = mountLayout() // beforeEach já posicionou em '/'
+    const link = backToRoomLink(w)
+    expect(link).toBeDefined()
+    expect(link?.text()).toContain('Voltar à Sala')
+    expect(link?.attributes('href')).toBe('/room/abc123')
+  })
+
+  it('labels the link "Ver Resumo" from Home when the session is completed (F5.2)', () => {
+    useRoomStore().syncRoom(makeRoom('completed'))
+    const w = mountLayout()
+    const link = backToRoomLink(w)
+    expect(link).toBeDefined()
+    expect(link?.text()).toContain('Ver Resumo')
+    expect(link?.attributes('href')).toBe('/room/abc123')
   })
 })

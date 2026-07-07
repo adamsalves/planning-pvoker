@@ -528,3 +528,19 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     wrapper.unmount() // limpa o DOM anexado ao document.body
   })
 })
+
+describe('RoomView.vue direct hit without identity (F5.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('redirects to Home preserving the room code in ?room= (not a bare /)', () => {
+    setActivePinia(createPinia())
+    // Sem setPlayer → sem playerId/playerName: link/bookmark de /room/:id aberto direto.
+    mount(RoomView, { global: { stubs: childStubs } })
+
+    // Antes ia pra '/' cru (perdia o id); agora manda pra Home com ?room=<id>, que o
+    // HomeView usa pra abrir na aba "Entrar" já preenchida.
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home', query: { room: 'abc123' } })
+  })
+})

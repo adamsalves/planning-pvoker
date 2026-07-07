@@ -13,11 +13,21 @@ const { t } = useI18n()
 const roomStore = useRoomStore()
 const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
 
-const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
-
 // F2.8 — troca de rota move o foco pro <main> e anuncia o título via aria-live,
 // já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
 const route = useRoute()
+
+// F5.1/F5.2 — "Voltar à Sala" só aparece quando há sala ativa E você NÃO está na
+// rota dela (na própria sala o botão seria redundante). Sem o antigo `!isCompleted`:
+// mesmo concluída, o resumo continua em /room/:id, então o botão segue sendo a
+// volta — e vira "Ver Resumo" pra não prometer uma sessão ainda em andamento.
+const showBackToRoom = computed(() => isInRoom.value && route.name !== 'room')
+const backToRoom = computed(() =>
+  isCompleted.value
+    ? { icon: '📊', label: t('layout.viewSummary') }
+    : { icon: '🎯', label: t('layout.backToRoom') },
+)
+
 const mainRef = ref<HTMLElement | null>(null)
 
 // route.path (não route.name): troca de :id na mesma rota nomeada (ex.: sala -> outra
@@ -63,8 +73,8 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
             :to="`/room/${currentRoom?.id}`"
             class="nav-link nav-link-room"
           >
-            <span class="room-icon">🎯</span>
-            {{ t('layout.backToRoom') }}
+            <span class="room-icon" aria-hidden="true">{{ backToRoom.icon }}</span>
+            {{ backToRoom.label }}
           </RouterLink>
           <RouterLink to="/" class="nav-link">{{ t('layout.home') }}</RouterLink>
           <RouterLink to="/history" class="nav-link">{{ t('layout.history') }}</RouterLink>

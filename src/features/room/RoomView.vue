@@ -153,7 +153,10 @@ function rejoinActiveRoom() {
 
 onMounted(() => {
   if (!userStore.playerId || !userStore.playerName) {
-    router.push('/') // no identity yet — go home to define a name
+    // F5.3 — sem identidade (link/bookmark de /room/:id aberto direto): manda pra
+    // Home PRESERVANDO o código da sala em ?room=, que o HomeView usa pra abrir na
+    // aba "Entrar" já preenchida. Antes ia pra '/' cru, descartando o id.
+    router.push({ name: 'home', query: { room: roomId.value } })
     return
   }
   rejoinActiveRoom()

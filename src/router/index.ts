@@ -31,6 +31,14 @@ const router = createRouter({
       component: () => import('../features/history/HistoryView.vue'),
       meta: { title: 'routes.history' },
     },
+    // F4.3 — catch-all: qualquer caminho desconhecido cai numa 404 (antes = tela
+    // branca). Precisa ser a ÚLTIMA rota (a ordem importa no matcher).
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../features/not-found/NotFoundView.vue'),
+      meta: { title: 'routes.notFound' },
+    },
   ],
 })
 
