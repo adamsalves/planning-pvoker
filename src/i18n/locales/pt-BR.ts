@@ -77,6 +77,11 @@ export const ptBR = {
       voting: '🗳️ Votação',
       completed: '✅ Concluída',
     },
+    tabs: {
+      voting: 'Votação',
+      summary: 'Resumo',
+      ariaLabel: 'Visualização da sala',
+    },
     share: {
       action: '🔗 Compartilhar',
       copied: 'Link copiado!',
@@ -150,6 +155,9 @@ export const ptBR = {
       title: 'Sessão Concluída!',
       subjectsVoted: '{count} subject votado | {count} subjects votados',
       newSession: '🔄 Nova Sessão',
+      roundLabel: 'Rodada {number}',
+      liveEmpty: 'Nenhuma rodada concluída ainda',
+      liveEmptyHint: 'As rodadas aparecem aqui assim que forem reveladas.',
     },
   },
   // Rótulos de estatística compartilhados (VoteReveal e RoundSummary do histórico).

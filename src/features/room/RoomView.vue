@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
 import { activePlayersOf } from '@/utils/players'
+import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import RoomSetup from './RoomSetup.vue'
 import RoomVoting from './RoomVoting.vue'
+import RoomSummary from './RoomSummary.vue'
 import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
 import { useShareRoom } from '@/composables/useShareRoom'
@@ -91,6 +93,37 @@ const allActiveVoted = computed(() => {
   // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
   return active.length > 0 && active.every((p) => p.id in round.votes)
 })
+
+// Abas da fase de votação: "Votação" (rodada atual) ↔ "Resumo" (rodadas já
+// reveladas, ao vivo). Só aparecem na fase de votação.
+const roomTab = ref<'voting' | 'summary'>('voting')
+const votingTabRef = ref<HTMLButtonElement | null>(null)
+const summaryTabRef = ref<HTMLButtonElement | null>(null)
+
+// Contagem exibida na aba, derivada da MESMA fonte que o RoomSummary lista
+// (`revealedRoundsOf`) — o rótulo "Resumo (N)" nunca diverge do painel.
+const revealedRoundCount = computed(() => revealedRoundsOf(roomStore.currentRoom).length)
+
+// Ao (re)entrar em votação — ex.: nova sessão após um reset — volta pra aba de
+// votação, pra não ficar preso no resumo da sessão anterior.
+watch(
+  () => roomStore.isVotingPhase,
+  (isVoting) => {
+    if (isVoting) roomTab.value = 'voting'
+  },
+)
+
+// Navegação por teclado das abas (padrão WAI-ARIA tabs): setas trocam a aba e
+// movem o foco pra ela (roving tabindex no template).
+function onTabsKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+  event.preventDefault()
+  roomTab.value = event.key === 'ArrowRight' ? 'summary' : 'voting'
+  nextTick(() => {
+    const target = roomTab.value === 'summary' ? summaryTabRef.value : votingTabRef.value
+    target?.focus()
+  })
+}
 
 // Auto-reveal é responsabilidade ÚNICA do servidor (roomManager.castVote);
 // o cliente não reemite reveal_votes para evitar lógica duplicada/divergente.
@@ -277,19 +310,67 @@ function confirmLeave() {
       @start="handleStartSession"
     />
 
-    <!-- PHASE: VOTING -->
-    <RoomVoting
-      v-if="roomStore.isVotingPhase"
-      :is-admin="isAdmin"
-      :is-observer="isObserver"
-      :selected-vote="selectedVote"
-      :active-player-count="activePlayerCount"
-      :all-active-voted="allActiveVoted"
-      @vote="handleVote"
-      @reveal="handleReveal"
-      @next-round="handleNextRound"
-      @finish="handleFinishSession"
-    />
+    <!-- PHASE: VOTING — abas "Votação" (rodada atual) ↔ "Resumo" (ao vivo) -->
+    <template v-if="roomStore.isVotingPhase">
+      <div
+        class="room-tabs"
+        role="tablist"
+        :aria-label="t('room.tabs.ariaLabel')"
+        @keydown="onTabsKeydown"
+      >
+        <button
+          id="room-tab-voting"
+          ref="votingTabRef"
+          type="button"
+          role="tab"
+          class="room-tab"
+          :class="{ 'room-tab--active': roomTab === 'voting' }"
+          :aria-selected="roomTab === 'voting'"
+          :tabindex="roomTab === 'voting' ? 0 : -1"
+          aria-controls="room-panel-voting"
+          @click="roomTab = 'voting'"
+        >
+          {{ t('room.tabs.voting') }}
+        </button>
+        <button
+          id="room-tab-summary"
+          ref="summaryTabRef"
+          type="button"
+          role="tab"
+          class="room-tab"
+          :class="{ 'room-tab--active': roomTab === 'summary' }"
+          :aria-selected="roomTab === 'summary'"
+          :tabindex="roomTab === 'summary' ? 0 : -1"
+          aria-controls="room-panel-summary"
+          @click="roomTab = 'summary'"
+        >
+          {{ t('room.tabs.summary') }} ({{ revealedRoundCount }})
+        </button>
+      </div>
+
+      <RoomVoting
+        v-show="roomTab === 'voting'"
+        id="room-panel-voting"
+        role="tabpanel"
+        aria-labelledby="room-tab-voting"
+        :is-admin="isAdmin"
+        :is-observer="isObserver"
+        :selected-vote="selectedVote"
+        :active-player-count="activePlayerCount"
+        :all-active-voted="allActiveVoted"
+        @vote="handleVote"
+        @reveal="handleReveal"
+        @next-round="handleNextRound"
+        @finish="handleFinishSession"
+      />
+      <RoomSummary
+        v-show="roomTab === 'summary'"
+        id="room-panel-summary"
+        role="tabpanel"
+        aria-labelledby="room-tab-summary"
+        tabindex="0"
+      />
+    </template>
 
     <!-- ======================== -->
     <!-- PHASE: COMPLETED         -->
@@ -345,6 +426,44 @@ function confirmLeave() {
   justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* Abas Votação ↔ Resumo (fase de votação) */
+.room-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.room-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; /* sobrepõe a borda do tablist */
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--c-text-mute);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.room-tab:hover {
+  color: var(--c-text);
+}
+
+.room-tab--active {
+  color: var(--c-primary);
+  border-bottom-color: var(--c-primary);
+}
+
+.room-tab:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .leave-confirm-text {

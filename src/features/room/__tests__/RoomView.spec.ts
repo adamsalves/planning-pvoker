@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
@@ -387,5 +388,143 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
     // F3.10 — token e vínculo com a sala descartados no leave.
     expect(userStore.sessionToken).toBeNull()
     expect(userStore.activeRoomId).toBeNull()
+  })
+})
+
+describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function mountVotingRoom(mountOptions: Record<string, unknown> = {}) {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin')
+    const room = createRoom()
+    room.phase = 'voting'
+    room.subjects = ['Login', 'Checkout']
+    room.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+      { id: 'r-2', subject: 'Checkout', status: 'voting', votes: {} },
+    ]
+    room.currentRoundIndex = 1
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs }, ...mountOptions })
+  }
+
+  it('shows a Voting/Summary tablist during the voting phase, with the revealed-round count', () => {
+    const wrapper = mountVotingRoom()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs).toHaveLength(2)
+    expect(tabs[0].text()).toContain('Votação')
+    expect(tabs[1].text()).toContain('Resumo')
+    // Só a rodada revelada conta — a rodada em votação não entra no resumo.
+    expect(tabs[1].text()).toContain('(1)')
+  })
+
+  it('defaults to the voting panel and switches to the summary on click', async () => {
+    const wrapper = mountVotingRoom()
+    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+
+    expect(tab(0).attributes('aria-selected')).toBe('true')
+    expect(tab(1).attributes('aria-selected')).toBe('false')
+    // v-show esconde o painel inativo (display:none inline no root do componente).
+    expect(wrapper.get('#room-panel-summary').attributes('style')).toContain('display: none')
+
+    await tab(1).trigger('click')
+
+    expect(tab(0).attributes('aria-selected')).toBe('false')
+    expect(tab(1).attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('#room-panel-voting').attributes('style')).toContain('display: none')
+    expect(wrapper.get('#room-panel-summary').attributes('style') ?? '').not.toContain(
+      'display: none',
+    )
+  })
+
+  it('switches tabs with Arrow keys (WAI-ARIA keyboard support)', async () => {
+    const wrapper = mountVotingRoom()
+    const tablist = wrapper.get('[role="tablist"]')
+
+    await tablist.trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+
+    await tablist.trigger('keydown', { key: 'ArrowLeft' })
+    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('does not render the tablist outside the voting phase', () => {
+    const wrapper = mountRoomView() // sala em fase de setup
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+  })
+
+  it('updates the tab counter live when the current round becomes revealed', async () => {
+    const wrapper = mountVotingRoom()
+    const roomStore = useRoomStore()
+    const summaryTab = () => wrapper.findAll('[role="tab"]')[1]
+
+    expect(summaryTab().text()).toContain('(1)')
+
+    // Admin revela a rodada atual (r-2) → ela entra no resumo e o contador sobe.
+    const revealed = createRoom()
+    revealed.phase = 'voting'
+    revealed.subjects = ['Login', 'Checkout']
+    revealed.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+      { id: 'r-2', subject: 'Checkout', status: 'revealed', votes: { 'player-1': 8 } },
+    ]
+    revealed.currentRoundIndex = 1
+    roomStore.syncRoom(revealed)
+    await nextTick()
+
+    expect(summaryTab().text()).toContain('(2)')
+  })
+
+  it('resets to the voting tab when a fresh voting phase starts (session reset)', async () => {
+    const wrapper = mountVotingRoom()
+    const roomStore = useRoomStore()
+    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+
+    // Vai pro resumo.
+    await tab(1).trigger('click')
+    expect(tab(1).attributes('aria-selected')).toBe('true')
+
+    // Sessão concluída: não é fase de votação → o tablist some.
+    const completed = createRoom()
+    completed.phase = 'completed'
+    completed.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+    ]
+    roomStore.syncRoom(completed)
+    await nextTick()
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+
+    // Nova sessão (reset) reentra em votação → a aba deve voltar pra "Votação",
+    // não ficar presa no resumo da sessão anterior.
+    const fresh = createRoom()
+    fresh.phase = 'voting'
+    fresh.subjects = ['Login']
+    fresh.rounds = [{ id: 'r-2', subject: 'Login', status: 'voting', votes: {} }]
+    fresh.currentRoundIndex = 0
+    roomStore.syncRoom(fresh)
+    await nextTick()
+
+    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('moves focus to the newly selected tab on Arrow navigation (roving tabindex)', async () => {
+    const wrapper = mountVotingRoom({ attachTo: document.body })
+    const tablist = wrapper.get('[role="tablist"]')
+
+    await tablist.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises() // o .focus() roda num nextTick após trocar a aba
+
+    const [votingTab, summaryTab] = wrapper.findAll('[role="tab"]')
+    // Roving tabindex: o alvo vira focável (0) e o outro sai da ordem de tab (-1)...
+    expect(summaryTab.attributes('tabindex')).toBe('0')
+    expect(votingTab.attributes('tabindex')).toBe('-1')
+    // ...e o foco de fato se moveu pra ele.
+    expect(document.activeElement).toBe(summaryTab.element)
+
+    wrapper.unmount() // limpa o DOM anexado ao document.body
   })
 })
