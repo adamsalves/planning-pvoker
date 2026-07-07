@@ -11,9 +11,11 @@ export const ptBR = {
     home: 'Início',
     room: 'Sala',
     history: 'Histórico',
+    notFound: 'Não encontrado',
   },
   layout: {
     backToRoom: 'Voltar à Sala',
+    viewSummary: 'Ver Resumo',
     home: 'Home',
     history: 'Histórico',
     madeBy: 'feito por',
@@ -28,6 +30,7 @@ export const ptBR = {
   home: {
     subtitle: 'Estimativas ágeis com seu time, em tempo real',
     sessionExpired: 'Sua sessão expirou ou a sala não está mais disponível. Entre novamente.',
+    inRoom: 'Você está numa sala em andamento.',
     tabs: {
       create: 'Criar Sala',
       join: 'Entrar na Sala',
@@ -51,6 +54,11 @@ export const ptBR = {
       nameMax: 'Nome deve ter no máximo 20 caracteres',
       roomCodeRequired: 'Código da sala é obrigatório',
     },
+  },
+  notFound: {
+    title: 'Página não encontrada',
+    message: 'O link pode estar quebrado ou a página não existe mais.',
+    backHome: '🏠 Voltar ao início',
   },
   decks: {
     fibonacci: 'Fibonacci',

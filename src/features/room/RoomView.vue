@@ -146,6 +146,11 @@ function rejoinActiveRoom() {
     // Socket.IO resolve, sem expulsar o usuário da sala.
     if (err instanceof JoinAckError) {
       userStore.setSessionToken(null)
+      // A sala REALMENTE não existe mais (reset/cold-start): descarta o estado
+      // obsoleto além do token. Sem isso, o `currentRoom` preso faria a Home
+      // mostrar o aviso "sessão expirou" JUNTO com o banner/link "Voltar à Sala"
+      // (F5.4) — um retorno quebrado que só reentra no erro.
+      roomStore.leaveRoom()
       router.push({ name: 'home', query: { notice: 'session-expired' } })
     }
   })
@@ -153,7 +158,10 @@ function rejoinActiveRoom() {
 
 onMounted(() => {
   if (!userStore.playerId || !userStore.playerName) {
-    router.push('/') // no identity yet — go home to define a name
+    // F5.3 — sem identidade (link/bookmark de /room/:id aberto direto): manda pra
+    // Home PRESERVANDO o código da sala em ?room=, que o HomeView usa pra abrir na
+    // aba "Entrar" já preenchida. Antes ia pra '/' cru, descartando o id.
+    router.push({ name: 'home', query: { room: roomId.value } })
     return
   }
   rejoinActiveRoom()

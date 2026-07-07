@@ -147,11 +147,11 @@ describe('RoomView.vue rejoin', () => {
     mockSocketJoinRoom.mockResolvedValue(undefined)
   })
 
-  it('drops the session token and goes home on a JoinAckError (real session failure)', async () => {
+  it('drops the session token AND the stale room, then goes home on a JoinAckError', async () => {
     // Server explicitly refuses the rejoin (stale token / room gone).
     mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('invalid_session'))
 
-    mountRoomView({ sessionToken: 'stale-token' })
+    mountRoomView({ sessionToken: 'stale-token' }) // mountRoomView já sincroniza uma sala
     await flushPromises()
 
     const userStore = useUserStore()
@@ -160,6 +160,9 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
+    // currentRoom precisa ser limpo: senão a Home mostraria o banner "Voltar à Sala"
+    // (F5.4) junto do aviso "sessão expirou" — um retorno quebrado.
+    expect(useRoomStore().currentRoom).toBeNull()
   })
 
   it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {
@@ -526,5 +529,21 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     expect(document.activeElement).toBe(summaryTab.element)
 
     wrapper.unmount() // limpa o DOM anexado ao document.body
+  })
+})
+
+describe('RoomView.vue direct hit without identity (F5.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('redirects to Home preserving the room code in ?room= (not a bare /)', () => {
+    setActivePinia(createPinia())
+    // Sem setPlayer → sem playerId/playerName: link/bookmark de /room/:id aberto direto.
+    mount(RoomView, { global: { stubs: childStubs } })
+
+    // Antes ia pra '/' cru (perdia o id); agora manda pra Home com ?room=<id>, que o
+    // HomeView usa pra abrir na aba "Entrar" já preenchida.
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home', query: { room: 'abc123' } })
   })
 })

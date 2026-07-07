@@ -10,9 +10,11 @@ export const en: MessageSchema = {
     home: 'Home',
     room: 'Room',
     history: 'History',
+    notFound: 'Not found',
   },
   layout: {
     backToRoom: 'Back to Room',
+    viewSummary: 'View Summary',
     home: 'Home',
     history: 'History',
     madeBy: 'made by',
@@ -27,6 +29,7 @@ export const en: MessageSchema = {
   home: {
     subtitle: 'Agile estimates with your team, in real time',
     sessionExpired: 'Your session expired or the room is no longer available. Join again.',
+    inRoom: 'You have a session in progress.',
     tabs: {
       create: 'Create Room',
       join: 'Join Room',
@@ -50,6 +53,11 @@ export const en: MessageSchema = {
       nameMax: 'Name must be at most 20 characters',
       roomCodeRequired: 'Room code is required',
     },
+  },
+  notFound: {
+    title: 'Page not found',
+    message: 'The link may be broken or the page no longer exists.',
+    backHome: '🏠 Back to home',
   },
   decks: {
     fibonacci: 'Fibonacci',
