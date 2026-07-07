@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
 import { activePlayersOf } from '@/utils/players'
+import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseModal from '@/components/BaseModal.vue'
@@ -99,11 +100,9 @@ const roomTab = ref<'voting' | 'summary'>('voting')
 const votingTabRef = ref<HTMLButtonElement | null>(null)
 const summaryTabRef = ref<HTMLButtonElement | null>(null)
 
-// Contagem exibida na aba: só rodadas reveladas entram no resumo (o servidor
-// transmite os votos antes do reveal; incluir a rodada em andamento vazaria).
-const revealedRoundCount = computed(
-  () => roomStore.currentRoom?.rounds.filter((r) => r.status === 'revealed').length ?? 0,
-)
+// Contagem exibida na aba, derivada da MESMA fonte que o RoomSummary lista
+// (`revealedRoundsOf`) — o rótulo "Resumo (N)" nunca diverge do painel.
+const revealedRoundCount = computed(() => revealedRoundsOf(roomStore.currentRoom).length)
 
 // Ao (re)entrar em votação — ex.: nova sessão após um reset — volta pra aba de
 // votação, pra não ficar preso no resumo da sessão anterior.
@@ -369,6 +368,7 @@ function confirmLeave() {
         id="room-panel-summary"
         role="tabpanel"
         aria-labelledby="room-tab-summary"
+        tabindex="0"
       />
     </template>
 

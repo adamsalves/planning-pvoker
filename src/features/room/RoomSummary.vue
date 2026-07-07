@@ -2,22 +2,17 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoomStore } from '@/stores/room'
+import { revealedRoundsOf } from '@/utils/rounds'
 import BaseCard from '@/components/BaseCard.vue'
 import VoteReveal from './VoteReveal.vue'
 
 const { t } = useI18n()
 const roomStore = useRoomStore()
 
-// Resumo AO VIVO da sala: apenas rodadas já REVELADAS. O servidor transmite
-// `round.votes` mesmo antes do reveal (é o cliente que esconde), então incluir a
-// rodada em votação vazaria a média/valores antes de o admin revelar. Numera pelo
-// índice REAL da rodada (não pela posição no subconjunto filtrado) — robusto caso
-// uma rodada fique sem revelar.
-const revealedRounds = computed(() =>
-  (roomStore.currentRoom?.rounds ?? [])
-    .map((round, index) => ({ round, number: index + 1 }))
-    .filter(({ round }) => round.status === 'revealed'),
-)
+// Resumo AO VIVO da sala: só rodadas já REVELADAS (ver `revealedRoundsOf` — fonte
+// única do predicado + numeração real, compartilhada com o contador da aba no
+// RoomView, pra o rótulo "Resumo (N)" nunca divergir do que é listado aqui).
+const revealedRounds = computed(() => revealedRoundsOf(roomStore.currentRoom))
 </script>
 
 <template>
