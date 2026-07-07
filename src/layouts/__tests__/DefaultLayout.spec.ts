@@ -102,8 +102,11 @@ describe('DefaultLayout.vue', () => {
     expect(document.documentElement.lang).toBe('pt-BR')
   })
 
-  // F5.1/F5.2 — visibilidade e rótulo do "Voltar à Sala".
-  it('does not show "Voltar à Sala" when there is no active room', () => {
+  // F5.1/F5.2/F5.4 — visibilidade e rótulo do "Voltar à Sala" do header. Aparece em
+  // rotas fora da sala (ex.: Histórico), mas NÃO na Home (lá o banner F5.4 já cobre o
+  // retorno — evita CTA duplicado) nem na própria sala.
+  it('does not show "Voltar à Sala" when there is no active room', async () => {
+    await router.push({ name: 'history' })
     const w = mountLayout()
     expect(backToRoomLink(w)).toBeUndefined()
   })
@@ -115,17 +118,25 @@ describe('DefaultLayout.vue', () => {
     expect(backToRoomLink(w)).toBeUndefined()
   })
 
-  it('shows "Voltar à Sala" from Home while a session is in progress (F5.1/F5.2)', () => {
+  it('hides "Voltar à Sala" on Home even with an active session (redundante com o banner F5.4)', () => {
     useRoomStore().syncRoom(makeRoom('voting'))
     const w = mountLayout() // beforeEach já posicionou em '/'
+    expect(backToRoomLink(w)).toBeUndefined()
+  })
+
+  it('shows "Voltar à Sala" from another route (Histórico) while a session is in progress (F5.1/F5.2)', async () => {
+    useRoomStore().syncRoom(makeRoom('voting'))
+    await router.push({ name: 'history' })
+    const w = mountLayout()
     const link = backToRoomLink(w)
     expect(link).toBeDefined()
     expect(link?.text()).toContain('Voltar à Sala')
     expect(link?.attributes('href')).toBe('/room/abc123')
   })
 
-  it('labels the link "Ver Resumo" from Home when the session is completed (F5.2)', () => {
+  it('labels the link "Ver Resumo" from another route when the session is completed (F5.2)', async () => {
     useRoomStore().syncRoom(makeRoom('completed'))
+    await router.push({ name: 'history' })
     const w = mountLayout()
     const link = backToRoomLink(w)
     expect(link).toBeDefined()

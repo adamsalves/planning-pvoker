@@ -17,11 +17,15 @@ const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
 // já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
 const route = useRoute()
 
-// F5.1/F5.2 — "Voltar à Sala" só aparece quando há sala ativa E você NÃO está na
-// rota dela (na própria sala o botão seria redundante). Sem o antigo `!isCompleted`:
-// mesmo concluída, o resumo continua em /room/:id, então o botão segue sendo a
-// volta — e vira "Ver Resumo" pra não prometer uma sessão ainda em andamento.
-const showBackToRoom = computed(() => isInRoom.value && route.name !== 'room')
+// F5.1/F5.2 — "Voltar à Sala" aparece quando há sala ativa e você NÃO está na rota
+// dela (na própria sala seria redundante) NEM na Home (lá o banner F5.4 já oferece o
+// retorno — dois CTAs idênticos na mesma tela). Sobra pra Histórico/404, onde o
+// header é o único caminho de volta em 1 clique. Sem o antigo `!isCompleted`: mesmo
+// concluída, o resumo continua em /room/:id, então o botão segue sendo a volta — e
+// vira "Ver Resumo" pra não prometer uma sessão ainda em andamento.
+const showBackToRoom = computed(
+  () => isInRoom.value && route.name !== 'room' && route.name !== 'home',
+)
 const backToRoom = computed(() =>
   isCompleted.value
     ? { icon: '📊', label: t('layout.viewSummary') }
