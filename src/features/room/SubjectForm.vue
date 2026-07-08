@@ -26,6 +26,14 @@ const errorKey = ref('')
 
 const canStart = computed(() => props.subjects.length >= 1 && props.playerCount >= 2)
 
+// Sempre explica por que "Iniciar" está desabilitado: a falta de subjects é o
+// pré-requisito (mostra primeiro), depois a falta de jogadores. Vazio = pode iniciar.
+const startHintKey = computed(() => {
+  if (props.subjects.length < 1) return 'room.setup.needSubjects'
+  if (props.playerCount < 2) return 'room.setup.waitingPlayers'
+  return ''
+})
+
 function handleAdd() {
   if (subject.value.trim().length < 2) {
     errorKey.value = 'room.setup.subjectMin'
@@ -78,8 +86,8 @@ function handleAdd() {
       <BaseButton variant="primary" size="lg" block :disabled="!canStart" @click="emit('start')">
         {{ t('room.setup.startButton') }}
       </BaseButton>
-      <p v-if="subjects.length > 0 && playerCount < 2" class="start-hint">
-        {{ t('room.setup.waitingPlayers') }}
+      <p v-if="startHintKey" class="start-hint">
+        {{ t(startHintKey) }}
       </p>
     </div>
   </div>

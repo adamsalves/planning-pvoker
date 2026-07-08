@@ -117,6 +117,7 @@ export const ptBR = {
       removeSubject: 'Remover {subject}',
       emptyBacklog: 'Adicione os subjects que serão votados nesta sessão',
       startButton: '▶️ Iniciar Sessão de Votação',
+      needSubjects: '📝 Adicione ao menos um subject para iniciar',
       waitingPlayers: '⏳ Aguardando mais jogadores entrarem na sala...',
     },
     voting: {
@@ -156,6 +157,7 @@ export const ptBR = {
     controls: {
       reveal: '👁️ Revelar Votos',
       allVotedHint: '(todos votaram!)',
+      noVotesHint: '⏳ Aguardando votos para revelar',
       next: '➡️ Próximo Subject',
       finish: '✅ Finalizar Sessão',
     },

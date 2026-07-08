@@ -383,7 +383,7 @@ function confirmLeave() {
     <!-- ======================== -->
     <!-- PHASE: COMPLETED         -->
     <!-- ======================== -->
-    <div v-if="roomStore.isCompleted" class="room-content room-content--full">
+    <div v-if="roomStore.isCompleted" class="completed-content">
       <SessionSummary
         :rounds="roomStore.currentRoom?.rounds ?? []"
         @new-session="handleNewSession"
@@ -531,16 +531,15 @@ function confirmLeave() {
   color: var(--c-text-mute);
 }
 
-/* Two Column Layout */
-.room-content {
+/* Fase concluída: coluna única centralizada. Usa classe PRÓPRIA (não `.room-content`)
+   de propósito — o scope do RoomView também marca o root do RoomSetup/RoomVoting
+   (que usam `.room-content`), e um `.room-content` sem media query aqui vazava e
+   sobrescrevia o layout mobile de 1 coluna das fases de setup/votação. */
+.completed-content {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr;
   gap: var(--space-5);
   align-items: start;
-}
-
-.room-content--full {
-  grid-template-columns: 1fr;
   max-width: 700px;
   margin: 0 auto;
   width: 100%;

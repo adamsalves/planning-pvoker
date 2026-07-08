@@ -116,6 +116,7 @@ export const en: MessageSchema = {
       removeSubject: 'Remove {subject}',
       emptyBacklog: 'Add the subjects to be voted on in this session',
       startButton: '▶️ Start Voting Session',
+      needSubjects: '📝 Add at least one subject to start',
       waitingPlayers: '⏳ Waiting for more players to join the room...',
     },
     voting: {
@@ -155,6 +156,7 @@ export const en: MessageSchema = {
     controls: {
       reveal: '👁️ Reveal Votes',
       allVotedHint: '(everyone voted!)',
+      noVotesHint: '⏳ Waiting for votes before revealing',
       next: '➡️ Next Subject',
       finish: '✅ Finish Session',
     },

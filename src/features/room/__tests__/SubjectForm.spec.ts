@@ -119,6 +119,23 @@ describe('SubjectForm.vue', () => {
     expect(startBtn?.props('disabled')).toBe(true)
   })
 
+  it('explica por que "Iniciar" está desabilitado: falta subject (pré-requisito)', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: [], playerCount: 3 } })
+    expect(wrapper.find('.start-hint').text()).toContain(
+      'Adicione ao menos um subject para iniciar',
+    )
+  })
+
+  it('explica por que "Iniciar" está desabilitado: faltam jogadores', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 1 } })
+    expect(wrapper.find('.start-hint').text()).toContain('Aguardando mais jogadores')
+  })
+
+  it('esconde o hint quando a sessão já pode iniciar', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 2 } })
+    expect(wrapper.find('.start-hint').exists()).toBe(false)
+  })
+
   it('emits "start" when start button is clicked', async () => {
     const wrapper = mount(SubjectForm, {
       props: { subjects: ['Login'], playerCount: 2 },

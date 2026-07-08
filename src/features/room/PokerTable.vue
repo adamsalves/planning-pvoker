@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Player } from '@/types'
 import { activePlayersOf } from '@/utils/players'
@@ -22,27 +22,18 @@ function hasVoted(playerId: string) {
   return playerId in props.votes
 }
 
-// Calcula a posição de cada jogador na mesa oval
-function getPlayerStyle(index: number) {
-  const total = activePlayers.value.length
-
-  if (total === 1) {
-    // Se for só 1 jogador, coloca centralizado na parte inferior
-    return { transform: `translate(-50%, calc(-50% + 150px))` }
-  }
-
-  // Começa em 90 graus (Math.PI / 2) para o primeiro jogador ficar na base
+// Posição de cada jogador na mesa oval. O JS entrega só os fatores
+// trigonométricos (--cos/--sin, independentes do tamanho da tela); os raios
+// (--rx/--ry) vivem no CSS via container queries e encolhem em telas estreitas,
+// então a mesa deixa de clipar/transbordar no mobile (F4.1).
+function getPlayerStyle(index: number): CSSProperties {
+  const total = activePlayers.value.length || 1
+  // 90° (Math.PI / 2) coloca o primeiro jogador na base; com um só jogador
+  // o ângulo é exatamente 90° → cos=0, sin=1 → centro-inferior, sem caso especial.
   const angle = Math.PI / 2 + (index / total) * Math.PI * 2
-
-  // Raios da elipse (espaçamento ao redor da mesa)
-  const rx = 220 // Horizontal
-  const ry = 150 // Vertical
-
-  const x = Math.cos(angle) * rx
-  const y = Math.sin(angle) * ry
-
   return {
-    transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
+    '--cos': Math.cos(angle).toFixed(4),
+    '--sin': Math.sin(angle).toFixed(4),
   }
 }
 </script>
@@ -111,7 +102,10 @@ function getPlayerStyle(index: number) {
   justify-content: center;
   min-height: 480px; /* Área grande o suficiente para o oval não transbordar */
   width: 100%;
-  overflow: hidden; /* Evitar scrollbar se a janela for muito estreita */
+  overflow: hidden; /* Rede de segurança contra scrollbar em telas muito estreitas */
+  /* Contexto de container query: os raios --rx/--ry e a mesa medem ESTA largura
+     (cqw), não a viewport — correto mesmo no layout de 2 colunas do desktop. */
+  container-type: inline-size;
 }
 
 .table-center {
@@ -123,8 +117,9 @@ function getPlayerStyle(index: number) {
 }
 
 .table-surface {
-  width: 260px;
-  height: 120px;
+  /* Encolhe com o container (cqw) p/ abrir espaço aos jogadores no mobile. */
+  width: clamp(150px, 50cqw, 260px);
+  height: clamp(76px, 22cqw, 120px);
   background: var(--c-bg-mute);
   border: 4px solid var(--c-border);
   border-radius: 60px; /* Oval look */
@@ -161,6 +156,16 @@ function getPlayerStyle(index: number) {
   position: absolute;
   left: 50%;
   top: 50%;
+  /* Raios da elipse responsivos ao container (cqw): no desktop batem os valores
+     originais (220×150); em telas estreitas encolhem até um piso, evitando que
+     as cartas clipem na borda (overflow:hidden) ou saiam da tela. Os fatores
+     --cos/--sin vêm do JS (getPlayerStyle). */
+  --rx: clamp(90px, 32cqw, 220px);
+  --ry: clamp(86px, 26cqw, 150px);
+  transform: translate(
+    calc(-50% + var(--cos, 0) * var(--rx)),
+    calc(-50% + var(--sin, 0) * var(--ry))
+  );
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -258,5 +263,12 @@ function getPlayerStyle(index: number) {
 .table-player-leave-to {
   opacity: 0;
   transform: scale(0.9);
+}
+
+/* Mobile: o oval encolhe (cqw acima), então a área não precisa ser tão alta. */
+@media (max-width: 640px) {
+  .poker-table {
+    min-height: 400px;
+  }
 }
 </style>

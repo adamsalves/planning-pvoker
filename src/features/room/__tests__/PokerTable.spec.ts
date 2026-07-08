@@ -28,6 +28,17 @@ describe('PokerTable.vue', () => {
     expect(wrapper.text()).not.toContain('Snake')
   })
 
+  it('posiciona cada jogador via --cos/--sin (raios responsivos moram no CSS)', () => {
+    const wrapper = mount(PokerTable, {
+      props: { players: mockPlayers, votes: {}, status: 'waiting' },
+    })
+
+    // 2 ativos (observer filtrado). O 1º jogador fica na base do oval: cos≈0, sin≈1.
+    const firstStyle = wrapper.findAll('.player-spot')[0]!.attributes('style') ?? ''
+    expect(firstStyle).toContain('--cos: 0')
+    expect(firstStyle).toContain('--sin: 1')
+  })
+
   it('renders face-down cards for players who voted during voting phase', () => {
     const wrapper = mount(PokerTable, {
       props: {
