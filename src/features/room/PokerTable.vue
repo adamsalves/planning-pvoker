@@ -117,9 +117,10 @@ function getPlayerStyle(index: number): CSSProperties {
 }
 
 .table-surface {
-  /* Encolhe com o container (cqw) p/ abrir espaço aos jogadores no mobile. */
-  width: clamp(150px, 50cqw, 260px);
-  height: clamp(76px, 22cqw, 120px);
+  /* Encolhe bastante com o container (cqw) p/ os jogadores caberem AO REDOR (e não
+     sobre) a mesa no mobile. Desktop segue no teto (260×120). */
+  width: clamp(108px, 36cqw, 260px);
+  height: clamp(48px, 16.5cqw, 120px);
   background: var(--c-bg-mute);
   border: 4px solid var(--c-border);
   border-radius: 60px; /* Oval look */
@@ -157,11 +158,13 @@ function getPlayerStyle(index: number): CSSProperties {
   left: 50%;
   top: 50%;
   /* Raios da elipse responsivos ao container (cqw): no desktop batem os valores
-     originais (220×150); em telas estreitas encolhem até um piso, evitando que
-     as cartas clipem na borda (overflow:hidden) ou saiam da tela. Os fatores
-     --cos/--sin vêm do JS (getPlayerStyle). */
-  --rx: clamp(90px, 32cqw, 220px);
-  --ry: clamp(86px, 26cqw, 150px);
+     originais (220×150); em telas estreitas encolhem até um piso ALTO o bastante
+     para o jogador limpar a mesa central (que também encolhe) — os nomes/cartas
+     ficam AO REDOR, não sobre a mesa. O --ry cresce junto da altura da mesa
+     (calc c/ cqw) p/ manter a folga vertical (~20px) em qualquer largura.
+     Os fatores --cos/--sin vêm do JS (getPlayerStyle). */
+  --rx: clamp(112px, 38cqw, 220px);
+  --ry: clamp(112px, calc(90px + 8.5cqw), 150px);
   transform: translate(
     calc(-50% + var(--cos, 0) * var(--rx)),
     calc(-50% + var(--sin, 0) * var(--ry))
@@ -223,7 +226,8 @@ function getPlayerStyle(index: number): CSSProperties {
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--c-text);
-  max-width: 60px;
+  /* Nome mais estreito no mobile → a "etiqueta" lateral não invade a mesa. */
+  max-width: clamp(44px, 9cqw, 60px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
