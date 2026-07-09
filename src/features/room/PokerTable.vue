@@ -131,11 +131,18 @@ function getPlayerStyle(index: number): CSSProperties {
 }
 
 .table-message {
-  font-size: var(--text-sm);
+  /* Escala com o container (cqw) igual à mesa: no desktop fica em --text-sm (14px);
+     em telas estreitas encolhe até um piso legível (~11px) e, com o padding/centro
+     abaixo, quebra DENTRO do oval em vez de vazar para fora dele (F4.1). */
+  font-size: clamp(0.6875rem, 0.375rem + 1.1cqw, var(--text-sm));
   font-weight: 600;
   color: var(--c-text-mute);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  /* Menos espaçamento no mobile libera largura p/ o texto caber no oval menor. */
+  letter-spacing: clamp(0.25px, 0.14cqw, 1px);
+  text-align: center;
+  line-height: 1.2;
+  padding: 0 var(--space-2);
 }
 
 .pulsing {
