@@ -115,4 +115,15 @@ describe('RoomVoting.vue', () => {
     expect(wrapper.text()).toContain('Aguardando o Scrum Master iniciar a votação')
     expect(wrapper.findComponent(VotingArea).exists()).toBe(false)
   })
+
+  it('admin sem rodada ativa: não renderiza RoundControls (a guarda protege o anyVoted)', () => {
+    const room = votingRoom('voting')
+    room.rounds = []
+    room.currentRoundIndex = -1
+    const wrapper = mountVoting({ isAdmin: true }, room)
+
+    // currentRound é undefined → `v-if="isAdmin && currentRound"` barra o RoundControls,
+    // então o fallback `?? {}` do anyVoted nunca é acionado em runtime (rede de segurança).
+    expect(wrapper.findComponent(RoundControls).exists()).toBe(false)
+  })
 })

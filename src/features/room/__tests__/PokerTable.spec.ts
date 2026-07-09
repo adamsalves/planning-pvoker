@@ -28,15 +28,22 @@ describe('PokerTable.vue', () => {
     expect(wrapper.text()).not.toContain('Snake')
   })
 
-  it('posiciona cada jogador via --cos/--sin (raios responsivos moram no CSS)', () => {
+  it('posiciona cada jogador via --cos/--sin exatos (raios responsivos moram no CSS)', () => {
     const wrapper = mount(PokerTable, {
       props: { players: mockPlayers, votes: {}, status: 'waiting' },
     })
 
-    // 2 ativos (observer filtrado). O 1º jogador fica na base do oval: cos≈0, sin≈1.
-    const firstStyle = wrapper.findAll('.player-spot')[0]!.attributes('style') ?? ''
-    expect(firstStyle).toContain('--cos: 0')
-    expect(firstStyle).toContain('--sin: 1')
+    // 2 ativos (observer filtrado). O CSS faz `var(--cos) * var(--rx)`, então o FORMATO
+    // importa — checamos as strings EXATAS (toFixed(4)), não um prefixo frouxo.
+    const spots = wrapper.findAll('.player-spot')
+    // 1º jogador na base do oval: angle=π/2 → cos=0, sin=1.
+    const firstStyle = spots[0]!.attributes('style') ?? ''
+    expect(firstStyle).toContain('--cos: 0.0000')
+    expect(firstStyle).toContain('--sin: 1.0000')
+    // 2º jogador no topo: angle=3π/2 → cos=-0 (zero negativo, CSS-válido) e sin=-1.
+    const secondStyle = spots[1]!.attributes('style') ?? ''
+    expect(secondStyle).toContain('--cos: -0.0000')
+    expect(secondStyle).toContain('--sin: -1.0000')
   })
 
   it('renders face-down cards for players who voted during voting phase', () => {
