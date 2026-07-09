@@ -4,6 +4,7 @@ import BaseButton from '@/components/BaseButton.vue'
 
 interface Props {
   status: 'waiting' | 'voting' | 'revealed'
+  anyVoted: boolean
   allVoted: boolean
   isLastSubject: boolean
 }
@@ -21,17 +22,15 @@ const { t } = useI18n()
 
 <template>
   <div class="round-controls">
-    <!-- Durante votação: botão de revelar -->
-    <BaseButton
-      v-if="status === 'voting'"
-      variant="primary"
-      size="lg"
-      block
-      @click="emit('reveal')"
-    >
-      {{ t('room.controls.reveal') }}
-      <span v-if="allVoted" class="hint">{{ t('room.controls.allVotedHint') }}</span>
-    </BaseButton>
+    <!-- Durante votação: botão de revelar (desabilitado sem nenhum voto — revelar
+         zero votos não mostra nada; o hint explica o porquê). -->
+    <template v-if="status === 'voting'">
+      <BaseButton variant="primary" size="lg" block :disabled="!anyVoted" @click="emit('reveal')">
+        {{ t('room.controls.reveal') }}
+        <span v-if="allVoted" class="hint">{{ t('room.controls.allVotedHint') }}</span>
+      </BaseButton>
+      <p v-if="!anyVoted" class="controls-hint">{{ t('room.controls.noVotesHint') }}</p>
+    </template>
 
     <!-- Após revelar: botão de próximo ou finalizar -->
     <BaseButton
@@ -68,5 +67,12 @@ const { t } = useI18n()
   font-weight: 400;
   opacity: 0.8;
   margin-left: var(--space-1);
+}
+
+.controls-hint {
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--c-text-mute);
+  margin: 0;
 }
 </style>

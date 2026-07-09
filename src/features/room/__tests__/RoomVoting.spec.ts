@@ -96,6 +96,16 @@ describe('RoomVoting.vue', () => {
     expect(wrapper.emitted('finish')).toHaveLength(1)
   })
 
+  it('passa anyVoted=true ao RoundControls quando já há um voto lançado', () => {
+    const wrapper = mountVoting({ isAdmin: true }, votingRoom('voting', { p1: 5 }))
+    expect(wrapper.findComponent(RoundControls).props('anyVoted')).toBe(true)
+  })
+
+  it('passa anyVoted=false ao RoundControls quando ninguém votou ainda', () => {
+    const wrapper = mountVoting({ isAdmin: true }, votingRoom('voting'))
+    expect(wrapper.findComponent(RoundControls).props('anyVoted')).toBe(false)
+  })
+
   it('sem rodada ativa e não-admin mostra a mensagem de espera do início', () => {
     const room = votingRoom('voting')
     room.rounds = []

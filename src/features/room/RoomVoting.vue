@@ -31,6 +31,10 @@ const { t } = useI18n()
 const roomStore = useRoomStore()
 const currentRound = computed(() => roomStore.currentRound)
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
+
+// Ao menos um voto lançado — habilita o "Revelar Votos" (revelar zero votos não
+// mostra nada). Deriva direto da rodada; observers não entram em `votes`.
+const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).length > 0)
 </script>
 
 <template>
@@ -80,6 +84,7 @@ const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
       <RoundControls
         v-if="isAdmin && currentRound"
         :status="currentRound.status"
+        :any-voted="anyVoted"
         :all-voted="allActiveVoted"
         :is-last-subject="roomStore.isLastSubject"
         @reveal="$emit('reveal')"
