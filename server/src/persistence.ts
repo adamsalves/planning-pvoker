@@ -65,8 +65,10 @@ const roomSchema = z.object({
   currentRoundIndex: z.number(),
 })
 
-// A room's token hash: { playerId -> token }, both strings.
-const tokenHashSchema = z.record(z.string(), z.string())
+// A room's token hash read back from Redis: { playerId -> token }. Values are
+// validated PER FIELD in loadAll (a single corrupt field must not drop the whole
+// room's tokens), so the value type is intentionally left open here.
+const tokenHashSchema = z.record(z.string(), z.unknown())
 
 // What the boot sequence needs to rebuild the in-memory Maps: every room plus
 // every session token, keyed EXACTLY like RoomManager keys them (`roomId::playerId`).
@@ -150,10 +152,13 @@ export class RedisPersistence implements RoomPersistence {
       }
       rooms.push(parsedRoom.data)
 
+      // Field-by-field: keep the valid string tokens, skip any corrupt field — one
+      // bad entry must NOT drop the whole room's tokens (that would reopen the
+      // anti-escalation guard for every player in the room).
       const parsedTokens = tokenHashSchema.safeParse(await this.redis.hgetall(tokensKey(id)))
       if (parsedTokens.success) {
         for (const [playerId, token] of Object.entries(parsedTokens.data)) {
-          tokens.set(`${id}::${playerId}`, token)
+          if (typeof token === 'string') tokens.set(`${id}::${playerId}`, token)
         }
       }
     }

@@ -261,6 +261,7 @@ class RecordingPersistence implements RoomPersistence {
   deletedTokens: Array<{ roomId: string; playerId: string }> = []
   seed: PersistenceSnapshot = { rooms: [], tokens: new Map() }
   rejectSaveRoom = false
+  rejectSaveToken = false
 
   loadAll(): Promise<PersistenceSnapshot> {
     return Promise.resolve(this.seed)
@@ -275,6 +276,7 @@ class RecordingPersistence implements RoomPersistence {
     return Promise.resolve()
   }
   saveToken(roomId: string, playerId: string, token: string): Promise<void> {
+    if (this.rejectSaveToken) return Promise.reject(new Error('redis down'))
     this.savedTokens.push({ roomId, playerId, token })
     return Promise.resolve()
   }
@@ -376,6 +378,26 @@ describe('write-through persistence', () => {
     expect(room.id).toBe('r1') // mutation still returns synchronously
     expect(manager.getRoom('r1')).toBe(room) // still served from memory
     await tick() // rejection is caught + logged, no unhandled rejection
+  })
+
+  it('swallows a rejected token save (in-memory token intact)', async () => {
+    persistence.rejectSaveToken = true
+    const token = manager.getOrCreateToken('r1', 'a1')
+    expect(token).toBeTruthy()
+    expect(manager.hasToken('r1', 'a1')).toBe(true) // still served from memory
+    await tick() // rejection is caught + logged, no unhandled rejection
+  })
+
+  it('keeps persisting after a save rejection (in-flight state is cleared)', async () => {
+    persistence.rejectSaveRoom = true
+    manager.createRoom('r1', admin, config) // this save rejects
+    await tick()
+    // A later mutation must STILL schedule a save — proving the failed save
+    // cleared savingRooms in its finally block (otherwise it'd stay "in flight").
+    persistence.rejectSaveRoom = false
+    manager.addSubjects('r1', ['A'])
+    await tick()
+    expect(persistence.lastRoom?.subjects).toEqual(['A'])
   })
 })
 

@@ -8,7 +8,7 @@ import type { Room } from '../src/types'
 // returns stored values (or null) directly.
 class FakeRedis implements RedisClient {
   strings = new Map<string, unknown>()
-  hashes = new Map<string, Map<string, string>>()
+  hashes = new Map<string, Map<string, unknown>>()
   sets = new Map<string, Set<string>>()
   expires: Array<{ key: string; seconds: number }> = []
   log: string[] = []
@@ -166,6 +166,17 @@ describe('RedisPersistence', () => {
     const snap = await persistence.loadAll()
     expect(snap.rooms.map((r) => r.id)).toEqual(['ALIVE'])
     expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('GHOST')
+  })
+
+  it('loadAll keeps valid tokens and skips a corrupt field (not all-or-nothing)', async () => {
+    await persistence.saveRoom(sampleRoom('ROOM1'))
+    await persistence.saveToken('ROOM1', 'p1', 'tok-1')
+    // Inject a corrupt (non-string) token field alongside the valid one.
+    redis.hashes.get('tokens:ROOM1')?.set('p2', 42)
+
+    const snap = await persistence.loadAll()
+    expect(snap.tokens.get('ROOM1::p1')).toBe('tok-1') // valid one survives
+    expect(snap.tokens.has('ROOM1::p2')).toBe(false) // corrupt one skipped
   })
 
   it('loadAll drops a malformed snapshot instead of throwing', async () => {

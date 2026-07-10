@@ -42,6 +42,15 @@ export class RoomManager {
   // the server accepts connections, so a client reconnecting right after a
   // redeploy finds its room (and its token) already present instead of getting
   // "room not found". A no-op under NullPersistence.
+  //
+  // Known trade-off: presence/grace timers (events.ts) are ephemeral and lost on
+  // restart, so a rehydrated room comes back with every player it had — including
+  // ones who won't reconnect. Such a "ghost" lingers until the room's TTL expires
+  // (no disconnect fires for a socket that never existed in this process), and
+  // while present it still counts toward the autoReveal quorum. Accepted for now:
+  // a grace-based reaper can't simply run here because the free-tier cold start
+  // (~60s) exceeds the reconnect grace (~30s) and would evict the room before the
+  // team finishes reconnecting. A presence-aware autoReveal fix is a follow-up.
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
     for (const room of rooms) this.rooms.set(room.id, room)

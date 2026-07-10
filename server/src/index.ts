@@ -109,4 +109,7 @@ async function start() {
   process.on('SIGINT', () => shutdown('SIGINT'))
 }
 
-void start()
+start().catch((err) => {
+  logger.error(`Fatal startup error: ${String(err)}`)
+  process.exit(1)
+})
