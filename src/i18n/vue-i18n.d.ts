@@ -15,7 +15,7 @@ import type { MessageSchema } from './locales/pt-BR'
 
 declare module 'vue-i18n' {
   // Declaration-merge vue-i18n's schema hook (per its TypeScript guide). The empty
-  // body is intentional: the interface exists only to carry the extended schema.
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- interface merging: this only extends the master schema, no members of its own
+  // body is intentional: the interface only carries the extended master schema.
+  // (The single-extends empty interface is allowed globally in eslint.config.ts.)
   export interface DefineLocaleMessage extends MessageSchema {}
 }
