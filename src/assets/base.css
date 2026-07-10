@@ -140,3 +140,19 @@ a:hover {
 button {
   font-family: inherit;
 }
+
+/* Acessibilidade: conteúdo presente para leitores de tela, oculto visualmente.
+   Único ponto de definição — antes dividido entre .sr-only (HomeView) e
+   .visually-hidden (ConnectionOverlay); os demais consumidores (PlayerList,
+   PokerTable, DefaultLayout) passam a usar esta regra global. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

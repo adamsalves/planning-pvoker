@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RoomView from '../RoomView.vue'
+import VotingArea from '../VotingArea.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import BaseButton from '@/components/BaseButton.vue'
 import { useRoomStore } from '@/stores/room'
 import { useUserStore } from '@/stores/user'
 import { useConnectionStore } from '@/stores/connection'
@@ -12,6 +16,11 @@ const mockRouterPush = vi.fn()
 const mockRevealVotes = vi.fn()
 // The rejoin effect awaits this Promise; resolve by default so mounting is a no-op.
 const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
+// castVote agora retorna Promise; resolve por padrão (sucesso) para o handleVote
+// não cair no .catch nos testes que não exercitam a rejeição.
+const mockCastVote = vi.fn().mockResolvedValue(undefined)
+const mockDisconnect = vi.fn()
+const mockLeaveRoom = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -29,10 +38,11 @@ vi.mock('@/composables/useSocket', () => ({
     startSession: vi.fn(),
     nextRound: vi.fn(),
     resetSession: vi.fn(),
-    castVote: vi.fn(),
+    castVote: mockCastVote,
     revealVotes: mockRevealVotes,
-    disconnect: vi.fn(),
+    disconnect: mockDisconnect,
     joinRoom: mockSocketJoinRoom,
+    leaveRoom: mockLeaveRoom,
   }),
 }))
 
@@ -137,11 +147,11 @@ describe('RoomView.vue rejoin', () => {
     mockSocketJoinRoom.mockResolvedValue(undefined)
   })
 
-  it('drops the session token and goes home on a JoinAckError (real session failure)', async () => {
+  it('drops the session token AND the stale room, then goes home on a JoinAckError', async () => {
     // Server explicitly refuses the rejoin (stale token / room gone).
-    mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('Sessão inválida'))
+    mockSocketJoinRoom.mockRejectedValueOnce(new JoinAckError('invalid_session'))
 
-    mountRoomView({ sessionToken: 'stale-token' })
+    mountRoomView({ sessionToken: 'stale-token' }) // mountRoomView já sincroniza uma sala
     await flushPromises()
 
     const userStore = useUserStore()
@@ -150,6 +160,9 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
+    // currentRoom precisa ser limpo: senão a Home mostraria o banner "Voltar à Sala"
+    // (F5.4) junto do aviso "sessão expirou" — um retorno quebrado.
+    expect(useRoomStore().currentRoom).toBeNull()
   })
 
   it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {
@@ -216,5 +229,321 @@ describe('RoomView.vue auto-reveal (server is the single source)', () => {
     await flushPromises()
 
     expect(mockRevealVotes).not.toHaveBeenCalled()
+  })
+})
+
+describe('RoomView.vue optimistic vote', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+    mockCastVote.mockResolvedValue(undefined)
+  })
+
+  function votingRoom(votes: Record<string, string | number>): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [
+        { id: 'player-1', name: 'Ana', role: 'admin' },
+        { id: 'player-2', name: 'Bob', role: 'member' },
+      ],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  it('highlights the clicked card immediately, before the server confirms', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    useRoomStore().syncRoom(votingRoom({})) // ninguém votou ainda
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    expect(votingArea.exists()).toBe(true)
+    expect(votingArea.props('selectedValue')).toBeNull()
+
+    // Clique numa carta → VotingArea emite 'vote'. Nenhum room_state_updated ainda.
+    votingArea.vm.$emit('vote', 8)
+    await flushPromises()
+
+    // Otimista: a seleção reflete o clique sem esperar o round-trip do servidor.
+    expect(votingArea.props('selectedValue')).toBe(8)
+  })
+
+  it('lets the server-confirmed vote take over the optimistic one', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    const roomStore = useRoomStore()
+    roomStore.syncRoom(votingRoom({}))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    votingArea.vm.$emit('vote', 8)
+    await flushPromises()
+
+    // O servidor confirma o voto — a seleção continua, agora vinda do servidor.
+    roomStore.syncRoom(votingRoom({ 'player-2': 8 }))
+    await flushPromises()
+    expect(votingArea.props('selectedValue')).toBe(8)
+  })
+
+  it('clears the optimistic vote when the server rejects the cast', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    useRoomStore().syncRoom(votingRoom({}))
+    mockCastVote.mockRejectedValueOnce(new Error('invalid_vote_for_deck'))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    const votingArea = wrapper.findComponent(VotingArea)
+    votingArea.vm.$emit('vote', 999)
+    await flushPromises()
+
+    // Servidor recusou → o otimista é desfeito (a carta volta a apagar).
+    expect(votingArea.props('selectedValue')).toBeNull()
+  })
+})
+
+describe('RoomView.vue heading structure', () => {
+  it('renders the room title as the page h1 (F2.7 — navbar logo is not a heading)', () => {
+    const wrapper = mountRoomView()
+
+    expect(wrapper.find('h1.room-title').exists()).toBe(true)
+  })
+})
+
+describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  // Cabeçalho: botão não teleportado (fica no DOM do wrapper).
+  function getHeaderLeaveButton(wrapper: ReturnType<typeof mountRoomView>) {
+    const button = wrapper.findAll('button').find((item) => item.text().includes('Sair da Sala'))
+    if (!button) throw new Error('Header leave button not found')
+    return button
+  }
+
+  // Botões do modal: teleportados p/ o body → achados via árvore de componentes.
+  function getModalButton(wrapper: ReturnType<typeof mountRoomView>, label: string) {
+    const button = wrapper.findAllComponents(BaseButton).find((item) => item.text() === label)
+    if (!button) throw new Error(`Modal button "${label}" not found`)
+    return button
+  }
+
+  it('opens a confirmation modal instead of leaving immediately', async () => {
+    const wrapper = mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+
+    const modal = wrapper.findComponent(BaseModal)
+    expect(modal.props('modelValue')).toBe(false)
+
+    await getHeaderLeaveButton(wrapper).trigger('click')
+
+    expect(modal.props('modelValue')).toBe(true)
+    // Ainda não saiu: sem navegação, sem desconectar, sem avisar o servidor.
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockDisconnect).not.toHaveBeenCalled()
+    expect(mockLeaveRoom).not.toHaveBeenCalled()
+    expect(useUserStore().sessionToken).toBe('live-token')
+
+    wrapper.unmount() // limpa o conteúdo teleportado do modal aberto
+  })
+
+  it('cancels without leaving and keeps the session', async () => {
+    const wrapper = mountRoomView({ sessionToken: 'live-token' })
+    await flushPromises()
+
+    await getHeaderLeaveButton(wrapper).trigger('click')
+    await getModalButton(wrapper, 'Cancelar').trigger('click')
+
+    expect(wrapper.findComponent(BaseModal).props('modelValue')).toBe(false)
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockDisconnect).not.toHaveBeenCalled()
+    expect(mockLeaveRoom).not.toHaveBeenCalled()
+    expect(useUserStore().sessionToken).toBe('live-token')
+  })
+
+  it('leaves and clears session token + active room only after confirming', async () => {
+    const wrapper = mountRoomView({ sessionToken: 'live-token' })
+    const userStore = useUserStore()
+    userStore.setActiveRoom('abc123')
+    await flushPromises()
+
+    await getHeaderLeaveButton(wrapper).trigger('click')
+    await getModalButton(wrapper, 'Sim, sair').trigger('click')
+    await flushPromises()
+
+    expect(mockDisconnect).toHaveBeenCalledTimes(1)
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home' })
+    // leave_room avisa o servidor (remoção imediata, sem o grace de 30s) e tem
+    // de ir ANTES do disconnect — depois dele o pacote não sai.
+    expect(mockLeaveRoom).toHaveBeenCalledWith('abc123')
+    expect(mockLeaveRoom.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDisconnect.mock.invocationCallOrder[0],
+    )
+    // F3.10 — token e vínculo com a sala descartados no leave.
+    expect(userStore.sessionToken).toBeNull()
+    expect(userStore.activeRoomId).toBeNull()
+  })
+})
+
+describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function mountVotingRoom(mountOptions: Record<string, unknown> = {}) {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin')
+    const room = createRoom()
+    room.phase = 'voting'
+    room.subjects = ['Login', 'Checkout']
+    room.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+      { id: 'r-2', subject: 'Checkout', status: 'voting', votes: {} },
+    ]
+    room.currentRoundIndex = 1
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs }, ...mountOptions })
+  }
+
+  it('shows a Voting/Summary tablist during the voting phase, with the revealed-round count', () => {
+    const wrapper = mountVotingRoom()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs).toHaveLength(2)
+    expect(tabs[0].text()).toContain('Votação')
+    expect(tabs[1].text()).toContain('Resumo')
+    // Só a rodada revelada conta — a rodada em votação não entra no resumo.
+    expect(tabs[1].text()).toContain('(1)')
+  })
+
+  it('defaults to the voting panel and switches to the summary on click', async () => {
+    const wrapper = mountVotingRoom()
+    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+
+    expect(tab(0).attributes('aria-selected')).toBe('true')
+    expect(tab(1).attributes('aria-selected')).toBe('false')
+    // v-show esconde o painel inativo (display:none inline no root do componente).
+    expect(wrapper.get('#room-panel-summary').attributes('style')).toContain('display: none')
+
+    await tab(1).trigger('click')
+
+    expect(tab(0).attributes('aria-selected')).toBe('false')
+    expect(tab(1).attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('#room-panel-voting').attributes('style')).toContain('display: none')
+    expect(wrapper.get('#room-panel-summary').attributes('style') ?? '').not.toContain(
+      'display: none',
+    )
+  })
+
+  it('switches tabs with Arrow keys (WAI-ARIA keyboard support)', async () => {
+    const wrapper = mountVotingRoom()
+    const tablist = wrapper.get('[role="tablist"]')
+
+    await tablist.trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+
+    await tablist.trigger('keydown', { key: 'ArrowLeft' })
+    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('does not render the tablist outside the voting phase', () => {
+    const wrapper = mountRoomView() // sala em fase de setup
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+  })
+
+  it('updates the tab counter live when the current round becomes revealed', async () => {
+    const wrapper = mountVotingRoom()
+    const roomStore = useRoomStore()
+    const summaryTab = () => wrapper.findAll('[role="tab"]')[1]
+
+    expect(summaryTab().text()).toContain('(1)')
+
+    // Admin revela a rodada atual (r-2) → ela entra no resumo e o contador sobe.
+    const revealed = createRoom()
+    revealed.phase = 'voting'
+    revealed.subjects = ['Login', 'Checkout']
+    revealed.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+      { id: 'r-2', subject: 'Checkout', status: 'revealed', votes: { 'player-1': 8 } },
+    ]
+    revealed.currentRoundIndex = 1
+    roomStore.syncRoom(revealed)
+    await nextTick()
+
+    expect(summaryTab().text()).toContain('(2)')
+  })
+
+  it('resets to the voting tab when a fresh voting phase starts (session reset)', async () => {
+    const wrapper = mountVotingRoom()
+    const roomStore = useRoomStore()
+    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+
+    // Vai pro resumo.
+    await tab(1).trigger('click')
+    expect(tab(1).attributes('aria-selected')).toBe('true')
+
+    // Sessão concluída: não é fase de votação → o tablist some.
+    const completed = createRoom()
+    completed.phase = 'completed'
+    completed.rounds = [
+      { id: 'r-1', subject: 'Login', status: 'revealed', votes: { 'player-1': 5 } },
+    ]
+    roomStore.syncRoom(completed)
+    await nextTick()
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+
+    // Nova sessão (reset) reentra em votação → a aba deve voltar pra "Votação",
+    // não ficar presa no resumo da sessão anterior.
+    const fresh = createRoom()
+    fresh.phase = 'voting'
+    fresh.subjects = ['Login']
+    fresh.rounds = [{ id: 'r-2', subject: 'Login', status: 'voting', votes: {} }]
+    fresh.currentRoundIndex = 0
+    roomStore.syncRoom(fresh)
+    await nextTick()
+
+    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('moves focus to the newly selected tab on Arrow navigation (roving tabindex)', async () => {
+    const wrapper = mountVotingRoom({ attachTo: document.body })
+    const tablist = wrapper.get('[role="tablist"]')
+
+    await tablist.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises() // o .focus() roda num nextTick após trocar a aba
+
+    const [votingTab, summaryTab] = wrapper.findAll('[role="tab"]')
+    // Roving tabindex: o alvo vira focável (0) e o outro sai da ordem de tab (-1)...
+    expect(summaryTab.attributes('tabindex')).toBe('0')
+    expect(votingTab.attributes('tabindex')).toBe('-1')
+    // ...e o foco de fato se moveu pra ele.
+    expect(document.activeElement).toBe(summaryTab.element)
+
+    wrapper.unmount() // limpa o DOM anexado ao document.body
+  })
+})
+
+describe('RoomView.vue direct hit without identity (F5.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('redirects to Home preserving the room code in ?room= (not a bare /)', () => {
+    setActivePinia(createPinia())
+    // Sem setPlayer → sem playerId/playerName: link/bookmark de /room/:id aberto direto.
+    mount(RoomView, { global: { stubs: childStubs } })
+
+    // Antes ia pra '/' cru (perdia o id); agora manda pra Home com ?room=<id>, que o
+    // HomeView usa pra abrir na aba "Entrar" já preenchida.
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home', query: { room: 'abc123' } })
   })
 })

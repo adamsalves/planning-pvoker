@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import SubjectForm from '../SubjectForm.vue'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
+import { i18n } from '@/i18n'
 
 describe('SubjectForm.vue', () => {
   const defaultProps = {
@@ -24,6 +26,29 @@ describe('SubjectForm.vue', () => {
     const input = wrapper.findComponent(BaseInput)
     expect(input.props('error')).toBe('O subject deve ter pelo menos 2 caracteres')
     expect(wrapper.emitted('add')).toBeUndefined()
+  })
+
+  it('re-traduz o erro de validação visível na troca de idioma', async () => {
+    const wrapper = mount(SubjectForm, { props: defaultProps })
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const input = wrapper.findComponent(BaseInput)
+    expect(input.props('error')).toBe('O subject deve ter pelo menos 2 caracteres')
+
+    // O erro é guardado como CHAVE e traduzido no render — trocar o idioma com o
+    // erro na tela deve re-traduzi-lo (restauração do locale = afterEach global).
+    i18n.global.locale.value = 'en'
+    await nextTick()
+    expect(input.props('error')).toBe('Subject must be at least 2 characters')
+  })
+
+  it('usa singular no backlog com 1 subject', () => {
+    const wrapper = mount(SubjectForm, {
+      props: { subjects: ['Login'], playerCount: 3 },
+    })
+
+    expect(wrapper.text()).toContain('Backlog (1 subject)')
+    expect(wrapper.text()).not.toContain('Backlog (1 subjects)')
   })
 
   it('emits "add" event with trimmed subject and clears input', async () => {
@@ -64,6 +89,16 @@ describe('SubjectForm.vue', () => {
     expect(wrapper.emitted('remove')?.[0]).toEqual([1])
   })
 
+  it('exposes a specific aria-label per backlog item on the remove button', () => {
+    const wrapper = mount(SubjectForm, {
+      props: { subjects: ['Login', 'Signup'], playerCount: 3 },
+    })
+
+    const buttons = wrapper.findAll('.remove-btn')
+    expect(buttons[0].attributes('aria-label')).toBe('Remover Login')
+    expect(buttons[1].attributes('aria-label')).toBe('Remover Signup')
+  })
+
   it('disables start button when no subjects', () => {
     const wrapper = mount(SubjectForm, {
       props: { subjects: [], playerCount: 3 },
@@ -82,6 +117,23 @@ describe('SubjectForm.vue', () => {
     const buttons = wrapper.findAllComponents(BaseButton)
     const startBtn = buttons.find((b) => b.text().includes('Iniciar Sessão'))
     expect(startBtn?.props('disabled')).toBe(true)
+  })
+
+  it('explica por que "Iniciar" está desabilitado: falta subject (pré-requisito)', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: [], playerCount: 3 } })
+    expect(wrapper.find('.start-hint').text()).toContain(
+      'Adicione ao menos um subject para iniciar',
+    )
+  })
+
+  it('explica por que "Iniciar" está desabilitado: faltam jogadores', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 1 } })
+    expect(wrapper.find('.start-hint').text()).toContain('Aguardando mais jogadores')
+  })
+
+  it('esconde o hint quando a sessão já pode iniciar', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 2 } })
+    expect(wrapper.find('.start-hint').exists()).toBe(false)
   })
 
   it('emits "start" when start button is clicked', async () => {

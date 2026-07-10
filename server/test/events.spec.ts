@@ -68,6 +68,20 @@ function join(socket: ClientSocket, data: unknown): Promise<JoinAck> {
   })
 }
 
+type VoteAck = { ok?: boolean; error?: string }
+function castVote(socket: ClientSocket, data: unknown): Promise<VoteAck> {
+  return new Promise((resolve) => {
+    socket.emit('cast_vote', data, (ack: VoteAck) => resolve(ack))
+  })
+}
+
+type LeaveAck = { ok?: boolean; error?: string }
+function leaveRoom(socket: ClientSocket, data: unknown): Promise<LeaveAck> {
+  return new Promise((resolve) => {
+    socket.emit('leave_room', data, (ack: LeaveAck) => resolve(ack))
+  })
+}
+
 function waitForRoomWhere(socket: ClientSocket, predicate: (room: Room) => boolean): Promise<Room> {
   return new Promise((resolve) => {
     const handler = (room: Room) => {
@@ -174,7 +188,9 @@ describe('authorization (requireAdmin)', () => {
       await seeded
 
       memberClient.emit(event, payload)
-      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
+      const room = roomOf(
+        await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+      )
       expect(room.phase).toBe('setup')
       expect(room.subjects).toEqual(['A'])
     })
@@ -190,7 +206,9 @@ describe('authorization (requireAdmin)', () => {
     it(`ignores ${event} from a non-admin (voting phase)`, async () => {
       const { memberClient, memberToken } = await startVotingRoom()
       memberClient.emit(event, payload)
-      const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
+      const room = roomOf(
+        await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+      )
       expect(room.phase).toBe('voting')
       expect(room.rounds[room.currentRoundIndex].status).toBe('voting')
     })
@@ -226,8 +244,32 @@ describe('cast_vote', () => {
     const { memberClient, memberToken } = await startVotingRoom()
     memberClient.emit('cast_vote', { roomId: 'r1', value: 999 })
     // FIFO: the re-join ack is handled after the (ignored) cast_vote.
-    const room = roomOf(await join(memberClient, { roomId: 'r1', player: member, token: memberToken }))
+    const room = roomOf(
+      await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+    )
     expect(Object.keys(room.rounds[0].votes)).toHaveLength(0)
+  })
+
+  it('acks { ok: true } on a valid vote', async () => {
+    const { memberClient } = await startVotingRoom()
+    const ack = await castVote(memberClient, { roomId: 'r1', value: 5 })
+    expect(ack.ok).toBe(true)
+    expect(ack.error).toBeUndefined()
+  })
+
+  it('acks an error for a vote outside the deck (so the client can undo the optimistic vote)', async () => {
+    const { memberClient } = await startVotingRoom()
+    const ack = await castVote(memberClient, { roomId: 'r1', value: 999 })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
+  })
+
+  it('acks an error when a socket that never joined tries to vote', async () => {
+    await startVotingRoom()
+    const stranger = await connect()
+    const ack = await castVote(stranger, { roomId: 'r1', value: 5 })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
   })
 })
 
@@ -281,6 +323,271 @@ describe('reconnection grace period & admin transfer', () => {
   })
 })
 
+describe('leave_room (explicit exit)', () => {
+  it('removes the player immediately, without waiting the grace window', async () => {
+    const { adminClient, memberClient, adminToken } = await adminAndMember()
+
+    const ack = await leaveRoom(memberClient, { roomId: 'r1' })
+    expect(ack.ok).toBe(true)
+
+    // The ack fires only after the removal ran, so the state can be read back
+    // right away — no grace-window delay involved.
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+  })
+
+  it('broadcasts the updated room to the remaining players', async () => {
+    const { adminClient, memberClient } = await adminAndMember()
+    const removed = waitForRoomWhere(adminClient, (room) => room.players.length === 1)
+    await leaveRoom(memberClient, { roomId: 'r1' })
+    const room = await removed
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+  })
+
+  it('transfers admin immediately when the admin leaves', async () => {
+    const { adminClient, memberClient } = await adminAndMember()
+    const transferred = waitForRoomWhere(memberClient, (room) => room.adminId === 'm1')
+
+    const ack = await leaveRoom(adminClient, { roomId: 'r1' })
+    expect(ack.ok).toBe(true)
+
+    const room = await transferred
+    expect(room.players.find((p) => p.id === 'm1')?.role).toBe('admin')
+  })
+
+  it('clears the session token, so the same identity can rejoin from scratch', async () => {
+    const { memberClient } = await adminAndMember()
+    await leaveRoom(memberClient, { roomId: 'r1' })
+
+    // Rejoin right away with the same player id and NO token. Before leave_room
+    // existed, the token lingered for the whole grace window and this exact
+    // flow (leave → come straight back) was rejected with 'invalid_session'.
+    const rejoined = await connect()
+    const ack = await join(rejoined, { roomId: 'r1', player: member })
+    expect(ack.success).toBe(true)
+    expect(
+      roomOf(ack)
+        .players.map((p) => p.id)
+        .sort(),
+    ).toEqual(['a1', 'm1'])
+  })
+
+  it('deletes the room when the last player leaves', async () => {
+    const { adminClient, memberClient } = await adminAndMember()
+    await leaveRoom(memberClient, { roomId: 'r1' })
+    await leaveRoom(adminClient, { roomId: 'r1' })
+
+    // Joining without a config must now fail: the room is gone.
+    const probe = await connect()
+    const ack = await join(probe, { roomId: 'r1', player: member })
+    expect(ack.error).toBeDefined()
+    expect(ack.success).toBeUndefined()
+  })
+
+  it('acks an error (and changes nothing) for a socket that is not in that room', async () => {
+    const { adminClient, adminToken } = await adminAndMember()
+    const stranger = await connect()
+
+    const ack = await leaveRoom(stranger, { roomId: 'r1' })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
+  it('acks an error for an invalid payload', async () => {
+    const { memberClient } = await adminAndMember()
+    const ack = await leaveRoom(memberClient, { nope: true })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
+  })
+
+  it('is identity-wide: leaving via one tab unsubscribes the sibling tab from broadcasts', async () => {
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    // The whole identity left, not just tab1's socket…
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+
+    // …and the sibling tab must not keep receiving updates for the room. Drive
+    // a broadcast and give it a beat to (not) arrive: proving a negative needs
+    // a small window after the admin — still subscribed — has received it.
+    let tab2Received = false
+    tab2.on('room_state_updated', () => {
+      tab2Received = true
+    })
+    const seeded = waitForRoomWhere(adminClient, (r) => r.subjects.length === 1)
+    adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
+    await seeded
+    await delay(50)
+    expect(tab2Received).toBe(false)
+  })
+
+  it('acks an error on a duplicated leave_room from the same socket', async () => {
+    const { adminClient, memberClient, adminToken } = await adminAndMember()
+
+    const first = await leaveRoom(memberClient, { roomId: 'r1' })
+    expect(first.ok).toBe(true)
+
+    // The socket identity was unbound by the first leave, so the duplicate is
+    // just an unauthorized emit — refused, and the room stays as it was.
+    const second = await leaveRoom(memberClient, { roomId: 'r1' })
+    expect(second.error).toBeDefined()
+    expect(second.ok).toBeUndefined()
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+  })
+
+  it('lets the same connection rejoin after leaving (leave → join on one socket)', async () => {
+    const { memberClient, memberToken } = await adminAndMember()
+    await leaveRoom(memberClient, { roomId: 'r1' })
+
+    // "Left by mistake, came straight back" without reloading: the old token
+    // was cleared by the leave, so the join carries none and a FRESH one is
+    // minted — it must not be the token the identity held before leaving.
+    const ack = await join(memberClient, { roomId: 'r1', player: member })
+    expect(ack.success).toBe(true)
+    expect(tokenOf(ack)).not.toBe(memberToken)
+    expect(
+      roomOf(ack)
+        .players.map((p) => p.id)
+        .sort(),
+    ).toEqual(['a1', 'm1'])
+  })
+
+  it('acks an error when a socket joined to another room tries to leave r1', async () => {
+    const { adminClient, adminToken } = await adminAndMember()
+
+    const outsider = await connect()
+    await join(outsider, {
+      roomId: 'r2',
+      player: { id: 'o1', name: 'Olga', role: 'member' },
+      config,
+    })
+
+    const ack = await leaveRoom(outsider, { roomId: 'r1' })
+    expect(ack.error).toBeDefined()
+    expect(ack.ok).toBeUndefined()
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
+  it('does not remove anyone else when the closing socket follows the leave', async () => {
+    const { adminClient, memberClient, adminToken } = await adminAndMember()
+
+    // Mirrors the real client: emit leave_room, then disconnect. The later
+    // disconnect must not schedule a second removal against the room.
+    await leaveRoom(memberClient, { roomId: 'r1' })
+    memberClient.close()
+    await delay(GRACE_MS + MARGIN_MS)
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+  })
+
+  it('ignores a stale leave from a sibling socket after the identity rejoined', async () => {
+    // Two sibling tabs for member m1 (shared session → same id + token).
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    // tab1 leaves — identity-wide, so m1 is removed and the token dropped. tab2's
+    // socket still (stalely) believes it is m1@r1.
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    // m1 comes back on a brand-new socket (no token — the leave cleared it).
+    const rejoined = await connect()
+    const reAck = await join(rejoined, { roomId: 'r1', player: member })
+    expect(reAck.success).toBe(true)
+
+    // The STALE sibling now emits leave_room. Its socket id is no longer the
+    // identity's live presence, so the leave must be a no-op — it must NOT evict
+    // the freshly rejoined m1. (Without the presence guard, this evicts m1.)
+    const staleAck = await leaveRoom(tab2, { roomId: 'r1' })
+    expect(staleAck.ok).toBe(true) // acked, but changed nothing
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+
+    // The rejoined m1 is still a fully live member: the stale no-op didn't drop
+    // its room subscription, so it keeps receiving broadcasts.
+    const seen = waitForRoomWhere(rejoined, (r) => r.subjects.includes('S1'))
+    adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['S1'] })
+    expect((await seen).players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
+  it('a stale sibling that disconnects after the identity rejoined keeps the rejoined player', async () => {
+    // Same shape as the stale-leave test, but the stale sibling DISCONNECTS
+    // (closes) instead of emitting leave_room. Its socket was never part of the
+    // rejoined identity's presence, so the disconnect must not schedule a grace
+    // removal for the freshly rejoined m1.
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    const rejoined = await connect()
+    expect((await join(rejoined, { roomId: 'r1', player: member })).success).toBe(true)
+
+    // The stale sibling drops off. m1's only live presence is the rejoined
+    // socket, so markAbsent finds tab2 absent from the set and schedules nothing.
+    tab2.close()
+    await delay(GRACE_MS + MARGIN_MS)
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+  })
+
+  it('a stale sibling that disconnects after an identity-wide leave schedules no spurious removal', async () => {
+    // After an identity-wide leave, a still-connected sibling is stale: its
+    // socket.data names an identity whose presence was already cleared. When it
+    // later disconnects (no rejoin in between), markAbsent must not schedule a
+    // redundant grace removal — otherwise a spurious room_state_updated fires
+    // after the window and the orphaned timer escapes dispose().
+    const adminClient = await connect()
+    const adminToken = tokenOf(await join(adminClient, { roomId: 'r1', player: admin, config }))
+    const tab1 = await connect()
+    const memberToken = tokenOf(await join(tab1, { roomId: 'r1', player: member }))
+    const tab2 = await connect()
+    await join(tab2, { roomId: 'r1', player: member, token: memberToken })
+
+    // Identity-wide leave: m1 removed, presence for r1::m1 cleared; tab2 stays
+    // connected but stale, and nothing rejoins.
+    await leaveRoom(tab1, { roomId: 'r1' })
+
+    // Any removal the stale disconnect schedules would broadcast to the admin,
+    // who is still subscribed.
+    let broadcasts = 0
+    adminClient.on('room_state_updated', () => {
+      broadcasts++
+    })
+
+    tab2.close()
+    await delay(GRACE_MS + MARGIN_MS)
+    expect(broadcasts).toBe(0)
+
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.players.map((p) => p.id)).toEqual(['a1'])
+  })
+})
+
 describe('unauthenticated socket (never joined)', () => {
   it('ignores cast_vote and admin actions from a socket that never joined', async () => {
     await startVotingRoom()
@@ -291,7 +598,10 @@ describe('unauthenticated socket (never joined)', () => {
     stranger.emit('cast_vote', { roomId: 'r1', playerId: 'm1', value: 5 })
     stranger.emit('reset_session', { roomId: 'r1' })
     const room = roomOf(
-      await join(stranger, { roomId: 'r1', player: { id: 's1', name: 'Stranger', role: 'observer' } }),
+      await join(stranger, {
+        roomId: 'r1',
+        player: { id: 's1', name: 'Stranger', role: 'observer' },
+      }),
     )
 
     expect(room.phase).toBe('voting') // reset_session was ignored

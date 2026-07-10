@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type CSSProperties } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Player } from '@/types'
+import { activePlayersOf } from '@/utils/players'
 import PokerCard from './PokerCard.vue'
 
 interface Props {
@@ -11,34 +13,27 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const { t } = useI18n()
+
 // Apenas mostramos jogadores ativos na mesa (espectadores não "sentam")
-const activePlayers = computed(() => props.players.filter((p) => p.role !== 'observer'))
+const activePlayers = computed(() => activePlayersOf(props.players))
 
 function hasVoted(playerId: string) {
   return playerId in props.votes
 }
 
-// Calcula a posição de cada jogador na mesa oval
-function getPlayerStyle(index: number) {
-  const total = activePlayers.value.length
-
-  if (total === 1) {
-    // Se for só 1 jogador, coloca centralizado na parte inferior
-    return { transform: `translate(-50%, calc(-50% + 150px))` }
-  }
-
-  // Começa em 90 graus (Math.PI / 2) para o primeiro jogador ficar na base
+// Posição de cada jogador na mesa oval. O JS entrega só os fatores
+// trigonométricos (--cos/--sin, independentes do tamanho da tela); os raios
+// (--rx/--ry) vivem no CSS via container queries e encolhem em telas estreitas,
+// então a mesa deixa de clipar/transbordar no mobile (F4.1).
+function getPlayerStyle(index: number): CSSProperties {
+  const total = activePlayers.value.length || 1
+  // 90° (Math.PI / 2) coloca o primeiro jogador na base; com um só jogador
+  // o ângulo é exatamente 90° → cos=0, sin=1 → centro-inferior, sem caso especial.
   const angle = Math.PI / 2 + (index / total) * Math.PI * 2
-
-  // Raios da elipse (espaçamento ao redor da mesa)
-  const rx = 220 // Horizontal
-  const ry = 150 // Vertical
-
-  const x = Math.cos(angle) * rx
-  const y = Math.sin(angle) * ry
-
   return {
-    transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
+    '--cos': Math.cos(angle).toFixed(4),
+    '--sin': Math.sin(angle).toFixed(4),
   }
 }
 </script>
@@ -48,11 +43,11 @@ function getPlayerStyle(index: number) {
     <!-- Centro da mesa (mensagem ou vazio) -->
     <div class="table-center">
       <div class="table-surface">
-        <span v-if="status === 'waiting'" class="table-message">Aguardando rodada...</span>
-        <span v-else-if="status === 'voting'" class="table-message pulsing"
-          >Votos em andamento</span
-        >
-        <span v-else class="table-message">Votos revelados!</span>
+        <span v-if="status === 'waiting'" class="table-message">{{ t('room.table.waiting') }}</span>
+        <span v-else-if="status === 'voting'" class="table-message pulsing">{{
+          t('room.table.voting')
+        }}</span>
+        <span v-else class="table-message">{{ t('room.table.revealed') }}</span>
       </div>
     </div>
 
@@ -65,7 +60,9 @@ function getPlayerStyle(index: number) {
           class="player-spot"
           :style="getPlayerStyle(index)"
         >
-          <!-- Card Area -->
+          <!-- Card Area — decorativa p/ leitores de tela: a carta é um botão desabilitado
+               sem ação (aria-label "Votar" enganaria) e o status/valor do voto já é
+               anunciado pelo sr-only do name tag abaixo. -->
           <div class="card-area">
             <Transition name="card-drop">
               <PokerCard
@@ -73,6 +70,7 @@ function getPlayerStyle(index: number) {
                 :value="status === 'revealed' ? (votes[player.id] ?? '') : ''"
                 :face-down="status === 'voting'"
                 disabled
+                aria-hidden="true"
                 class="table-card"
               />
               <div v-else class="empty-card-slot"></div>
@@ -83,6 +81,12 @@ function getPlayerStyle(index: number) {
           <div class="player-tag">
             <span class="avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="name">{{ player.name }}</span>
+            <span v-if="status === 'voting'" class="sr-only">
+              {{ hasVoted(player.id) ? t('room.players.voted') : t('room.players.waitingVote') }}
+            </span>
+            <span v-else-if="status === 'revealed' && hasVoted(player.id)" class="sr-only">
+              {{ t('room.players.votedValue', { value: votes[player.id] }) }}
+            </span>
           </div>
         </div>
       </TransitionGroup>
@@ -98,7 +102,10 @@ function getPlayerStyle(index: number) {
   justify-content: center;
   min-height: 480px; /* Área grande o suficiente para o oval não transbordar */
   width: 100%;
-  overflow: hidden; /* Evitar scrollbar se a janela for muito estreita */
+  overflow: hidden; /* Rede de segurança contra scrollbar em telas muito estreitas */
+  /* Contexto de container query: os raios --rx/--ry e a mesa medem ESTA largura
+     (cqw), não a viewport — correto mesmo no layout de 2 colunas do desktop. */
+  container-type: inline-size;
 }
 
 .table-center {
@@ -110,8 +117,10 @@ function getPlayerStyle(index: number) {
 }
 
 .table-surface {
-  width: 260px;
-  height: 120px;
+  /* Encolhe bastante com o container (cqw) p/ os jogadores caberem AO REDOR (e não
+     sobre) a mesa no mobile. Desktop segue no teto (260×120). */
+  width: clamp(108px, 36cqw, 260px);
+  height: clamp(48px, 16.5cqw, 120px);
   background: var(--c-bg-mute);
   border: 4px solid var(--c-border);
   border-radius: 60px; /* Oval look */
@@ -122,11 +131,18 @@ function getPlayerStyle(index: number) {
 }
 
 .table-message {
-  font-size: var(--text-sm);
+  /* Escala com o container (cqw) igual à mesa: no desktop fica em --text-sm (14px);
+     em telas estreitas encolhe até um piso legível (~11px) e, com o padding/centro
+     abaixo, quebra DENTRO do oval em vez de vazar para fora dele (F4.1). */
+  font-size: clamp(0.6875rem, 0.375rem + 1.1cqw, var(--text-sm));
   font-weight: 600;
   color: var(--c-text-mute);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  /* Menos espaçamento no mobile libera largura p/ o texto caber no oval menor. */
+  letter-spacing: clamp(0.25px, 0.14cqw, 1px);
+  text-align: center;
+  line-height: 1.2;
+  padding: 0 var(--space-2);
 }
 
 .pulsing {
@@ -148,6 +164,18 @@ function getPlayerStyle(index: number) {
   position: absolute;
   left: 50%;
   top: 50%;
+  /* Raios da elipse responsivos ao container (cqw): no desktop batem os valores
+     originais (220×150); em telas estreitas encolhem até um piso ALTO o bastante
+     para o jogador limpar a mesa central (que também encolhe) — os nomes/cartas
+     ficam AO REDOR, não sobre a mesa. O --ry cresce junto da altura da mesa
+     (calc c/ cqw) p/ manter a folga vertical (~20px) em qualquer largura.
+     Os fatores --cos/--sin vêm do JS (getPlayerStyle). */
+  --rx: clamp(112px, 38cqw, 220px);
+  --ry: clamp(112px, calc(90px + 8.5cqw), 150px);
+  transform: translate(
+    calc(-50% + var(--cos, 0) * var(--rx)),
+    calc(-50% + var(--sin, 0) * var(--ry))
+  );
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -205,7 +233,8 @@ function getPlayerStyle(index: number) {
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--c-text);
-  max-width: 60px;
+  /* Nome mais estreito no mobile → a "etiqueta" lateral não invade a mesa. */
+  max-width: clamp(44px, 9cqw, 60px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -245,5 +274,12 @@ function getPlayerStyle(index: number) {
 .table-player-leave-to {
   opacity: 0;
   transform: scale(0.9);
+}
+
+/* Mobile: o oval encolhe (cqw acima), então a área não precisa ser tão alta. */
+@media (max-width: 640px) {
+  .poker-table {
+    min-height: 400px;
+  }
 }
 </style>

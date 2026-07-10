@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { DECKS } from '@/types'
+import { activePlayersOf } from '@/utils/players'
+import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
-import SubjectForm from './SubjectForm.vue'
-import RoundHeader from './RoundHeader.vue'
-import VotingArea from './VotingArea.vue'
-import PlayerList from './PlayerList.vue'
-import PokerTable from './PokerTable.vue'
-import VoteReveal from './VoteReveal.vue'
-import RoundControls from './RoundControls.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import RoomSetup from './RoomSetup.vue'
+import RoomVoting from './RoomVoting.vue'
+import RoomSummary from './RoomSummary.vue'
 import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
+import { useShareRoom } from '@/composables/useShareRoom'
 import { JoinAckError } from '@/composables/joinErrors'
 import { useHistoryStore } from '@/stores/history'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -35,12 +36,13 @@ const {
   revealVotes,
   disconnect,
   joinRoom,
+  leaveRoom,
 } = useSocket()
 
-// Type-safe route param
+// Type-safe route param (sem cast `as` — String() normaliza string | string[]).
 const roomId = computed(() => {
   const id = route.params.id
-  return (Array.isArray(id) ? id[0] : id) as string
+  return String(Array.isArray(id) ? id[0] : id)
 })
 
 // Admin é derivado da fonte da verdade (servidor): quem é o adminId da sala.
@@ -51,81 +53,80 @@ const isAdmin = computed(() => {
 })
 const isObserver = computed(() => userStore.playerRole === 'observer')
 
-const deckLabel = computed(() => {
-  const dt = roomStore.roomConfig?.deckType
-  return dt ? DECKS[dt].label : 'Fibonacci'
-})
-
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
+const deckLabel = computed(() => t(`decks.${deckType.value}`))
 const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
-const shareStatus = ref<'idle' | 'copied' | 'error'>('idle')
-let shareFeedbackTimeout: ReturnType<typeof setTimeout> | undefined
-const selectedVote = computed(() => {
+
+// Compartilhar sala (link de convite / Web Share) — lógica em useShareRoom.
+const { shareStatus, shareRoom } = useShareRoom(roomId)
+
+// Voto otimista: a carta acende na hora do clique, sem esperar o round-trip
+// (cast_vote → room_state_updated). Reconciliado com o servidor logo abaixo.
+const optimisticVote = ref<string | number | null>(null)
+
+const serverVote = computed(() => {
   if (!currentRound.value) return null
   return currentRound.value.votes[userStore.playerId] ?? null
 })
 
+// O voto confirmado pelo servidor prevalece; enquanto não chega, mostra o otimista.
+const selectedVote = computed(() => serverVote.value ?? optimisticVote.value)
+
+// Trocar de rodada (nova rodada / reset) limpa o otimista pra não vazar entre rodadas.
+// A transição voting→revealed mantém o mesmo round.id, então a seleção persiste no reveal.
+watch(
+  () => currentRound.value?.id,
+  () => {
+    optimisticVote.value = null
+  },
+)
+
 // Apenas jogadores ativos (não observers) para contagem
-const activePlayerCount = computed(() => players.value.filter((p) => p.role !== 'observer').length)
+const activePlayerCount = computed(() => activePlayersOf(players.value).length)
 
 const allActiveVoted = computed(() => {
   const round = currentRound.value
   if (!round) return false
-  const activePlayers = players.value.filter((p) => p.role !== 'observer')
+  const active = activePlayersOf(players.value)
   // Guard length: uma sala só de observers (zero ativos) NÃO conta como "todos
   // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
-  return activePlayers.length > 0 && activePlayers.every((p) => p.id in round.votes)
+  return active.length > 0 && active.every((p) => p.id in round.votes)
 })
+
+// Abas da fase de votação: "Votação" (rodada atual) ↔ "Resumo" (rodadas já
+// reveladas, ao vivo). Só aparecem na fase de votação.
+const roomTab = ref<'voting' | 'summary'>('voting')
+const votingTabRef = ref<HTMLButtonElement | null>(null)
+const summaryTabRef = ref<HTMLButtonElement | null>(null)
+
+// Contagem exibida na aba, derivada da MESMA fonte que o RoomSummary lista
+// (`revealedRoundsOf`) — o rótulo "Resumo (N)" nunca diverge do painel.
+const revealedRoundCount = computed(() => revealedRoundsOf(roomStore.currentRoom).length)
+
+// Ao (re)entrar em votação — ex.: nova sessão após um reset — volta pra aba de
+// votação, pra não ficar preso no resumo da sessão anterior.
+watch(
+  () => roomStore.isVotingPhase,
+  (isVoting) => {
+    if (isVoting) roomTab.value = 'voting'
+  },
+)
+
+// Navegação por teclado das abas (padrão WAI-ARIA tabs): setas trocam a aba e
+// movem o foco pra ela (roving tabindex no template).
+function onTabsKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+  event.preventDefault()
+  roomTab.value = event.key === 'ArrowRight' ? 'summary' : 'voting'
+  nextTick(() => {
+    const target = roomTab.value === 'summary' ? summaryTabRef.value : votingTabRef.value
+    target?.focus()
+  })
+}
 
 // Auto-reveal é responsabilidade ÚNICA do servidor (roomManager.castVote);
 // o cliente não reemite reveal_votes para evitar lógica duplicada/divergente.
-
-const inviteUrl = computed(() => {
-  const url = new URL(import.meta.env.BASE_URL, window.location.origin)
-  url.searchParams.set('room', roomId.value)
-  return url.toString()
-})
-
-function setShareStatus(status: 'copied' | 'error') {
-  shareStatus.value = status
-  if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
-  shareFeedbackTimeout = setTimeout(() => {
-    shareStatus.value = 'idle'
-  }, 2500)
-}
-
-async function copyInviteLink() {
-  await navigator.clipboard.writeText(inviteUrl.value)
-  setShareStatus('copied')
-}
-
-async function handleShareRoom() {
-  shareStatus.value = 'idle'
-
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: 'Planning Poker',
-        text: 'Entre na minha sala de Planning Poker',
-        url: inviteUrl.value,
-      })
-      return
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-    }
-  }
-
-  try {
-    await copyInviteLink()
-  } catch {
-    setShareStatus('error')
-  }
-}
-
-onUnmounted(() => {
-  if (shareFeedbackTimeout) clearTimeout(shareFeedbackTimeout)
-})
 
 // Rejoin the active room. Runs on mount (direct hit / refresh of /room/:id) AND on
 // every transparent socket reconnect: the server binds presence to socket.id, so a
@@ -145,6 +146,11 @@ function rejoinActiveRoom() {
     // Socket.IO resolve, sem expulsar o usuário da sala.
     if (err instanceof JoinAckError) {
       userStore.setSessionToken(null)
+      // A sala REALMENTE não existe mais (reset/cold-start): descarta o estado
+      // obsoleto além do token. Sem isso, o `currentRoom` preso faria a Home
+      // mostrar o aviso "sessão expirou" JUNTO com o banner/link "Voltar à Sala"
+      // (F5.4) — um retorno quebrado que só reentra no erro.
+      roomStore.leaveRoom()
       router.push({ name: 'home', query: { notice: 'session-expired' } })
     }
   })
@@ -152,7 +158,10 @@ function rejoinActiveRoom() {
 
 onMounted(() => {
   if (!userStore.playerId || !userStore.playerName) {
-    router.push('/') // no identity yet — go home to define a name
+    // F5.3 — sem identidade (link/bookmark de /room/:id aberto direto): manda pra
+    // Home PRESERVANDO o código da sala em ?room=, que o HomeView usa pra abrir na
+    // aba "Entrar" já preenchida. Antes ia pra '/' cru, descartando o id.
+    router.push({ name: 'home', query: { room: roomId.value } })
     return
   }
   rejoinActiveRoom()
@@ -182,7 +191,12 @@ function handleStartSession() {
 // Voting phase
 function handleVote(value: string | number) {
   if (currentRound.value?.status !== 'voting') return
-  castVote(roomId.value, userStore.playerId, value)
+  optimisticVote.value = value // acende na hora (otimista)
+  castVote(roomId.value, userStore.playerId, value).catch(() => {
+    // Servidor recusou (deck inválido / fora de votação / não autorizado): desfaz o
+    // otimista se ele ainda for este valor (o usuário pode ter votado de novo).
+    if (optimisticVote.value === value) optimisticVote.value = null
+  })
 }
 
 function handleReveal() {
@@ -202,6 +216,14 @@ function handleNewSession() {
   resetSession(roomId.value)
 }
 
+// Confirmação de saída: o botão "Sair da Sala" do cabeçalho fica sempre visível e
+// é fácil de clicar sem querer no meio de uma sessão. A saída pela tela de sessão
+// concluída (SessionSummary) é deliberada e continua imediata.
+const showLeaveConfirm = ref(false)
+
+// Só há sessão a preservar quando alguma rodada já foi criada (setup vazio não).
+const hasRecordedRounds = computed(() => (roomStore.currentRoom?.rounds.length ?? 0) > 0)
+
 function handleLeave() {
   if (roomStore.currentRoom && roomStore.currentRoom.rounds.length > 0) {
     historyStore.saveSession({
@@ -213,9 +235,22 @@ function handleLeave() {
     })
   }
 
+  // Avisa o servidor ANTES do disconnect: remoção imediata lá (sem o grace de
+  // 30s), admin transferido na hora e o token do servidor descartado — sem isso,
+  // voltar pra sala logo após sair esbarrava em "Sessão inválida".
+  leaveRoom(roomId.value)
   disconnect()
   roomStore.leaveRoom()
+  // Sair encerra a sessão: descarta o token e o vínculo com a sala (senão ficam
+  // no localStorage e um rejoin futuro tentaria reusar uma sessão já abandonada).
+  userStore.setSessionToken(null)
+  userStore.setActiveRoom(null)
   router.push({ name: 'home' })
+}
+
+function confirmLeave() {
+  showLeaveConfirm.value = false
+  handleLeave()
 }
 </script>
 
@@ -226,21 +261,27 @@ function handleLeave() {
       <template #header>
         <div class="room-header">
           <div>
-            <h2 class="room-title">
-              Sala <span class="room-code">{{ roomId }}</span>
-            </h2>
+            <h1 class="room-title">
+              {{ t('room.title') }} <span class="room-code">{{ roomId }}</span>
+            </h1>
             <div class="room-meta">
               <span class="badge badge-role" :class="userStore.playerRole">
-                {{ isAdmin ? '👑 Admin' : isObserver ? '👁️ Espectador' : '🃏 Jogador' }}
+                {{
+                  isAdmin
+                    ? t('room.roles.admin')
+                    : isObserver
+                      ? t('room.roles.observer')
+                      : t('room.roles.player')
+                }}
               </span>
               <span class="badge badge-deck">{{ deckLabel }}</span>
               <span class="badge badge-phase">
                 {{
                   roomStore.isSetupPhase
-                    ? '📝 Preparação'
+                    ? t('room.phases.setup')
                     : roomStore.isVotingPhase
-                      ? '🗳️ Votação'
-                      : '✅ Concluída'
+                      ? t('room.phases.voting')
+                      : t('room.phases.completed')
                 }}
               </span>
             </div>
@@ -249,151 +290,124 @@ function handleLeave() {
             <BaseButton
               variant="secondary"
               size="sm"
-              :aria-label="`Compartilhar link da sala ${roomId}`"
-              @click="handleShareRoom"
+              :aria-label="t('room.share.ariaLabel', { roomId })"
+              @click="shareRoom"
             >
               {{
                 shareStatus === 'copied'
-                  ? 'Link copiado!'
+                  ? t('room.share.copied')
                   : shareStatus === 'error'
-                    ? 'Não foi possível copiar'
-                    : '🔗 Compartilhar'
+                    ? t('room.share.error')
+                    : t('room.share.action')
               }}
             </BaseButton>
-            <BaseButton variant="ghost" size="sm" @click="handleLeave"> Sair da Sala </BaseButton>
+            <BaseButton variant="ghost" size="sm" @click="showLeaveConfirm = true">
+              {{ t('room.leave.button') }}
+            </BaseButton>
           </div>
         </div>
       </template>
     </BaseCard>
 
-    <!-- ======================== -->
-    <!-- PHASE: SETUP             -->
-    <!-- ======================== -->
-    <div v-if="roomStore.isSetupPhase" class="room-content">
-      <div class="voting-panel">
-        <BaseCard class="section-card" title="📋 Planejamento da Sessão">
-          <template v-if="isAdmin">
-            <SubjectForm
-              :subjects="roomStore.subjects"
-              :player-count="players.length"
-              @add="handleAddSubject"
-              @remove="handleRemoveSubject"
-              @start="handleStartSession"
-            />
-          </template>
-          <template v-else>
-            <div class="waiting-message">
-              <p class="waiting-icon">📝</p>
-              <p>O Scrum Master está preparando os subjects para votação...</p>
-              <div v-if="roomStore.subjects.length > 0" class="preview-backlog">
-                <p class="backlog-count">
-                  {{ roomStore.subjects.length }}
-                  {{
-                    roomStore.subjects.length === 1 ? 'subject cadastrado' : 'subjects cadastrados'
-                  }}
-                </p>
-                <ul class="preview-list">
-                  <li v-for="(item, index) in roomStore.subjects" :key="index" class="preview-item">
-                    <span class="preview-index">{{ index + 1 }}.</span>
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </template>
-        </BaseCard>
+    <!-- PHASE: SETUP -->
+    <RoomSetup
+      v-if="roomStore.isSetupPhase"
+      :is-admin="isAdmin"
+      @add="handleAddSubject"
+      @remove="handleRemoveSubject"
+      @start="handleStartSession"
+    />
+
+    <!-- PHASE: VOTING — abas "Votação" (rodada atual) ↔ "Resumo" (ao vivo) -->
+    <template v-if="roomStore.isVotingPhase">
+      <div
+        class="room-tabs"
+        role="tablist"
+        :aria-label="t('room.tabs.ariaLabel')"
+        @keydown="onTabsKeydown"
+      >
+        <button
+          id="room-tab-voting"
+          ref="votingTabRef"
+          type="button"
+          role="tab"
+          class="room-tab"
+          :class="{ 'room-tab--active': roomTab === 'voting' }"
+          :aria-selected="roomTab === 'voting'"
+          :tabindex="roomTab === 'voting' ? 0 : -1"
+          aria-controls="room-panel-voting"
+          @click="roomTab = 'voting'"
+        >
+          {{ t('room.tabs.voting') }}
+        </button>
+        <button
+          id="room-tab-summary"
+          ref="summaryTabRef"
+          type="button"
+          role="tab"
+          class="room-tab"
+          :class="{ 'room-tab--active': roomTab === 'summary' }"
+          :aria-selected="roomTab === 'summary'"
+          :tabindex="roomTab === 'summary' ? 0 : -1"
+          aria-controls="room-panel-summary"
+          @click="roomTab = 'summary'"
+        >
+          {{ t('room.tabs.summary') }} ({{ revealedRoundCount }})
+        </button>
       </div>
 
-      <div class="sidebar-panel">
-        <BaseCard title="Participantes" class="section-card">
-          <PlayerList :players="players" :votes="{}" :status="'waiting'" />
-        </BaseCard>
-      </div>
-    </div>
-
-    <!-- ======================== -->
-    <!-- PHASE: VOTING            -->
-    <!-- ======================== -->
-    <div v-if="roomStore.isVotingPhase" class="room-content">
-      <div class="voting-panel">
-        <!-- Round Header with progress -->
-        <RoundHeader
-          v-if="currentRound"
-          :subject="currentRound.subject"
-          :round-number="roomStore.currentSubjectIndex"
-          :total-subjects="roomStore.totalSubjects"
-          :status="currentRound.status"
-        />
-
-        <!-- Poker Table (Mesa central com animações 3D) -->
-        <BaseCard v-if="currentRound" class="section-card table-wrapper">
-          <PokerTable
-            :players="players"
-            :votes="currentRound.votes"
-            :status="currentRound.status"
-          />
-        </BaseCard>
-
-        <!-- Voting Cards (jogadores podem votar) -->
-        <BaseCard v-if="currentRound?.status === 'voting' && !isObserver" class="section-card">
-          <VotingArea :deck-type="deckType" :selected-value="selectedVote" @vote="handleVote" />
-        </BaseCard>
-
-        <!-- Observer waiting message -->
-        <BaseCard v-if="currentRound?.status === 'voting' && isObserver" class="section-card">
-          <div class="observer-message">
-            <p>👁️ Você está como espectador</p>
-            <p class="observer-sub">Aguardando os jogadores votarem...</p>
-          </div>
-        </BaseCard>
-
-        <!-- Vote Reveal (após revelar) -->
-        <BaseCard v-if="currentRound?.status === 'revealed'" class="section-card">
-          <VoteReveal :votes="currentRound.votes" :player-count="activePlayerCount" />
-        </BaseCard>
-
-        <!-- Admin Controls -->
-        <RoundControls
-          v-if="isAdmin && currentRound"
-          :status="currentRound.status"
-          :all-voted="allActiveVoted"
-          :is-last-subject="roomStore.isLastSubject"
-          @reveal="handleReveal"
-          @next-round="handleNextRound"
-          @finish="handleFinishSession"
-        />
-
-        <!-- Waiting: não é admin e sem rodada -->
-        <BaseCard v-if="!currentRound && !isAdmin" class="section-card">
-          <div class="waiting-message">
-            <p class="waiting-icon">⏳</p>
-            <p>Aguardando o Scrum Master iniciar a votação...</p>
-          </div>
-        </BaseCard>
-      </div>
-
-      <div class="sidebar-panel">
-        <BaseCard title="Participantes" class="section-card">
-          <PlayerList
-            :players="players"
-            :votes="currentRound?.votes ?? {}"
-            :status="currentRound?.status ?? 'waiting'"
-          />
-        </BaseCard>
-      </div>
-    </div>
+      <RoomVoting
+        v-show="roomTab === 'voting'"
+        id="room-panel-voting"
+        role="tabpanel"
+        aria-labelledby="room-tab-voting"
+        :is-admin="isAdmin"
+        :is-observer="isObserver"
+        :selected-vote="selectedVote"
+        :active-player-count="activePlayerCount"
+        :all-active-voted="allActiveVoted"
+        @vote="handleVote"
+        @reveal="handleReveal"
+        @next-round="handleNextRound"
+        @finish="handleFinishSession"
+      />
+      <RoomSummary
+        v-show="roomTab === 'summary'"
+        id="room-panel-summary"
+        role="tabpanel"
+        aria-labelledby="room-tab-summary"
+        tabindex="0"
+      />
+    </template>
 
     <!-- ======================== -->
     <!-- PHASE: COMPLETED         -->
     <!-- ======================== -->
-    <div v-if="roomStore.isCompleted" class="room-content room-content--full">
+    <div v-if="roomStore.isCompleted" class="completed-content">
       <SessionSummary
         :rounds="roomStore.currentRoom?.rounds ?? []"
-        :player-count="activePlayerCount"
         @new-session="handleNewSession"
         @leave="handleLeave"
       />
     </div>
+
+    <!-- F3.4 — confirmação antes de sair da sala (BaseModal endurecido na F2.2) -->
+    <BaseModal v-model="showLeaveConfirm" :title="t('room.leave.confirmTitle')">
+      <p class="leave-confirm-text">
+        {{ t('room.leave.confirmBody') }}
+        <template v-if="hasRecordedRounds">
+          {{ t('room.leave.confirmHistoryNote') }}
+        </template>
+      </p>
+      <template #footer>
+        <BaseButton variant="ghost" @click="showLeaveConfirm = false">{{
+          t('common.cancel')
+        }}</BaseButton>
+        <BaseButton variant="danger" @click="confirmLeave">{{
+          t('room.leave.confirmAction')
+        }}</BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -420,6 +434,50 @@ function handleLeave() {
   justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* Abas Votação ↔ Resumo (fase de votação) */
+.room-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.room-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; /* sobrepõe a borda do tablist */
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--c-text-mute);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.room-tab:hover {
+  color: var(--c-text);
+}
+
+.room-tab--active {
+  color: var(--c-primary);
+  border-bottom-color: var(--c-primary);
+}
+
+.room-tab:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.leave-confirm-text {
+  margin: 0;
+  color: var(--c-text-soft);
+  line-height: 1.5;
 }
 
 .room-title {
@@ -473,87 +531,18 @@ function handleLeave() {
   color: var(--c-text-mute);
 }
 
-/* Two Column Layout */
-.room-content {
+/* Fase concluída: coluna única centralizada. Usa classe PRÓPRIA (não `.room-content`)
+   de propósito — o scope do RoomView também marca o root do RoomSetup/RoomVoting
+   (que usam `.room-content`), e um `.room-content` sem media query aqui vazava e
+   sobrescrevia o layout mobile de 1 coluna das fases de setup/votação. */
+.completed-content {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr;
   gap: var(--space-5);
   align-items: start;
-}
-
-.room-content--full {
-  grid-template-columns: 1fr;
   max-width: 700px;
   margin: 0 auto;
   width: 100%;
-}
-
-.voting-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.sidebar-panel {
-  position: sticky;
-  top: 80px; /* Navbar height + padding */
-}
-
-.section-card {
-  animation: slideUp var(--transition-normal);
-}
-
-/* Messages */
-.observer-message,
-.waiting-message {
-  text-align: center;
-  padding: var(--space-6) 0;
-  color: var(--c-text-mute);
-}
-
-.observer-sub {
-  font-size: var(--text-sm);
-  margin-top: var(--space-1);
-}
-
-.waiting-icon {
-  font-size: 2rem;
-  margin-bottom: var(--space-2);
-}
-
-/* Preview backlog (non-admin setup view) */
-.preview-backlog {
-  margin-top: var(--space-4);
-  text-align: left;
-}
-
-.backlog-count {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--c-primary);
-  margin-bottom: var(--space-2);
-}
-
-.preview-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.preview-item {
-  font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-2);
-  background: var(--c-bg-mute);
-  border-radius: var(--radius-sm);
-}
-
-.preview-index {
-  font-weight: 600;
-  color: var(--c-primary);
-  margin-right: var(--space-1);
 }
 
 /* Responsive */
@@ -565,25 +554,6 @@ function handleLeave() {
   .room-actions {
     justify-content: flex-start;
     width: 100%;
-  }
-
-  .room-content {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar-panel {
-    position: static;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 </style>

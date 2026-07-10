@@ -28,6 +28,24 @@ describe('PokerTable.vue', () => {
     expect(wrapper.text()).not.toContain('Snake')
   })
 
+  it('posiciona cada jogador via --cos/--sin exatos (raios responsivos moram no CSS)', () => {
+    const wrapper = mount(PokerTable, {
+      props: { players: mockPlayers, votes: {}, status: 'waiting' },
+    })
+
+    // 2 ativos (observer filtrado). O CSS faz `var(--cos) * var(--rx)`, então o FORMATO
+    // importa — checamos as strings EXATAS (toFixed(4)), não um prefixo frouxo.
+    const spots = wrapper.findAll('.player-spot')
+    // 1º jogador na base do oval: angle=π/2 → cos=0, sin=1.
+    const firstStyle = spots[0]!.attributes('style') ?? ''
+    expect(firstStyle).toContain('--cos: 0.0000')
+    expect(firstStyle).toContain('--sin: 1.0000')
+    // 2º jogador no topo: angle=3π/2 → cos=-0 (zero negativo, CSS-válido) e sin=-1.
+    const secondStyle = spots[1]!.attributes('style') ?? ''
+    expect(secondStyle).toContain('--cos: -0.0000')
+    expect(secondStyle).toContain('--sin: -1.0000')
+  })
+
   it('renders face-down cards for players who voted during voting phase', () => {
     const wrapper = mount(PokerTable, {
       props: {
@@ -69,6 +87,32 @@ describe('PokerTable.vue', () => {
     const valuesRendered = wrapper.text()
     expect(valuesRendered).toContain('8')
     expect(valuesRendered).toContain('5')
+  })
+
+  it('exposes a sr-only vote status per player during voting', () => {
+    const wrapper = mount(PokerTable, {
+      props: { players: mockPlayers, votes: { '1': 8 }, status: 'voting' },
+    })
+
+    const spots = wrapper.findAll('.player-spot')
+    expect(spots[0]!.find('.sr-only').text()).toContain('Votou')
+    expect(spots[1]!.find('.sr-only').text()).toContain('Aguardando voto')
+  })
+
+  it('announces the revealed vote value via sr-only and hides the decorative card', () => {
+    const wrapper = mount(PokerTable, {
+      props: { players: mockPlayers, votes: { '1': 8 }, status: 'revealed' },
+    })
+
+    // O valor revelado é anunciado no name tag ("Votou 8")...
+    const spots = wrapper.findAll('.player-spot')
+    expect(spots[0]!.find('.sr-only').text()).toBe('Votou 8')
+    // ...e quem não votou não ganha anúncio nenhum
+    expect(spots[1]!.find('.sr-only').exists()).toBe(false)
+
+    // A carta da mesa é decorativa: botão desabilitado sem ação, fora da árvore de a11y
+    const card = wrapper.findComponent(PokerCard)
+    expect(card.attributes('aria-hidden')).toBe('true')
   })
 
   it('shows appropriate messages in the center of the table', () => {

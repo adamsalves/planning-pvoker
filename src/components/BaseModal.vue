@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useId, useSlots, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   modelValue: boolean // v-model bindings
   title?: string
   preventClose?: boolean // Se true, clicando fora não fecha
+  ariaLabel?: string // Nome acessível quando um slot #header customizado é usado (sem título nosso)
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -17,29 +19,96 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const { t } = useI18n()
+
+const titleId = useId()
+const dialogRef = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
+
+const slots = useSlots()
+
+// Nome acessível do diálogo: aponta pro <h2> do título quando somos nós que o renderizamos;
+// com slot #header customizado (não sabemos o conteúdo), cai no aria-label vindo da prop.
+const labelledById = computed(() => (props.title && !slots.header ? titleId : undefined))
+const dialogAriaLabel = computed(() => (labelledById.value ? undefined : props.ariaLabel))
+
 const close = () => {
   if (props.preventClose) return
   emit('update:modelValue', false)
   emit('close')
 }
 
-// Fechar com ESCAPE key
-const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && props.modelValue && !props.preventClose) {
-    close()
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+// Descarta elementos ocultos (display:none/visibility:hidden): o browser não move foco
+// pra eles, então incluí-los faria o trap "prender" o foco num alvo que .focus() ignora.
+function isVisible(el: HTMLElement): boolean {
+  const style = window.getComputedStyle(el)
+  return style.display !== 'none' && style.visibility !== 'hidden'
+}
+
+function getFocusableElements(): HTMLElement[] {
+  if (!dialogRef.value) return []
+  const elements: HTMLElement[] = []
+  dialogRef.value.querySelectorAll(FOCUSABLE_SELECTOR).forEach((node) => {
+    if (node instanceof HTMLElement && isVisible(node)) elements.push(node)
+  })
+  return elements
+}
+
+// Focus trap: Tab/Shift+Tab ficam presos aos elementos focáveis do diálogo.
+function trapFocus(e: KeyboardEvent) {
+  const focusable = getFocusableElements()
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (!first || !last) {
+    e.preventDefault()
+    return
+  }
+
+  const active = document.activeElement
+  const activeIndex = active instanceof HTMLElement ? focusable.indexOf(active) : -1
+
+  if (e.shiftKey && activeIndex <= 0) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && (activeIndex === -1 || activeIndex === focusable.length - 1)) {
+    e.preventDefault()
+    first.focus()
   }
 }
 
-// Prevenir scroll do body quando o modal estiver aberto
+const handleKeydown = (e: KeyboardEvent) => {
+  if (!props.modelValue) return
+  if (e.key === 'Escape' && !props.preventClose) {
+    close()
+    return
+  }
+  if (e.key === 'Tab') trapFocus(e)
+}
+
+// Scroll-lock + gerenciamento de foco: ao abrir, guarda quem estava focado e move o
+// foco pra dentro do diálogo; ao fechar, restaura o foco pra quem o tinha antes.
+// immediate: true cobre o caso de montar já aberto (modelValue true desde o início).
 watch(
   () => props.modelValue,
   (isOpen) => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
+      previouslyFocused =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null
+      nextTick(() => {
+        const target = getFocusableElements()[0] ?? dialogRef.value
+        target?.focus()
+      })
     } else {
       document.body.style.overflow = ''
+      previouslyFocused?.focus()
+      previouslyFocused = null
     }
   },
+  { immediate: true },
 )
 
 onMounted(() => {
@@ -56,16 +125,25 @@ onUnmounted(() => {
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="modelValue" class="modal-backdrop" @click="close">
-        <div class="modal-dialog" @click.stop>
+        <div
+          ref="dialogRef"
+          class="modal-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="labelledById"
+          :aria-label="dialogAriaLabel"
+          tabindex="-1"
+          @click.stop
+        >
           <div v-if="title || $slots.header" class="modal-header">
             <slot name="header">
-              <h2 class="modal-title">{{ title }}</h2>
+              <h2 :id="titleId" class="modal-title">{{ title }}</h2>
             </slot>
             <button
               v-if="!preventClose"
               class="modal-close-btn"
               @click="close"
-              aria-label="Close modal"
+              :aria-label="t('common.closeModal')"
             >
               &times;
             </button>

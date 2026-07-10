@@ -1,29 +1,66 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, nextTick, ref, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { routeTitle } from '@/router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
+import { useLocaleStore } from '@/stores/locale'
+
+const { t } = useI18n()
 
 const roomStore = useRoomStore()
 const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
 
-const showBackToRoom = computed(() => isInRoom.value && !isCompleted.value)
+// F2.8 — troca de rota move o foco pro <main> e anuncia o título via aria-live,
+// já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
+const route = useRoute()
+
+// F5.1/F5.2 — "Voltar à Sala" aparece quando há sala ativa e você NÃO está na rota
+// dela (na própria sala seria redundante) NEM na Home (lá o banner F5.4 já oferece o
+// retorno — dois CTAs idênticos na mesma tela). Sobra pra Histórico/404, onde o
+// header é o único caminho de volta em 1 clique. Sem o antigo `!isCompleted`: mesmo
+// concluída, o resumo continua em /room/:id, então o botão segue sendo a volta — e
+// vira "Ver Resumo" pra não prometer uma sessão ainda em andamento.
+const showBackToRoom = computed(
+  () => isInRoom.value && route.name !== 'room' && route.name !== 'home',
+)
+const backToRoom = computed(() =>
+  isCompleted.value
+    ? { icon: '📊', label: t('layout.viewSummary') }
+    : { icon: '🎯', label: t('layout.backToRoom') },
+)
+
+const mainRef = ref<HTMLElement | null>(null)
+
+// route.path (não route.name): troca de :id na mesma rota nomeada (ex.: sala -> outra
+// sala) também deve mover o foco — mesmo não havendo hoje nenhuma navegação assim.
+watch(
+  () => route.path,
+  async () => {
+    await nextTick()
+    mainRef.value?.focus()
+  },
+)
+
+// Título anunciado ao trocar de rota (inclui o código da Sala). Ver routeTitle no router.
+const announcedTitle = computed(() => routeTitle(route.meta, route.params))
 
 const themeStore = useThemeStore()
 const { preference: themePreference } = storeToRefs(themeStore)
 const themeIcon = computed(() =>
   themePreference.value === 'light' ? '☀️' : themePreference.value === 'dark' ? '🌙' : '🌗',
 )
-const themeLabel = computed(() => {
-  const name =
-    themePreference.value === 'light'
-      ? 'claro'
-      : themePreference.value === 'dark'
-        ? 'escuro'
-        : 'automático'
-  return `Tema: ${name}. Clique para alternar.`
-})
+const themeLabel = computed(() =>
+  t('layout.theme.toggle', { name: t(`layout.theme.${themePreference.value}`) }),
+)
+
+// F8 — toggle de idioma. O botão mostra o idioma ALVO (pra onde o clique leva),
+// não o atual: "EN" convida o leitor de inglês perdido na UI em português.
+const localeStore = useLocaleStore()
+const { locale } = storeToRefs(localeStore)
+const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
 </script>
 
 <template>
@@ -32,7 +69,7 @@ const themeLabel = computed(() => {
       <div class="navbar-content">
         <RouterLink to="/" class="navbar-brand">
           <span class="logo-icon">🃏</span>
-          <h1 class="logo-text">Planning Poker</h1>
+          <span class="logo-text">Planning Poker</span>
         </RouterLink>
         <nav class="navbar-nav">
           <RouterLink
@@ -40,11 +77,11 @@ const themeLabel = computed(() => {
             :to="`/room/${currentRoom?.id}`"
             class="nav-link nav-link-room"
           >
-            <span class="room-icon">🎯</span>
-            Voltar à Sala
+            <span class="room-icon" aria-hidden="true">{{ backToRoom.icon }}</span>
+            {{ backToRoom.label }}
           </RouterLink>
-          <RouterLink to="/" class="nav-link">Home</RouterLink>
-          <RouterLink to="/history" class="nav-link">Histórico</RouterLink>
+          <RouterLink to="/" class="nav-link">{{ t('layout.home') }}</RouterLink>
+          <RouterLink to="/history" class="nav-link">{{ t('layout.history') }}</RouterLink>
           <button
             type="button"
             class="theme-toggle"
@@ -54,11 +91,23 @@ const themeLabel = computed(() => {
           >
             <span aria-hidden="true">{{ themeIcon }}</span>
           </button>
+          <button
+            type="button"
+            class="theme-toggle locale-toggle"
+            :aria-label="t('layout.localeToggle')"
+            :title="t('layout.localeToggle')"
+            @click="localeStore.toggle()"
+          >
+            {{ localeTarget }}
+          </button>
         </nav>
       </div>
     </header>
 
-    <main class="main-content">
+    <!-- Live region IRMÃ do <main> (não filha): na navegação o foco vai pro <main>; se a
+         região estivesse dentro, o leitor de tela poderia anunciar o título duas vezes. -->
+    <p class="sr-only" aria-live="polite">{{ announcedTitle }}</p>
+    <main ref="mainRef" class="main-content" tabindex="-1">
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />
@@ -69,7 +118,7 @@ const themeLabel = computed(() => {
     <footer class="footer">
       <div class="footer-content">
         <p>
-          Planning Poker · feito por
+          Planning Poker · {{ t('layout.madeBy') }}
           <a
             href="https://github.com/adamsalves"
             target="_blank"
@@ -174,6 +223,15 @@ const themeLabel = computed(() => {
   padding: var(--space-6) var(--space-4);
 }
 
+/* F2.8: <main> recebe foco programático a cada navegação (landmark, não widget
+   interativo) — o anel de foco do navegador nesse caso só serve pra atrapalhar
+   visualmente; o benefício de a11y (reset de contexto pro leitor de tela) não
+   depende de mostrar o outline. Os elementos que o usuário realmente navega via
+   Tab mantêm seu próprio :focus-visible normalmente. */
+.main-content:focus {
+  outline: none;
+}
+
 .footer {
   border-top: 1px solid var(--c-border);
   background: var(--c-bg-soft);
@@ -241,6 +299,13 @@ const themeLabel = computed(() => {
 .theme-toggle:focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
+}
+
+/* F8 — toggle de idioma: mesma base do theme-toggle, mas com texto ("EN"/"PT"). */
+.locale-toggle {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 /* F4.5 — navbar responsivo: empilha brand/nav e permite quebra em telas estreitas */

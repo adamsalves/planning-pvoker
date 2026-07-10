@@ -1,14 +1,10 @@
 import { onScopeDispose, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { canMatchMedia } from '@/composables/matchMedia'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
-
-// Feature-detection: jsdom (testes) e ambientes SSR não têm matchMedia/window.
-function canMatchMedia(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-}
 
 function systemPrefersDark(): boolean {
   return canMatchMedia() && window.matchMedia(DARK_QUERY).matches

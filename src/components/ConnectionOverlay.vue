@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useConnectionStore } from '@/stores/connection'
 
 // Overlay full-screen temático que mascara o cold start (~1 min) e as reconexões
 // do backend no Render free. Dirigido pelo connection store; o RoomView trata
 // erro REAL de sessão à parte — aqui é só "o servidor está acordando/voltando".
+const { t } = useI18n()
 const connection = useConnectionStore()
 
 // Aparição com debounce p/ não piscar em conexões rápidas, e tempo mínimo visível
@@ -46,25 +48,21 @@ watch(
 
 // Copy rotativa — puramente decorativa (aria-hidden). O anúncio p/ leitores de tela
 // é estável (ariaMessage), pra não tagarelar a cada rotação.
-const ROTATING_COPY = [
-  'Embaralhando as cartas…',
-  'Preparando a mesa…',
-  'Reunindo o time…',
-  'Revisando as regras da sala…',
-]
-const DOWN_COPY = 'Isso está demorando mais que o normal, mas ainda estamos tentando…'
+const ROTATING_KEYS = ['shuffling', 'preparing', 'gathering', 'reviewing'] as const
 
 const copyIndex = ref(0)
 let rotateTimer: ReturnType<typeof setInterval> | undefined
 
 const message = computed(() =>
-  connection.isDown ? DOWN_COPY : (ROTATING_COPY[copyIndex.value % ROTATING_COPY.length] ?? ''),
+  connection.isDown
+    ? t('connection.down')
+    : t(
+        `connection.rotating.${ROTATING_KEYS[copyIndex.value % ROTATING_KEYS.length] ?? 'shuffling'}`,
+      ),
 )
 
 const ariaMessage = computed(() =>
-  connection.isDown
-    ? 'A conexão está demorando mais que o normal. Ainda tentando reconectar.'
-    : 'Conectando ao servidor. Aguarde um momento.',
+  connection.isDown ? t('connection.ariaDown') : t('connection.ariaConnecting'),
 )
 
 watch(visible, (isVisible) => {
@@ -75,7 +73,7 @@ watch(visible, (isVisible) => {
   if (isVisible) {
     copyIndex.value = 0
     rotateTimer = setInterval(() => {
-      copyIndex.value = (copyIndex.value + 1) % ROTATING_COPY.length
+      copyIndex.value = (copyIndex.value + 1) % ROTATING_KEYS.length
     }, ROTATE_MS)
   }
 })
@@ -102,7 +100,7 @@ onUnmounted(() => {
           </div>
         </div>
         <p class="overlay-message" aria-hidden="true">{{ message }}</p>
-        <p class="visually-hidden">{{ ariaMessage }}</p>
+        <p class="sr-only">{{ ariaMessage }}</p>
       </div>
     </div>
   </Transition>
@@ -165,18 +163,6 @@ onUnmounted(() => {
   color: var(--c-text);
   max-width: 32ch;
   min-height: 1.6em; /* reserva a linha p/ a copy não pular ao trocar */
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 @keyframes pp-float {

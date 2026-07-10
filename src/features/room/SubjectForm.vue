@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
 
@@ -16,17 +17,29 @@ const emit = defineEmits<{
   start: []
 }>()
 
+const { t } = useI18n()
+
 const subject = ref('')
-const error = ref('')
+// CHAVE i18n, não a tradução: traduzida no template, o erro visível troca de
+// idioma ao vivo (mesmo padrão dos forms da home).
+const errorKey = ref('')
 
 const canStart = computed(() => props.subjects.length >= 1 && props.playerCount >= 2)
 
+// Sempre explica por que "Iniciar" está desabilitado: a falta de subjects é o
+// pré-requisito (mostra primeiro), depois a falta de jogadores. Vazio = pode iniciar.
+const startHintKey = computed(() => {
+  if (props.subjects.length < 1) return 'room.setup.needSubjects'
+  if (props.playerCount < 2) return 'room.setup.waitingPlayers'
+  return ''
+})
+
 function handleAdd() {
   if (subject.value.trim().length < 2) {
-    error.value = 'O subject deve ter pelo menos 2 caracteres'
+    errorKey.value = 'room.setup.subjectMin'
     return
   }
-  error.value = ''
+  errorKey.value = ''
   emit('add', subject.value.trim())
   subject.value = ''
 }
@@ -37,37 +50,44 @@ function handleAdd() {
     <form @submit.prevent="handleAdd" class="add-form">
       <BaseInput
         v-model="subject"
-        label="Adicionar subject"
-        placeholder="Ex: Implementar endpoint de login"
-        :error="error"
+        :label="t('room.setup.addSubjectLabel')"
+        :placeholder="t('room.setup.addSubjectPlaceholder')"
+        :error="errorKey ? t(errorKey) : ''"
       />
-      <BaseButton type="submit" size="md">➕ Adicionar</BaseButton>
+      <BaseButton type="submit" size="md">{{ t('room.setup.addButton') }}</BaseButton>
     </form>
 
     <!-- Subject Backlog List -->
     <div v-if="subjects.length > 0" class="backlog">
-      <p class="backlog-title">📋 Backlog ({{ subjects.length }} subjects)</p>
+      <p class="backlog-title">{{ t('room.setup.backlogTitle', subjects.length) }}</p>
       <ul class="backlog-list">
         <li v-for="(item, index) in subjects" :key="index" class="backlog-item">
           <span class="backlog-index">{{ index + 1 }}.</span>
           <span class="backlog-text">{{ item }}</span>
-          <button class="remove-btn" @click="emit('remove', index)" title="Remover">✕</button>
+          <button
+            class="remove-btn"
+            @click="emit('remove', index)"
+            :title="t('room.setup.removeTitle')"
+            :aria-label="t('room.setup.removeSubject', { subject: item })"
+          >
+            ✕
+          </button>
         </li>
       </ul>
     </div>
 
     <!-- Empty state -->
     <div v-else class="empty-backlog">
-      <p>Adicione os subjects que serão votados nesta sessão</p>
+      <p>{{ t('room.setup.emptyBacklog') }}</p>
     </div>
 
     <!-- Start Session Button -->
     <div class="start-section">
       <BaseButton variant="primary" size="lg" block :disabled="!canStart" @click="emit('start')">
-        ▶️ Iniciar Sessão de Votação
+        {{ t('room.setup.startButton') }}
       </BaseButton>
-      <p v-if="subjects.length > 0 && playerCount < 2" class="start-hint">
-        ⏳ Aguardando mais jogadores entrarem na sala...
+      <p v-if="startHintKey" class="start-hint">
+        {{ t(startHintKey) }}
       </p>
     </div>
   </div>

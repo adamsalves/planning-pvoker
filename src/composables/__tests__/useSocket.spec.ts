@@ -38,6 +38,14 @@ function joinAck() {
   return ack
 }
 
+function castVoteAck() {
+  const call = vi.mocked(lastSocket().emit).mock.calls.find((c) => c[0] === 'cast_vote')
+  if (!call) throw new Error('cast_vote was not emitted')
+  const ack = call[2]
+  if (typeof ack !== 'function') throw new Error('cast_vote ack is not a function')
+  return ack
+}
+
 // Grab a socket-level handler (connect/disconnect/connect_error) registered via socket.on.
 function socketHandler(event: string) {
   const call = vi.mocked(lastSocket().on).mock.calls.find((c) => c[0] === event)
@@ -113,6 +121,17 @@ describe('useSocket', () => {
       { roomId: 'room-1', player: p, config: undefined },
       expect.any(Function),
     )
+
+    joinAck()({ success: true }) // resolve o join p/ limpar o timer de safety-net
+  })
+
+  it('emits leave_room with the room id (explicit exit, no ack needed)', () => {
+    const { leaveRoom, connect } = useSocket()
+    connect()
+
+    leaveRoom('room-1')
+
+    expect(lastSocket().emit).toHaveBeenCalledWith('leave_room', { roomId: 'room-1' })
   })
 
   it('emits cast_vote', () => {
@@ -122,11 +141,21 @@ describe('useSocket', () => {
 
     castVote('room-1', 'p1', 5)
 
-    expect(mockSocket.emit).toHaveBeenCalledWith('cast_vote', {
-      roomId: 'room-1',
-      playerId: 'p1',
-      value: 5,
-    })
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      'cast_vote',
+      { roomId: 'room-1', playerId: 'p1', value: 5 },
+      expect.any(Function),
+    )
+  })
+
+  it('rejects cast_vote when the server returns an error ack', async () => {
+    const { castVote, connect } = useSocket()
+    connect()
+    const promise = castVote('room-1', 'p1', 999)
+
+    castVoteAck()({ error: 'invalid_vote_for_deck' })
+
+    await expect(promise).rejects.toThrow('invalid_vote_for_deck')
   })
 
   it('emits start_session', () => {
@@ -191,6 +220,8 @@ describe('useSocket', () => {
       expect.objectContaining({ roomId: 'room-B', token: undefined }),
       expect.any(Function),
     )
+
+    joinAck()({ success: true }) // resolve o join p/ limpar o timer de safety-net
   })
 
   it('resends the stored token when rejoining the active room', () => {
@@ -206,15 +237,17 @@ describe('useSocket', () => {
       expect.objectContaining({ roomId: 'room-A', token: 'tok-A' }),
       expect.any(Function),
     )
+
+    joinAck()({ success: true }) // resolve o join p/ limpar o timer de safety-net
   })
 
   it('rejects when the server returns an error ack', async () => {
     const { joinRoom } = useSocket()
     const promise = joinRoom('room-1', player)
 
-    joinAck()({ error: 'Sessão inválida' })
+    joinAck()({ error: 'invalid_session' })
 
-    await expect(promise).rejects.toThrow('Sessão inválida')
+    await expect(promise).rejects.toThrow('invalid_session')
     // Typed so RoomView can tell a real server rejection from a connection failure.
     await expect(promise).rejects.toBeInstanceOf(JoinAckError)
   })

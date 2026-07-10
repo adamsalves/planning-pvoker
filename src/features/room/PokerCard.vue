@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   value: string | number
@@ -17,6 +18,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   select: [value: string | number]
 }>()
+
+const { t } = useI18n()
 
 const isSpecial = computed(() => props.value === '☕')
 
@@ -40,7 +43,7 @@ function handleClick() {
     ]"
     :disabled="disabled"
     @click="handleClick"
-    :aria-label="`Votar ${value}`"
+    :aria-label="t('room.voting.voteAria', { value })"
     :aria-pressed="selected"
   >
     <div class="card-inner">

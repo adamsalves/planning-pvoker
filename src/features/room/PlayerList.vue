@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Player } from '@/types'
+import { activePlayersOf, observersOf } from '@/utils/players'
 
 interface Props {
   players: Player[]
@@ -10,9 +12,11 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const { t } = useI18n()
+
 // Separar jogadores ativos dos espectadores
-const activePlayers = computed(() => props.players.filter((p) => p.role !== 'observer'))
-const observers = computed(() => props.players.filter((p) => p.role === 'observer'))
+const activePlayers = computed(() => activePlayersOf(props.players))
+const observers = computed(() => observersOf(props.players))
 
 function hasVoted(playerId: string): boolean {
   return playerId in props.votes
@@ -27,7 +31,7 @@ function getVote(playerId: string): string | number | undefined {
   <div class="player-list-wrapper">
     <!-- Active Players -->
     <div class="player-section">
-      <h4 class="section-title">Jogadores ({{ activePlayers.length }})</h4>
+      <h4 class="section-title">{{ t('room.players.title', { count: activePlayers.length }) }}</h4>
       <TransitionGroup name="player" tag="ul" class="player-list">
         <li
           v-for="player in activePlayers"
@@ -39,7 +43,10 @@ function getVote(playerId: string): string | number | undefined {
             <span class="player-avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="player-name">
               {{ player.name }}
-              <span v-if="player.role === 'admin'" class="admin-badge">👑</span>
+              <span v-if="player.role === 'admin'" class="admin-badge" aria-hidden="true">👑</span>
+              <span v-if="player.role === 'admin'" class="sr-only">{{
+                t('room.players.adminSr')
+              }}</span>
             </span>
           </div>
           <div class="player-status">
@@ -50,9 +57,13 @@ function getVote(playerId: string): string | number | undefined {
                 class="voted-badge"
                 key="voted"
               >
-                ✅
+                <span aria-hidden="true">✅</span
+                ><span class="sr-only">{{ t('room.players.voted') }}</span>
               </span>
-              <span v-else-if="status === 'voting'" class="pending-badge" key="pending"> ⏳ </span>
+              <span v-else-if="status === 'voting'" class="pending-badge" key="pending">
+                <span aria-hidden="true">⏳</span
+                ><span class="sr-only">{{ t('room.players.waitingVote') }}</span>
+              </span>
               <!-- Votos revelados: mostrar o valor -->
               <span
                 v-else-if="status === 'revealed' && hasVoted(player.id)"
@@ -69,7 +80,9 @@ function getVote(playerId: string): string | number | undefined {
 
     <!-- Observers -->
     <div v-if="observers.length > 0" class="player-section observers">
-      <h4 class="section-title">Espectadores ({{ observers.length }})</h4>
+      <h4 class="section-title">
+        {{ t('room.players.observersTitle', { count: observers.length }) }}
+      </h4>
       <ul class="player-list">
         <li v-for="player in observers" :key="player.id" class="player-item observer-item">
           <div class="player-info">
@@ -78,7 +91,8 @@ function getVote(playerId: string): string | number | undefined {
             }}</span>
             <span class="player-name">{{ player.name }}</span>
           </div>
-          <span class="observer-badge">👁️</span>
+          <span class="observer-badge" aria-hidden="true">👁️</span>
+          <span class="sr-only">{{ t('room.players.observerSr') }}</span>
         </li>
       </ul>
     </div>

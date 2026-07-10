@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { useHistoryStore } from '@/stores/history'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseCard from '@/components/BaseCard.vue'
 import RoundSummary from './RoundSummary.vue'
 import SessionChart from './SessionChart.vue'
 
+const { t, locale } = useI18n()
+
 const historyStore = useHistoryStore()
 const sessions = computed(() => historyStore.sessions)
 
+// locale.value lido durante o render → a data re-formata na troca de idioma.
 function formatDate(isoString: string) {
-  return new Intl.DateTimeFormat('pt-BR', {
+  return new Intl.DateTimeFormat(locale.value, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -21,14 +25,14 @@ function formatDate(isoString: string) {
 <template>
   <div class="history-container">
     <header class="history-header">
-      <h1 class="page-title">Histórico de Sessões</h1>
-      <p class="page-subtitle">Suas rodadas de Planning Poker anteriores</p>
+      <h1 class="page-title">{{ t('history.title') }}</h1>
+      <p class="page-subtitle">{{ t('history.subtitle') }}</p>
     </header>
 
     <div v-if="sessions.length === 0" class="empty-state">
       <span class="empty-icon">📂</span>
-      <h2>Nenhum histórico encontrado</h2>
-      <p>Você ainda não participou de sessões com rodadas finalizadas.</p>
+      <h2>{{ t('history.emptyTitle') }}</h2>
+      <p>{{ t('history.emptyBody') }}</p>
     </div>
 
     <div v-else class="sessions-list">
@@ -36,12 +40,16 @@ function formatDate(isoString: string) {
         <template #header>
           <div class="session-header">
             <div>
-              <h2 class="session-title">Sala: {{ session.roomId }}</h2>
+              <h2 class="session-title">{{ t('history.roomLabel', { id: session.roomId }) }}</h2>
               <span class="session-date">{{ formatDate(session.date) }}</span>
             </div>
             <div class="session-meta">
-              <span class="badge">Baralho: {{ session.deckType }}</span>
-              <span class="badge accent">{{ session.rounds.length }} Rodadas</span>
+              <span class="badge">{{
+                t('history.deckLabel', { name: t(`decks.${session.deckType}`) })
+              }}</span>
+              <span class="badge accent">{{
+                t('history.roundsCount', session.rounds.length)
+              }}</span>
             </div>
           </div>
         </template>
@@ -164,17 +172,6 @@ function formatDate(isoString: string) {
 @media (max-width: 768px) {
   .session-content {
     grid-template-columns: 1fr;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 </style>

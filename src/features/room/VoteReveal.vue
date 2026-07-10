@@ -1,66 +1,29 @@
 <script setup lang="ts">
-import { computed, watch, onMounted, ref } from 'vue'
+import { watch, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import confetti from 'canvas-confetti'
+import { prefersReducedMotion } from '@/composables/matchMedia'
+import { useVoteStats } from '@/composables/useVoteStats'
 
 interface Props {
   votes: Record<string, string | number>
-  playerCount: number // apenas jogadores ativos (sem observers)
+  // Apenas jogadores ativos AGORA (sem observers). Omitir em recaps de rodadas
+  // passadas: quem votou pode já ter saído e o denominador atual mentiria ("2/1").
+  playerCount?: number
+  celebrate?: boolean // dispara confetti no consenso (default true); desligado no resumo
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  celebrate: true,
+})
+
+const { t } = useI18n()
 
 const hasConfettiPlayed = ref(false)
 
-// Calcular estatísticas dos votos
-const numericVotes = computed(() => {
-  return Object.values(props.votes).filter((v): v is number => typeof v === 'number')
-})
-
-const average = computed(() => {
-  if (numericVotes.value.length === 0) return null
-  const sum = numericVotes.value.reduce((acc, v) => acc + v, 0)
-  return Math.round((sum / numericVotes.value.length) * 10) / 10
-})
-
-const min = computed(() => {
-  if (numericVotes.value.length === 0) return null
-  return Math.min(...numericVotes.value)
-})
-
-const max = computed(() => {
-  if (numericVotes.value.length === 0) return null
-  return Math.max(...numericVotes.value)
-})
-
-const hasConsensus = computed(() => {
-  const values = Object.values(props.votes)
-  if (values.length === 0) return false
-  return values.every((v) => v === values[0])
-})
-
-const consensusValue = computed(() => {
-  if (!hasConsensus.value) return null
-  const values = Object.values(props.votes)
-  return values[0] ?? null
-})
-
-// Vote distribution: quantas vezes cada valor aparece
-const distribution = computed(() => {
-  const dist: Record<string, number> = {}
-  for (const vote of Object.values(props.votes)) {
-    const key = String(vote)
-    dist[key] = (dist[key] || 0) + 1
-  }
-  // Ordenar por contagem desc
-  return Object.entries(dist)
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count)
-})
-
-const maxCount = computed(() => {
-  if (distribution.value.length === 0) return 0
-  return Math.max(...distribution.value.map((d) => d.count))
-})
+// Estatísticas dos votos — fonte única (useVoteStats).
+const { average, min, max, hasConsensus, consensusValue, distribution, maxCount, count } =
+  useVoteStats(() => props.votes)
 
 // Confetti quando há consenso
 function fireConfetti() {
@@ -87,16 +50,16 @@ function fireConfetti() {
 
 // Disparar confetti na primeira renderização se houver consenso
 onMounted(() => {
-  if (hasConsensus.value && !hasConfettiPlayed.value) {
+  if (props.celebrate && hasConsensus.value && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
-    fireConfetti()
+    if (!prefersReducedMotion()) fireConfetti()
   }
 })
 
 watch(hasConsensus, (newVal) => {
-  if (newVal && !hasConfettiPlayed.value) {
+  if (props.celebrate && newVal && !hasConfettiPlayed.value) {
     hasConfettiPlayed.value = true
-    fireConfetti()
+    if (!prefersReducedMotion()) fireConfetti()
   }
 })
 </script>
@@ -105,33 +68,35 @@ watch(hasConsensus, (newVal) => {
   <div class="vote-reveal animate-slide-up">
     <!-- Consensus Banner -->
     <div v-if="hasConsensus" class="consensus-banner">
-      🎉 <strong>Consenso!</strong> Todos votaram
+      🎉 <strong>{{ t('room.reveal.consensus') }}</strong> {{ t('room.reveal.allVoted') }}
       <span class="consensus-value">{{ consensusValue }}</span>
     </div>
 
     <!-- Stats Grid -->
     <div class="stats-grid">
       <div v-if="average !== null" class="stat-card">
-        <span class="stat-label">Média</span>
+        <span class="stat-label">{{ t('stats.average') }}</span>
         <span class="stat-value">{{ average }}</span>
       </div>
       <div v-if="min !== null" class="stat-card">
-        <span class="stat-label">Mínimo</span>
+        <span class="stat-label">{{ t('stats.min') }}</span>
         <span class="stat-value">{{ min }}</span>
       </div>
       <div v-if="max !== null" class="stat-card">
-        <span class="stat-label">Máximo</span>
+        <span class="stat-label">{{ t('stats.max') }}</span>
         <span class="stat-value">{{ max }}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Votos</span>
-        <span class="stat-value">{{ Object.keys(votes).length }}/{{ playerCount }}</span>
+        <span class="stat-label">{{ t('stats.votes') }}</span>
+        <span class="stat-value">{{
+          playerCount != null ? `${count}/${playerCount}` : count
+        }}</span>
       </div>
     </div>
 
     <!-- Distribution -->
     <div v-if="distribution.length > 0" class="distribution">
-      <h4 class="distribution-title">Distribuição</h4>
+      <h4 class="distribution-title">{{ t('room.reveal.distribution') }}</h4>
       <div class="distribution-bars">
         <div v-for="item in distribution" :key="item.value" class="bar-row">
           <span class="bar-label">{{ item.value }}</span>

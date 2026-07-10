@@ -22,5 +22,18 @@ export default defineConfigWithVueTs(
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
+  {
+    name: 'app/rule-overrides',
+    rules: {
+      // Empty interfaces that extend a single type are intentional: module
+      // augmentation (e.g. src/i18n/vue-i18n.d.ts) carries the extended schema
+      // and declares no members of its own.
+      '@typescript-eslint/no-empty-object-type': [
+        'error',
+        { allowInterfaces: 'with-single-extends' },
+      ],
+    },
+  },
+
   skipFormatting,
 )

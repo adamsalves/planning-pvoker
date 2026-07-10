@@ -24,6 +24,9 @@ feat|fix|chore/*  →  PR  →  develop  →  PR de release  →  main (produç�
 - `develop` é a branch de integração (staging).
 - `main` é produção: só recebe via **PR de release** a partir da `develop`.
 - Nunca commitar direto em `develop` ou `main`.
+- **Squash-merge** nos PRs de feature → `develop` (1 Conventional Commit por PR). Evita
+  changelog duplicado: o release-please parseia tanto o commit da branch quanto o título do PR
+  embutido no merge commit — com squash sobra só uma entrada por feature.
 
 ## Versionamento (SemVer)
 
@@ -46,6 +49,9 @@ changelog da próxima versão).
 5. O **release-please** (ver "Automação") abre/atualiza um PR de release que faz o
    bump de versão + atualiza o `CHANGELOG.md`; ao mergear esse PR, ele cria a
    **tag `vX.Y.Z`** e a **GitHub Release** com as notas.
+6. **Back-merge `main → develop`** (PR) logo após o release: traz o bump de versão + o
+   `CHANGELOG.md` que o release-please escreveu só na `main` de volta pra `develop`, evitando
+   drift entre as branches e conflitos no próximo PR de release.
 
 ## Automação (release-please)
 
@@ -56,6 +62,11 @@ roda via GitHub Action a cada push na `main` e cuida de:
 - manter um PR de release com o `CHANGELOG.md` e o bump de versão
   (`package.json` da raiz + `server/package.json`);
 - ao mergear o PR de release, criar a **tag** e a **GitHub Release**.
+
+> **CI no PR de release:** o PR aberto pelo release-please usa o `GITHUB_TOKEN`, que por
+> segurança **não dispara** os workflows de CI (eles ficam `action_required` / não rodam). Como
+> esse PR só altera versão/changelog e o código já passou no CI no push da `main`, isso **não
+> bloqueia** o merge. Se quiser CI também nesses PRs, configure um **PAT** dedicado no release-please.
 
 > **Bootstrap:** a **v1.0.0** é criada manualmente (esta entrada de changelog +
 > tag), porque é o primeiro release. O release-please é ativado logo depois e passa
