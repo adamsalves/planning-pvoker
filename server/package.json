@@ -15,6 +15,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "socket.io": "^4.8.3",

@@ -3,6 +3,7 @@ import http from 'http'
 import { Server, type DefaultEventsMap } from 'socket.io'
 import cors, { CorsOptions } from 'cors'
 import { RoomManager } from './roomManager'
+import { createPersistence } from './persistence'
 import { setupSocketEvents } from './events'
 import { logger } from './logger'
 import type { SocketData } from './types'
@@ -67,11 +68,10 @@ const io = new Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, Sock
   cors: corsOptions,
 })
 
-// Initialize central state manager
-const roomManager = new RoomManager()
-
-// Setup all socket handlers
-const disposeSocketEvents = setupSocketEvents(io, roomManager)
+// Initialize central state manager with persistence: Upstash Redis when the
+// env vars are set (write-through snapshots), otherwise an in-memory no-op that
+// preserves the original behavior.
+const roomManager = new RoomManager(createPersistence())
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -80,17 +80,36 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 3001
 
-server.listen(PORT, () => {
-  logger.info(`🚀 Server listening on port ${PORT}`)
-  logger.info(`Allowed CORS origins: ${Array.from(allowedOrigins).join(', ')}`)
-})
+async function start() {
+  // Rehydrate persisted rooms/tokens BEFORE accepting connections, so a client
+  // reconnecting right after a redeploy finds its room. A failure here must NOT
+  // abort the boot — degrade to empty in-memory state and keep serving.
+  try {
+    await roomManager.hydrate()
+  } catch (err) {
+    logger.error(`Hydrate failed — starting with empty state: ${String(err)}`)
+  }
 
-// Graceful shutdown (e.g. SIGTERM on container redeploy): clear pending grace
-// timers and close connections so the process can exit cleanly.
-const shutdown = (signal: string) => {
-  logger.info(`👋 ${signal} received — shutting down`)
-  disposeSocketEvents()
-  io.close(() => process.exit(0))
+  // Setup all socket handlers (after hydrate, before we start listening).
+  const disposeSocketEvents = setupSocketEvents(io, roomManager)
+
+  server.listen(PORT, () => {
+    logger.info(`🚀 Server listening on port ${PORT}`)
+    logger.info(`Allowed CORS origins: ${Array.from(allowedOrigins).join(', ')}`)
+  })
+
+  // Graceful shutdown (e.g. SIGTERM on container redeploy): clear pending grace
+  // timers and close connections so the process can exit cleanly.
+  const shutdown = (signal: string) => {
+    logger.info(`👋 ${signal} received — shutting down`)
+    disposeSocketEvents()
+    io.close(() => process.exit(0))
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 }
-process.on('SIGTERM', () => shutdown('SIGTERM'))
-process.on('SIGINT', () => shutdown('SIGINT'))
+
+start().catch((err) => {
+  logger.error(`Fatal startup error: ${String(err)}`)
+  process.exit(1)
+})

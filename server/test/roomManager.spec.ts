@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { RoomManager } from '../src/roomManager'
-import type { Player, RoomConfig } from '../src/types'
+import type { Player, RoomConfig, Room } from '../src/types'
+import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
 const config: RoomConfig = { deckType: 'fibonacci', autoReveal: false }
 const admin: Player = { id: 'a1', name: 'Admin', role: 'admin' }
@@ -236,5 +237,197 @@ describe('revealVotes / resetSession', () => {
     expect(room?.phase).toBe('setup')
     expect(room?.subjects).toEqual([])
     expect(room?.currentRoundIndex).toBe(-1)
+  })
+})
+
+// Deep-clone a room so a recorded snapshot isn't retro-changed by a later mutation
+// (lets us prove coalescing persists the LATEST state, not a shared reference).
+function cloneRoom(room: Room): Room {
+  return {
+    ...room,
+    config: { ...room.config },
+    players: room.players.map((p) => ({ ...p })),
+    subjects: [...room.subjects],
+    rounds: room.rounds.map((r) => ({ ...r, votes: { ...r.votes } })),
+  }
+}
+
+// Best-effort persistence double: records every call so tests can assert the
+// RoomManager mirrors each mutation. Reads come from `seed` (for hydrate).
+class RecordingPersistence implements RoomPersistence {
+  savedRooms: Room[] = []
+  deletedRoomIds: string[] = []
+  savedTokens: Array<{ roomId: string; playerId: string; token: string }> = []
+  deletedTokens: Array<{ roomId: string; playerId: string }> = []
+  seed: PersistenceSnapshot = { rooms: [], tokens: new Map() }
+  rejectSaveRoom = false
+  rejectSaveToken = false
+
+  loadAll(): Promise<PersistenceSnapshot> {
+    return Promise.resolve(this.seed)
+  }
+  saveRoom(room: Room): Promise<void> {
+    if (this.rejectSaveRoom) return Promise.reject(new Error('redis down'))
+    this.savedRooms.push(cloneRoom(room))
+    return Promise.resolve()
+  }
+  deleteRoom(roomId: string): Promise<void> {
+    this.deletedRoomIds.push(roomId)
+    return Promise.resolve()
+  }
+  saveToken(roomId: string, playerId: string, token: string): Promise<void> {
+    if (this.rejectSaveToken) return Promise.reject(new Error('redis down'))
+    this.savedTokens.push({ roomId, playerId, token })
+    return Promise.resolve()
+  }
+  deleteToken(roomId: string, playerId: string): Promise<void> {
+    this.deletedTokens.push({ roomId, playerId })
+    return Promise.resolve()
+  }
+  get lastRoom(): Room | undefined {
+    return this.savedRooms.at(-1)
+  }
+}
+
+// Lets the fire-and-forget write-through microtasks (and any coalesced re-save) run.
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+describe('write-through persistence', () => {
+  let persistence: RecordingPersistence
+  let manager: RoomManager
+
+  beforeEach(() => {
+    persistence = new RecordingPersistence()
+    manager = new RoomManager(persistence)
+  })
+
+  it('persists a snapshot on createRoom', async () => {
+    manager.createRoom('r1', admin, config)
+    await tick()
+    expect(persistence.lastRoom?.id).toBe('r1')
+    expect(persistence.lastRoom?.adminId).toBe('a1')
+  })
+
+  it('persists the latest state after a chain of mutations', async () => {
+    manager.createRoom('r1', admin, config)
+    manager.joinRoom('r1', member)
+    manager.addSubjects('r1', ['A'])
+    manager.startSession('r1')
+    manager.castVote('r1', 'm1', 5)
+    await tick()
+    const last = persistence.lastRoom
+    expect(last?.phase).toBe('voting')
+    expect(last?.rounds[0].votes['m1']).toBe(5)
+    expect(last?.players.map((p) => p.id)).toEqual(['a1', 'm1'])
+  })
+
+  it('coalesces a burst but persists the LATEST state', async () => {
+    manager.createRoom('r1', admin, config)
+    // Rapid-fire mutations while the first save is still in flight.
+    manager.addSubjects('r1', ['A'])
+    manager.addSubjects('r1', ['B'])
+    manager.addSubjects('r1', ['C'])
+    await tick()
+    await tick()
+    expect(persistence.lastRoom?.subjects).toEqual(['A', 'B', 'C'])
+    // Fewer saves than mutations: the burst collapsed into in-flight + one re-save.
+    expect(persistence.savedRooms.length).toBeLessThan(4)
+  })
+
+  it('persists a delete when the last player leaves', async () => {
+    manager.createRoom('r1', admin, config)
+    await tick()
+    manager.leaveRoom('r1', 'a1') // empties -> room destroyed
+    await tick()
+    expect(persistence.deletedRoomIds).toContain('r1')
+  })
+
+  it('persists the reduced room (not a delete) when a non-last player leaves', async () => {
+    manager.createRoom('r1', admin, config)
+    manager.joinRoom('r1', member)
+    await tick()
+    persistence.savedRooms.length = 0
+    manager.leaveRoom('r1', 'm1')
+    await tick()
+    expect(persistence.deletedRoomIds).not.toContain('r1')
+    expect(persistence.lastRoom?.players.map((p) => p.id)).toEqual(['a1'])
+  })
+
+  it('persists a freshly minted token, and does not re-persist a reused one', async () => {
+    const t1 = manager.getOrCreateToken('r1', 'a1')
+    manager.getOrCreateToken('r1', 'a1') // reuse
+    await tick()
+    const forA1 = persistence.savedTokens.filter((s) => s.playerId === 'a1')
+    expect(forA1).toHaveLength(1)
+    expect(forA1[0].token).toBe(t1)
+  })
+
+  it('persists token removal on leaveRoom (via clearToken)', async () => {
+    manager.createRoom('r1', admin, config)
+    manager.joinRoom('r1', member)
+    manager.getOrCreateToken('r1', 'm1')
+    await tick()
+    manager.leaveRoom('r1', 'm1')
+    await tick()
+    expect(persistence.deletedTokens).toContainEqual({ roomId: 'r1', playerId: 'm1' })
+  })
+
+  it('a rejected save does not break the mutation nor throw', async () => {
+    persistence.rejectSaveRoom = true
+    const room = manager.createRoom('r1', admin, config)
+    expect(room.id).toBe('r1') // mutation still returns synchronously
+    expect(manager.getRoom('r1')).toBe(room) // still served from memory
+    await tick() // rejection is caught + logged, no unhandled rejection
+  })
+
+  it('swallows a rejected token save (in-memory token intact)', async () => {
+    persistence.rejectSaveToken = true
+    const token = manager.getOrCreateToken('r1', 'a1')
+    expect(token).toBeTruthy()
+    expect(manager.hasToken('r1', 'a1')).toBe(true) // still served from memory
+    await tick() // rejection is caught + logged, no unhandled rejection
+  })
+
+  it('keeps persisting after a save rejection (in-flight state is cleared)', async () => {
+    persistence.rejectSaveRoom = true
+    manager.createRoom('r1', admin, config) // this save rejects
+    await tick()
+    // A later mutation must STILL schedule a save — proving the failed save
+    // cleared savingRooms in its finally block (otherwise it'd stay "in flight").
+    persistence.rejectSaveRoom = false
+    manager.addSubjects('r1', ['A'])
+    await tick()
+    expect(persistence.lastRoom?.subjects).toEqual(['A'])
+  })
+})
+
+describe('hydrate', () => {
+  it('rebuilds rooms and tokens from persistence', async () => {
+    const persistence = new RecordingPersistence()
+    const seededRoom: Room = {
+      id: 'r9',
+      adminId: 'a1',
+      config,
+      players: [admin],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: {} }],
+      currentRoundIndex: 0,
+    }
+    persistence.seed = { rooms: [seededRoom], tokens: new Map([['r9::a1', 'tok-9']]) }
+    const manager = new RoomManager(persistence)
+
+    expect(manager.getRoom('r9')).toBeUndefined() // nothing before hydrate
+    await manager.hydrate()
+
+    expect(manager.getRoom('r9')?.phase).toBe('voting')
+    expect(manager.hasToken('r9', 'a1')).toBe(true)
+    expect(manager.verifyToken('r9', 'a1', 'tok-9')).toBe(true)
+  })
+
+  it('is a no-op under the default (Null) persistence', async () => {
+    const bare = new RoomManager()
+    await bare.hydrate()
+    expect(bare.getRoom('anything')).toBeUndefined()
   })
 })
