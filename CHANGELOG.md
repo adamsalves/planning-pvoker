@@ -5,6 +5,13 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O formato se
 [SemVer](https://semver.org/lang/pt-BR/). A partir da v1.0.0, as entradas abaixo
 desta são geradas automaticamente pelo [release-please](./RELEASE.md).
 
+## [1.3.0](https://github.com/adamsalves/planning-pvoker/compare/v1.2.0...v1.3.0) (2026-07-11)
+
+
+### Features
+
+* **server:** persistência write-through com Upstash Redis (6.6) ([#46](https://github.com/adamsalves/planning-pvoker/issues/46)) ([f631490](https://github.com/adamsalves/planning-pvoker/commit/f631490666c4a47c45be6928960cf6065ff7511c))
+
 ## [1.2.0](https://github.com/adamsalves/planning-pvoker/compare/v1.1.0...v1.2.0) (2026-07-10)
 
 
