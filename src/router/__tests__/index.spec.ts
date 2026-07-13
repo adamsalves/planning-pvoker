@@ -16,8 +16,8 @@ describe('router', () => {
   })
 
   it('updates document.title after navigating', async () => {
-    await router.push({ name: 'history' })
-    expect(document.title).toBe('Histórico · Planning Poker')
+    await router.push('/unknown/route')
+    expect(document.title).toBe('Não encontrado · Planning Poker')
 
     await router.push({ name: 'home' })
     expect(document.title).toBe('Início · Planning Poker')

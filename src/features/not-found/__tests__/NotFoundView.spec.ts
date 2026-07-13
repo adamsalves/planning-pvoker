@@ -20,11 +20,11 @@ describe('router catch-all → 404 (F4.3)', () => {
   it('resolves unknown paths to the not-found route (antes = tela branca)', () => {
     expect(router.resolve('/definitely/not/a/route').name).toBe('not-found')
     expect(router.resolve('/room').name).toBe('not-found') // /room sem :id não casa
+    expect(router.resolve('/history').name).toBe('not-found') // rota removida (F6.2)
   })
 
   it('still resolves the known routes normally', () => {
     expect(router.resolve('/').name).toBe('home')
     expect(router.resolve('/room/abc123').name).toBe('room')
-    expect(router.resolve('/history').name).toBe('history')
   })
 })
