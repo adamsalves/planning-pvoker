@@ -91,12 +91,6 @@ test.describe('Planning Poker E2E Flow', () => {
     await adminPage.click('text=Sair da Sala')
     await adminPage.waitForURL('/')
 
-    // Check history
-    await adminPage.click('a:has-text("Histórico")')
-    await adminPage.waitForURL('/history')
-    await expect(adminPage.locator('text=Sala: ' + roomId)).toBeVisible()
-    await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
-
     // Close contexts
     await adminContext.close()
     await memberContext.close()

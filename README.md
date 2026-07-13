@@ -28,13 +28,13 @@ Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com
     ├── components/          → Componentes atômicos (BaseButton, BaseCard, BaseInput, BaseModal)
     ├── composables/         → Lógica reutilizável (useRoom, useSocket)
     ├── features/
-    │   ├── room/            → Sala de votação (8 componentes)
-    │   └── history/         → Histórico de sessões com gráficos
+    │   ├── home/            → Tela inicial (criar/entrar na sala)
+    │   ├── room/            → Sala de votação
+    │   └── not-found/       → Página 404
     ├── layouts/             → Layout principal (Navbar + RouterView animado)
     ├── router/              → Configuração de rotas (100% lazy-loaded)
-    ├── stores/              → Stores Pinia (room, user, history)
-    ├── types/               → Interfaces TypeScript do domínio
-    └── views/               → Página inicial (HomeView)
+    ├── stores/              → Stores Pinia (room, user, connection, theme, locale)
+    └── types/               → Interfaces TypeScript do domínio
 ```
 
 ## 🚀 Rodando o Projeto Localmente

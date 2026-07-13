@@ -27,13 +27,13 @@ src/
 ├── components/      → Componentes reutilizáveis (BaseButton, BaseCard…)
 ├── composables/     → Lógica reutilizável (useRoom, useWebSocket…)
 ├── features/        → Módulos por feature
+│   ├── home/        → Tela inicial (criar/entrar)
 │   ├── room/        → Componentes e lógica da sala
-│   └── history/     → Histórico de rodadas
+│   └── not-found/   → Página 404
 ├── layouts/         → Layouts base (DefaultLayout)
 ├── router/          → Configuração de rotas
 ├── stores/          → Stores Pinia
-├── types/           → Interfaces TypeScript globais
-└── views/           → Páginas (HomeView, RoomView, HistoryView)
+└── types/           → Interfaces TypeScript globais
 ```
 
 ### Conceitos Praticados — Fase 1
@@ -51,7 +51,7 @@ Vite usa ESModules nativos do browser em dev, eliminando o bundling durante dese
 {
   path: '/',
   name: 'home',
-  component: () => import('../views/HomeView.vue'), // lazy loaded
+  component: () => import('../features/home/HomeView.vue'), // lazy loaded
 },
 {
   path: '/room/:id',
@@ -59,9 +59,10 @@ Vite usa ESModules nativos do browser em dev, eliminando o bundling durante dese
   component: () => import('../features/room/RoomView.vue'), // lazy loaded
 },
 {
-  path: '/history',
-  name: 'history',
-  component: () => import('../features/history/HistoryView.vue'), // lazy loaded
+  // catch-all → 404
+  path: '/:pathMatch(.*)*',
+  name: 'not-found',
+  component: () => import('../features/not-found/NotFoundView.vue'), // lazy loaded
 }
 ```
 
