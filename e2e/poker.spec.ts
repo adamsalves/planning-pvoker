@@ -14,9 +14,9 @@ test.describe('Planning Poker E2E Flow', () => {
     await adminPage.goto('/')
     await expect(adminPage).toHaveTitle(/Planning Poker/)
 
-    // Fill Create Room form
-    await adminPage.fill('input[placeholder="Ex: João"]', 'ScrumMaster')
-    await adminPage.click('button:has-text("🚀 Criar Sala")')
+    // Fill Create Room form (só o form "Criar" está montado → label "Seu nome" é único aqui)
+    await adminPage.getByLabel('Seu nome').fill('ScrumMaster')
+    await adminPage.getByRole('button', { name: '🚀 Criar Sala' }).click()
 
     // Wait to enter room
     await adminPage.waitForURL(/\/room\//)
@@ -26,8 +26,8 @@ test.describe('Planning Poker E2E Flow', () => {
     expect(roomId).not.toBe('')
 
     // -- ADMIN ADDS SUBJECTS (setup phase) --
-    await adminPage.fill('input[placeholder="Ex: Implementar endpoint de login"]', 'Fix CSS bugs')
-    await adminPage.click('button:has-text("➕ Adicionar")')
+    await adminPage.getByLabel('Adicionar subject').fill('Fix CSS bugs')
+    await adminPage.getByRole('button', { name: '➕ Adicionar' }).click()
 
     // Verify subject was added to backlog (plural nativo do i18n → singular em 1)
     await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
@@ -35,16 +35,17 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- MEMBER JOINS ROOM --
     await memberPage.goto('/')
-    await memberPage.click('button:has-text("Entrar na Sala")')
+    // A aba "Entrar na Sala" (exact: o botão de submit é "🔗 Entrar na Sala", substring).
+    await memberPage.getByRole('button', { name: 'Entrar na Sala', exact: true }).click()
 
-    // Wait for the join room form to appear (tab transition)
-    await memberPage.waitForSelector('input[placeholder="Ex: Maria"]', { state: 'visible' })
+    // "Código da sala" só existe no form de entrar → sinaliza que a troca de aba concluiu.
+    await expect(memberPage.getByLabel('Código da sala')).toBeVisible()
 
-    // Fill Join Room form
-    await memberPage.fill('input[placeholder="Ex: Maria"]', 'Dev 1')
-    await memberPage.fill('input[placeholder="Ex: a1b2c3d4"]', roomId)
+    // Fill Join Room form (o Transition out-in desmonta o "Criar" → "Seu nome" é único).
+    await memberPage.getByLabel('Seu nome').fill('Dev 1')
+    await memberPage.getByLabel('Código da sala').fill(roomId)
     // Role defaults to member, so we just join
-    await memberPage.click('button:has-text("🔗 Entrar na Sala")', { force: true })
+    await memberPage.getByRole('button', { name: '🔗 Entrar na Sala' }).click({ force: true })
 
     await memberPage.waitForURL(roomUrl)
 
@@ -52,7 +53,7 @@ test.describe('Planning Poker E2E Flow', () => {
     await expect(memberPage.locator('text=Fix CSS bugs')).toBeVisible()
 
     // -- ADMIN STARTS SESSION --
-    await adminPage.click('button:has-text("▶️ Iniciar Sessão de Votação")')
+    await adminPage.getByRole('button', { name: '▶️ Iniciar Sessão de Votação' }).click()
 
     // Both should see the round header with "Fix CSS bugs"
     await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
@@ -62,8 +63,9 @@ test.describe('Planning Poker E2E Flow', () => {
     await expect(adminPage.locator('text=Subject 1/1')).toBeVisible()
 
     // -- MEMBER VOTES --
-    // Deck Fibonacci => carta "5", alvejada pelo nome acessível (aria-label "Votar 5").
-    const voteCard = memberPage.getByRole('button', { name: 'Votar 5' })
+    // Deck Fibonacci => carta "5", pelo nome acessível EXATO (aria-label "Votar 5"; exact
+    // blinda contra decks futuros com valores como "55").
+    const voteCard = memberPage.getByRole('button', { name: 'Votar 5', exact: true })
     await expect(voteCard).toBeVisible()
     await voteCard.click()
 
@@ -72,7 +74,7 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- ADMIN REVEALS --
     await adminPage.waitForTimeout(500)
-    await adminPage.click('button:has-text("👁️ Revelar Votos")')
+    await adminPage.getByRole('button', { name: '👁️ Revelar Votos' }).click()
 
     // -- VERIFY REVEAL --
     // A rodada revelada aparece na aba "Votação" E na "Resumo (1)" (F6.1; ambas ficam
@@ -84,7 +86,7 @@ test.describe('Planning Poker E2E Flow', () => {
     await expect(memberPage.locator('#room-panel-voting').getByText('Consenso!')).toBeVisible()
 
     // -- ADMIN FINISHES SESSION (last subject) --
-    await adminPage.click('button:has-text("✅ Finalizar Sessão")')
+    await adminPage.getByRole('button', { name: '✅ Finalizar Sessão' }).click()
 
     // Should see session summary
     await expect(adminPage.locator('text=Sessão Concluída!')).toBeVisible()

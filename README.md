@@ -84,6 +84,8 @@ npx playwright install chromium   # Primeira vez
 npm run test:e2e
 ```
 
+> ⚠️ O e2e também roda no `npm run validate`, que é o hook de **pre-push** (Husky). Ou seja, o `npx playwright install chromium` acima é pré-requisito para dar `git push` — sem os browsers, o pre-push falha. O CI **não** roda o e2e (executa type-check/lint/unit/build separadamente), então isso não afeta o pipeline.
+
 ---
 
 ## 🛠️ Stack
