@@ -18,7 +18,7 @@
     "test:unit": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "validate": "oxlint . && eslint . && npm run type-check && vitest run && npm --prefix server run build && npm --prefix server test",
+    "validate": "oxlint . && eslint . && npm run type-check && vitest run && npm --prefix server run build && npm --prefix server test && playwright test --reporter=line",
     "prepare": "husky"
   },
   "dependencies": {
