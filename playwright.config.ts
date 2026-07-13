@@ -14,6 +14,10 @@ export default defineConfig({
     actionTimeout: 0,
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
+    // A UI detecta o idioma por navigator.language (F8/i18n). O Chrome do Playwright
+    // usa en-US por padrão → sem isto a app subiria em inglês e os seletores em
+    // português falhariam. Fixa pt-BR para o e2e ser determinístico.
+    locale: 'pt-BR',
   },
 
   projects: [
