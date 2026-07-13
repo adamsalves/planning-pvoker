@@ -10,14 +10,12 @@ export const ptBR = {
   routes: {
     home: 'Início',
     room: 'Sala',
-    history: 'Histórico',
     notFound: 'Não encontrado',
   },
   layout: {
     backToRoom: 'Voltar à Sala',
     viewSummary: 'Ver Resumo',
     home: 'Home',
-    history: 'Histórico',
     madeBy: 'feito por',
     theme: {
       light: 'claro',
@@ -101,7 +99,6 @@ export const ptBR = {
       button: 'Sair da Sala',
       confirmTitle: 'Sair da sala?',
       confirmBody: 'Você vai sair desta sala e voltar à tela inicial.',
-      confirmHistoryNote: 'O resumo desta sessão fica salvo no seu histórico neste dispositivo.',
       confirmAction: 'Sim, sair',
     },
     setup: {
@@ -170,31 +167,12 @@ export const ptBR = {
       liveEmptyHint: 'As rodadas aparecem aqui assim que forem reveladas.',
     },
   },
-  // Rótulos de estatística compartilhados (VoteReveal e RoundSummary do histórico).
+  // Rótulos de estatística compartilhados (usados no VoteReveal).
   stats: {
     average: 'Média',
     min: 'Mínimo',
     max: 'Máximo',
     votes: 'Votos',
-  },
-  history: {
-    title: 'Histórico de Sessões',
-    subtitle: 'Suas rodadas de Planning Poker anteriores',
-    emptyTitle: 'Nenhum histórico encontrado',
-    emptyBody: 'Você ainda não participou de sessões com rodadas finalizadas.',
-    roomLabel: 'Sala: {id}',
-    deckLabel: 'Baralho: {name}',
-    roundsCount: '{count} Rodada | {count} Rodadas',
-    consensus: '🤝 Consenso Atingido',
-    spread: 'Dispersão',
-    textVotes: 'Votos textuais: {values}',
-    noVotes: 'Nenhum',
-    chart: {
-      title: 'Média das Estimativas por Rodada',
-      datasetLabel: 'Média de Votos',
-      empty: 'Ainda não há votos nesta sessão.',
-      nonNumeric: 'Gráfico de média indisponível para baralhos não-numéricos.',
-    },
   },
   connection: {
     rotating: {

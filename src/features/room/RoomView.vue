@@ -17,7 +17,6 @@ import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
 import { useShareRoom } from '@/composables/useShareRoom'
 import { JoinAckError } from '@/composables/joinErrors'
-import { useHistoryStore } from '@/stores/history'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -25,7 +24,6 @@ const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
 const connectionStore = useConnectionStore()
-const historyStore = useHistoryStore()
 const {
   addSubjects,
   removeSubject,
@@ -221,20 +219,7 @@ function handleNewSession() {
 // concluída (SessionSummary) é deliberada e continua imediata.
 const showLeaveConfirm = ref(false)
 
-// Só há sessão a preservar quando alguma rodada já foi criada (setup vazio não).
-const hasRecordedRounds = computed(() => (roomStore.currentRoom?.rounds.length ?? 0) > 0)
-
 function handleLeave() {
-  if (roomStore.currentRoom && roomStore.currentRoom.rounds.length > 0) {
-    historyStore.saveSession({
-      id: `${roomId.value}-${Date.now()}`,
-      date: new Date().toISOString(),
-      roomId: roomId.value,
-      deckType: deckType.value,
-      rounds: roomStore.currentRoom.rounds,
-    })
-  }
-
   // Avisa o servidor ANTES do disconnect: remoção imediata lá (sem o grace de
   // 30s), admin transferido na hora e o token do servidor descartado — sem isso,
   // voltar pra sala logo após sair esbarrava em "Sessão inválida".
@@ -395,9 +380,6 @@ function confirmLeave() {
     <BaseModal v-model="showLeaveConfirm" :title="t('room.leave.confirmTitle')">
       <p class="leave-confirm-text">
         {{ t('room.leave.confirmBody') }}
-        <template v-if="hasRecordedRounds">
-          {{ t('room.leave.confirmHistoryNote') }}
-        </template>
       </p>
       <template #footer>
         <BaseButton variant="ghost" @click="showLeaveConfirm = false">{{

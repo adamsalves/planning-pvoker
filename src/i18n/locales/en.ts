@@ -9,14 +9,12 @@ export const en: MessageSchema = {
   routes: {
     home: 'Home',
     room: 'Room',
-    history: 'History',
     notFound: 'Not found',
   },
   layout: {
     backToRoom: 'Back to Room',
     viewSummary: 'View Summary',
     home: 'Home',
-    history: 'History',
     madeBy: 'made by',
     theme: {
       light: 'light',
@@ -100,7 +98,6 @@ export const en: MessageSchema = {
       button: 'Leave Room',
       confirmTitle: 'Leave the room?',
       confirmBody: "You're about to leave this room and go back to the home screen.",
-      confirmHistoryNote: "This session's summary stays saved in your history on this device.",
       confirmAction: 'Yes, leave',
     },
     setup: {
@@ -174,25 +171,6 @@ export const en: MessageSchema = {
     min: 'Min',
     max: 'Max',
     votes: 'Votes',
-  },
-  history: {
-    title: 'Session History',
-    subtitle: 'Your previous Planning Poker rounds',
-    emptyTitle: 'No history found',
-    emptyBody: "You haven't taken part in any session with finished rounds yet.",
-    roomLabel: 'Room: {id}',
-    deckLabel: 'Deck: {name}',
-    roundsCount: '{count} Round | {count} Rounds',
-    consensus: '🤝 Consensus Reached',
-    spread: 'Spread',
-    textVotes: 'Text votes: {values}',
-    noVotes: 'None',
-    chart: {
-      title: 'Average Estimate per Round',
-      datasetLabel: 'Vote Average',
-      empty: 'No votes in this session yet.',
-      nonNumeric: 'Average chart unavailable for non-numeric decks.',
-    },
   },
   connection: {
     rotating: {

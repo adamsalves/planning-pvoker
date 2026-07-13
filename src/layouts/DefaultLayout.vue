@@ -19,8 +19,8 @@ const route = useRoute()
 
 // F5.1/F5.2 — "Voltar à Sala" aparece quando há sala ativa e você NÃO está na rota
 // dela (na própria sala seria redundante) NEM na Home (lá o banner F5.4 já oferece o
-// retorno — dois CTAs idênticos na mesma tela). Sobra pra Histórico/404, onde o
-// header é o único caminho de volta em 1 clique. Sem o antigo `!isCompleted`: mesmo
+// retorno — dois CTAs idênticos na mesma tela). Sobra pra 404, onde o header é o
+// único caminho de volta em 1 clique. Sem o antigo `!isCompleted`: mesmo
 // concluída, o resumo continua em /room/:id, então o botão segue sendo a volta — e
 // vira "Ver Resumo" pra não prometer uma sessão ainda em andamento.
 const showBackToRoom = computed(
@@ -81,7 +81,6 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
             {{ backToRoom.label }}
           </RouterLink>
           <RouterLink to="/" class="nav-link">{{ t('layout.home') }}</RouterLink>
-          <RouterLink to="/history" class="nav-link">{{ t('layout.history') }}</RouterLink>
           <button
             type="button"
             class="theme-toggle"

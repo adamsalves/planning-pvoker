@@ -59,12 +59,12 @@ describe('DefaultLayout.vue', () => {
   it('moves focus to <main> and announces the route title on navigation', async () => {
     const w = mountLayout()
 
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     await nextTick()
     await nextTick()
 
     expect(document.activeElement).toBe(w.get('main').element)
-    expect(w.find('[aria-live="polite"]').text()).toBe('Histórico')
+    expect(w.find('[aria-live="polite"]').text()).toBe('Não encontrado')
   })
 
   it('moves focus to <main> and announces "Sala {código}" when only the route param changes', async () => {
@@ -86,27 +86,27 @@ describe('DefaultLayout.vue', () => {
 
     const toggle = w.get('.locale-toggle')
     expect(toggle.text()).toBe('EN') // mostra o idioma ALVO
-    expect(w.text()).toContain('Histórico')
+    expect(w.text()).toContain('feito por') // rodapé em pt-BR
 
     await toggle.trigger('click')
     await nextTick()
 
     expect(toggle.text()).toBe('PT')
-    expect(w.text()).toContain('History')
-    expect(w.text()).not.toContain('Histórico')
+    expect(w.text()).toContain('made by')
+    expect(w.text()).not.toContain('feito por')
     expect(document.documentElement.lang).toBe('en')
 
     await toggle.trigger('click')
     await nextTick()
-    expect(w.text()).toContain('Histórico')
+    expect(w.text()).toContain('feito por')
     expect(document.documentElement.lang).toBe('pt-BR')
   })
 
   // F5.1/F5.2/F5.4 — visibilidade e rótulo do "Voltar à Sala" do header. Aparece em
-  // rotas fora da sala (ex.: Histórico), mas NÃO na Home (lá o banner F5.4 já cobre o
+  // rotas fora da sala (ex.: 404), mas NÃO na Home (lá o banner F5.4 já cobre o
   // retorno — evita CTA duplicado) nem na própria sala.
   it('does not show "Voltar à Sala" when there is no active room', async () => {
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     const w = mountLayout()
     expect(backToRoomLink(w)).toBeUndefined()
   })
@@ -124,9 +124,9 @@ describe('DefaultLayout.vue', () => {
     expect(backToRoomLink(w)).toBeUndefined()
   })
 
-  it('shows "Voltar à Sala" from another route (Histórico) while a session is in progress (F5.1/F5.2)', async () => {
+  it('shows "Voltar à Sala" from another route (404) while a session is in progress (F5.1/F5.2)', async () => {
     useRoomStore().syncRoom(makeRoom('voting'))
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     const w = mountLayout()
     const link = backToRoomLink(w)
     expect(link).toBeDefined()
@@ -136,7 +136,7 @@ describe('DefaultLayout.vue', () => {
 
   it('labels the link "Ver Resumo" from another route when the session is completed (F5.2)', async () => {
     useRoomStore().syncRoom(makeRoom('completed'))
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     const w = mountLayout()
     const link = backToRoomLink(w)
     expect(link).toBeDefined()

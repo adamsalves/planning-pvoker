@@ -6,8 +6,8 @@ export type Votes = Record<string, VoteValue>
 // Type guard único (regra do projeto: sem casts `as`).
 export const isNumericVote = (v: VoteValue): v is number => typeof v === 'number'
 
-// Helpers puros — reusáveis fora de um contexto reativo (ex.: média por rodada
-// no SessionChart, que itera várias rodadas).
+// Helpers puros — reusáveis fora de um contexto reativo (sem refs), p.ex. para
+// calcular a média de uma rodada avulsa.
 export function numericVotesOf(votes: Votes): number[] {
   return Object.values(votes).filter(isNumericVote)
 }
@@ -23,8 +23,8 @@ export function averageOf(votes: Votes): number | null {
 
 /**
  * Estatísticas de um conjunto de votos como fonte única — antes duplicadas e
- * divergentes em VoteReveal, RoundSummary e SessionChart. Aceita ref, getter ou
- * valor cru e recomputa reativamente quando os votos mudam.
+ * divergentes em vários componentes. Aceita ref, getter ou valor cru e recomputa
+ * reativamente quando os votos mudam.
  */
 export function useVoteStats(votesSource: MaybeRefOrGetter<Votes>) {
   const values = computed(() => Object.values(toValue(votesSource)))
@@ -41,10 +41,7 @@ export function useVoteStats(votesSource: MaybeRefOrGetter<Votes>) {
   )
 
   // Consenso = todos os votos iguais (numéricos OU textuais) e pelo menos um voto.
-  // Unifica VoteReveal e RoundSummary e corrige um bug latente deste último: o
-  // consenso textual antigo era código morto (inalcançável após o early-return do
-  // caso "sem votos numéricos"), então o histórico nunca marcava consenso em deck
-  // textual. Agora marca.
+  // Vale também para decks textuais (T-Shirt): todos "M" contam como consenso.
   const hasConsensus = computed(() => {
     if (values.value.length === 0) return false
     const first = values.value[0]

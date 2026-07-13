@@ -28,13 +28,13 @@ Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com
     ├── components/          → Componentes atômicos (BaseButton, BaseCard, BaseInput, BaseModal)
     ├── composables/         → Lógica reutilizável (useRoom, useSocket)
     ├── features/
-    │   ├── room/            → Sala de votação (8 componentes)
-    │   └── history/         → Histórico de sessões com gráficos
+    │   ├── home/            → Tela inicial (criar/entrar na sala)
+    │   ├── room/            → Sala de votação
+    │   └── not-found/       → Página 404
     ├── layouts/             → Layout principal (Navbar + RouterView animado)
     ├── router/              → Configuração de rotas (100% lazy-loaded)
-    ├── stores/              → Stores Pinia (room, user, history)
-    ├── types/               → Interfaces TypeScript do domínio
-    └── views/               → Página inicial (HomeView)
+    ├── stores/              → Stores Pinia (room, user, connection, theme, locale)
+    └── types/               → Interfaces TypeScript do domínio
 ```
 
 ## 🚀 Rodando o Projeto Localmente
@@ -83,6 +83,8 @@ Simulação ponta-a-ponta entre um Admin e um Participante em duas abas independ
 npx playwright install chromium   # Primeira vez
 npm run test:e2e
 ```
+
+> ⚠️ O e2e também roda no `npm run validate`, que é o hook de **pre-push** (Husky). Ou seja, o `npx playwright install chromium` acima é pré-requisito para dar `git push` — sem os browsers, o pre-push falha. O CI **não** roda o e2e (executa type-check/lint/unit/build separadamente), então isso não afeta o pipeline.
 
 ---
 
