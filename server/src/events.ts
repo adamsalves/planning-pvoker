@@ -39,6 +39,16 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
   const activeSockets = new Map<string, Set<string>>()
   const presenceKey = (roomId: string, playerId: string) => `${roomId}::${playerId}`
 
+  // Feed the RoomManager's autoReveal quorum: a player counts while they have a
+  // live socket OR are within the reconnect grace window. A rehydration ghost has
+  // neither (no socket ever existed in this process, no grace timer), so it is
+  // excluded from the quorum; a refreshing player is in grace and still counts.
+  const isPresent = (roomId: string, playerId: string): boolean => {
+    const key = presenceKey(roomId, playerId)
+    return activeSockets.has(key) || leaveTimers.has(key)
+  }
+  roomManager.setPresence({ isPresent })
+
   const notifyRoomUpdate = (roomId: string) => {
     const room = roomManager.getRoom(roomId)
     if (room) {
