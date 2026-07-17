@@ -351,20 +351,6 @@ export class RoomManager {
     }
   }
 
-  // Re-runs the autoReveal check for the room's current round and persists only
-  // if it flipped to revealed. Used on the reconnect path (events.ts join_room):
-  // if every present eligible voter had already voted BEFORE a restart, no new
-  // vote fires the check, so the last player reconnecting must trigger it here.
-  public syncAutoReveal(roomId: string): void {
-    const room = this.rooms.get(roomId)
-    if (!room || room.currentRoundIndex === -1) return
-    const before = room.rounds[room.currentRoundIndex].status
-    this.maybeAutoReveal(room)
-    if (room.rounds[room.currentRoundIndex].status !== before) {
-      this.scheduleSave(roomId)
-    }
-  }
-
   public revealVotes(roomId: string): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null

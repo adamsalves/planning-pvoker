@@ -234,34 +234,6 @@ describe('autoReveal quorum is presence-aware', () => {
     const room = arm.leaveRoom('r1', 'g1')
     expect(room?.rounds[0].status).toBe('revealed')
   })
-
-  it('syncAutoReveal reveals when every present voter already voted (no new vote)', () => {
-    // Reproduce the post-restart corner: the votes already exist but the round is
-    // still 'voting' because nobody was present when they were cast. Then the
-    // present set completes and only syncAutoReveal (not a new vote) can reveal.
-    const arm = new RoomManager()
-    arm.setPresence({ isPresent: () => false }) // nobody present yet
-    arm.createRoom('r1', admin, autoRevealConfig)
-    arm.joinRoom('r1', member)
-    arm.joinRoom('r1', ghost)
-    arm.addSubjects('r1', ['A'])
-    arm.startSession('r1')
-    // Cast while nobody is present: quorum is empty, so no auto-reveal fires.
-    arm.castVote('r1', 'a1', 3)
-    arm.castVote('r1', 'm1', 5)
-    expect(arm.getRoom('r1')?.rounds[0].status).toBe('voting')
-    // a1 + m1 reconnect (ghost stays absent); the reconnect path re-checks.
-    arm.setPresence({ isPresent: (_r, id) => id === 'a1' || id === 'm1' })
-    arm.syncAutoReveal('r1')
-    expect(arm.getRoom('r1')?.rounds[0].status).toBe('revealed')
-  })
-
-  it('syncAutoReveal is a no-op while a present voter is still pending', () => {
-    const arm = seededRoom()
-    arm.castVote('r1', 'a1', 3) // member still pending
-    arm.syncAutoReveal('r1')
-    expect(arm.getRoom('r1')?.rounds[0].status).toBe('voting')
-  })
 })
 
 describe('session tokens', () => {

@@ -762,18 +762,4 @@ describe('rehydration ghost does not block autoReveal', () => {
     expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'g1', 'm1'])
     expect(room.rounds[0].votes['g1']).toBeUndefined()
   })
-
-  it('reveals on reconnect when the votes survived the restart (syncAutoReveal path)', async () => {
-    // The real votes were cast before the restart; only the ghost is missing one.
-    const manager = seedManager({ a1: 3, m1: 5 })
-    await manager.hydrate()
-    await restartWith(manager)
-
-    // The first present voter to reconnect already voted, and every OTHER eligible
-    // voter is still absent — so the quorum is satisfied and the round reveals
-    // without any new vote, driven by the join_room syncAutoReveal re-check.
-    const adminClient = await connect()
-    const ack = await join(adminClient, { roomId: 'r1', player: admin, token: 'tok-a' })
-    expect(roomOf(ack).rounds[0].status).toBe('revealed')
-  })
 })

@@ -174,12 +174,6 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
       // via the ack. It is intentionally absent from the room broadcast below.
       const sessionToken = roomManager.getOrCreateToken(roomId, player.id)
 
-      // Presence just grew (this player is now present). If every present eligible
-      // voter has already voted — e.g. all votes survived a restart and this is the
-      // last player reconnecting — the round can auto-reveal now, and the broadcast
-      // below carries the revealed state.
-      roomManager.syncAutoReveal(roomId)
-
       notifyRoomUpdate(roomId)
       callback?.({ success: true, room, token: sessionToken })
     })
