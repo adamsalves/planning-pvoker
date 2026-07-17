@@ -172,6 +172,98 @@ describe('castVote', () => {
   })
 })
 
+describe('autoReveal quorum is presence-aware', () => {
+  const autoRevealConfig: RoomConfig = { deckType: 'fibonacci', autoReveal: true }
+  // A third eligible voter that stands in for a rehydration ghost: eligible to
+  // vote, but never present (no socket, no grace timer).
+  const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+
+  // Seeds a voting room [admin, member, ghost] with autoReveal on, and an oracle
+  // where only admin + member are present.
+  function seededRoom() {
+    const arm = new RoomManager()
+    arm.setPresence({ isPresent: (_roomId, playerId) => playerId === 'a1' || playerId === 'm1' })
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    return arm
+  }
+
+  it('reveals once the present voters have voted, excluding the absent ghost', () => {
+    const arm = seededRoom()
+    arm.castVote('r1', 'a1', 3)
+    const room = arm.castVote('r1', 'm1', 5)
+    // Ghost never voted, but it is absent, so it is out of the quorum.
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  it('does not reveal while a present voter has not voted yet', () => {
+    const arm = seededRoom()
+    const room = arm.castVote('r1', 'a1', 3) // member (present) still pending
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  it('the default oracle counts every eligible voter (a pending one blocks reveal)', () => {
+    // No setPresence(): default oracle reports everyone present, so the ghost is
+    // still required and the round stays open — the pre-fix behavior, preserved.
+    const arm = new RoomManager()
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    arm.castVote('r1', 'a1', 3)
+    const room = arm.castVote('r1', 'm1', 5) // g1 still hasn't voted
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  it('reveals when the last present voter leaves and the rest have voted', () => {
+    // Three present voters; two vote; the third leaves before voting. Once gone,
+    // the remaining present voters are the whole quorum and all have voted.
+    const arm = new RoomManager()
+    arm.setPresence({ isPresent: () => true })
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    arm.castVote('r1', 'a1', 3)
+    arm.castVote('r1', 'm1', 5)
+    const room = arm.leaveRoom('r1', 'g1')
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  it('syncAutoReveal reveals when every present voter already voted (no new vote)', () => {
+    // Reproduce the post-restart corner: the votes already exist but the round is
+    // still 'voting' because nobody was present when they were cast. Then the
+    // present set completes and only syncAutoReveal (not a new vote) can reveal.
+    const arm = new RoomManager()
+    arm.setPresence({ isPresent: () => false }) // nobody present yet
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    // Cast while nobody is present: quorum is empty, so no auto-reveal fires.
+    arm.castVote('r1', 'a1', 3)
+    arm.castVote('r1', 'm1', 5)
+    expect(arm.getRoom('r1')?.rounds[0].status).toBe('voting')
+    // a1 + m1 reconnect (ghost stays absent); the reconnect path re-checks.
+    arm.setPresence({ isPresent: (_r, id) => id === 'a1' || id === 'm1' })
+    arm.syncAutoReveal('r1')
+    expect(arm.getRoom('r1')?.rounds[0].status).toBe('revealed')
+  })
+
+  it('syncAutoReveal is a no-op while a present voter is still pending', () => {
+    const arm = seededRoom()
+    arm.castVote('r1', 'a1', 3) // member still pending
+    arm.syncAutoReveal('r1')
+    expect(arm.getRoom('r1')?.rounds[0].status).toBe('voting')
+  })
+})
+
 describe('session tokens', () => {
   it('mints a non-empty token and reuses it on repeat calls', () => {
     const a = rm.getOrCreateToken('r1', 'a1')

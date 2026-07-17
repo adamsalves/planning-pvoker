@@ -2,6 +2,14 @@ import { Room, Player, RoomConfig, Round } from './types'
 import { NullPersistence, type RoomPersistence } from './persistence'
 import { logger } from './logger'
 
+// Narrow port the RoomManager consults to decide whether a player still counts
+// toward a quorum. Presence (live socket OR within the reconnect grace) lives in
+// the events.ts closure and is injected via setPresence(); RoomManager itself
+// never touches sockets. Kept minimal on purpose — presence, not authorization.
+export interface PresenceOracle {
+  isPresent(roomId: string, playerId: string): boolean
+}
+
 // Defensive cap on a room's cumulative backlog. The per-call Zod limit
 // (MAX_SUBJECTS_PER_CALL in validation.ts) only bounds a single add_subjects
 // payload; without a total cap an admin could still grow the in-memory list
@@ -26,9 +34,21 @@ export class RoomManager {
   private savingRooms = new Set<string>()
   private dirtyRooms = new Set<string>()
 
+  // Presence oracle for the autoReveal quorum. Defaults to "everyone is present"
+  // so `new RoomManager()` (and the NullPersistence path) behaves exactly as
+  // before — the quorum is computed over every eligible voter, as it was inline.
+  // events.ts wires the real presence via setPresence() after construction.
+  private presence: PresenceOracle = { isPresent: () => true }
+
   // Persistence is best-effort and defaults to a no-op, so `new RoomManager()`
   // (used across the tests) behaves exactly as before — pure in-memory.
   constructor(private readonly persistence: RoomPersistence = new NullPersistence()) {}
+
+  // Injects the presence source. Called once from setupSocketEvents (which owns
+  // the socket/grace-timer state), after the RoomManager already exists.
+  public setPresence(oracle: PresenceOracle): void {
+    this.presence = oracle
+  }
 
   private tokenKey(roomId: string, playerId: string): string {
     return `${roomId}::${playerId}`
@@ -45,12 +65,15 @@ export class RoomManager {
   //
   // Known trade-off: presence/grace timers (events.ts) are ephemeral and lost on
   // restart, so a rehydrated room comes back with every player it had — including
-  // ones who won't reconnect. Such a "ghost" lingers until the room's TTL expires
-  // (no disconnect fires for a socket that never existed in this process), and
-  // while present it still counts toward the autoReveal quorum. Accepted for now:
-  // a grace-based reaper can't simply run here because the free-tier cold start
-  // (~60s) exceeds the reconnect grace (~30s) and would evict the room before the
-  // team finishes reconnecting. A presence-aware autoReveal fix is a follow-up.
+  // ones who won't reconnect. Such a "ghost" still APPEARS in the player list
+  // until the room's TTL expires (no disconnect fires for a socket that never
+  // existed in this process). It no longer blocks progress, though: the autoReveal
+  // quorum is presence-aware (see maybeAutoReveal + the PresenceOracle), so a ghost
+  // is excluded from the quorum and can neither stall the reveal nor pin the room.
+  // A grace-based boot reaper is still avoided on purpose — the free-tier cold
+  // start (~60s) exceeds the reconnect grace (~30s) and would evict the room
+  // before the team finishes reconnecting. Hiding the ghost from the UI is a
+  // separate follow-up (it needs presence broadcast to clients).
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
     for (const room of rooms) this.rooms.set(room.id, room)
@@ -195,6 +218,11 @@ export class RoomManager {
       next.role = 'admin'
     }
 
+    // A present voter just left (their grace expired). If the voters who remain
+    // present have all voted, the round can now auto-reveal — the departing
+    // player was the last one holding it open. No-op when autoReveal is off.
+    this.maybeAutoReveal(room)
+
     // Schedule AFTER admin transfer so the snapshot carries the final adminId.
     this.scheduleSave(roomId)
     return room
@@ -288,20 +316,53 @@ export class RoomManager {
 
     round.votes[playerId] = value
 
-    // Check autoReveal if everyone has voted
-    if (room.config.autoReveal) {
-      const activePlayers = room.players.filter((p) => p.role !== 'observer')
-      // Guard length: [].every() is true, which would reveal a round in an
-      // observers-only room (zero active players) without a single vote.
-      const allVoted =
-        activePlayers.length > 0 && activePlayers.every((p) => round.votes[p.id] !== undefined)
-      if (allVoted) {
-        round.status = 'revealed'
-      }
-    }
+    this.maybeAutoReveal(room)
 
     this.scheduleSave(roomId)
     return room
+  }
+
+  // --- AutoReveal quorum (presence-aware) ---
+
+  // The set of players eligible to vote in the room. Today: everyone who is not
+  // an observer. This is the single seam the quorum is built on — item #3 (admin
+  // chooses who votes) narrows this to a chosen subset and nothing else changes.
+  private eligibleVotersOf(room: Room): Player[] {
+    return room.players.filter((p) => p.role !== 'observer')
+  }
+
+  // Reveals the current round when every PRESENT eligible voter has voted. Only
+  // present players count (live socket OR within the reconnect grace, per the
+  // injected PresenceOracle), so a rehydration ghost — eligible but with no
+  // socket and no grace timer — can't stall the reveal or pin the room. No-op
+  // unless autoReveal is on and a round is actively being voted on.
+  private maybeAutoReveal(room: Room): void {
+    if (!room.config.autoReveal || room.currentRoundIndex === -1) return
+    const round = room.rounds[room.currentRoundIndex]
+    if (round.status !== 'voting') return
+
+    const required = this.eligibleVotersOf(room).filter((p) =>
+      this.presence.isPresent(room.id, p.id),
+    )
+    // Guard length: [].every() is true, which would reveal a round with no
+    // present eligible voters (e.g. observers-only) without a single vote.
+    if (required.length > 0 && required.every((p) => round.votes[p.id] !== undefined)) {
+      round.status = 'revealed'
+    }
+  }
+
+  // Re-runs the autoReveal check for the room's current round and persists only
+  // if it flipped to revealed. Used on the reconnect path (events.ts join_room):
+  // if every present eligible voter had already voted BEFORE a restart, no new
+  // vote fires the check, so the last player reconnecting must trigger it here.
+  public syncAutoReveal(roomId: string): void {
+    const room = this.rooms.get(roomId)
+    if (!room || room.currentRoundIndex === -1) return
+    const before = room.rounds[room.currentRoundIndex].status
+    this.maybeAutoReveal(room)
+    if (room.rounds[room.currentRoundIndex].status !== before) {
+      this.scheduleSave(roomId)
+    }
   }
 
   public revealVotes(roomId: string): Room | null {
