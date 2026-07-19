@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -558,6 +558,14 @@ describe('RoomView.vue direct hit without identity (F5.3)', () => {
 describe('RoomView.vue role and phase badges (ícones theme-aware)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  // O teste do compartilhar troca navigator.share/clipboard: restaura depois pra não
+  // deixar o estado vazar pra quem rodar em seguida (a ordem dos arquivos varia).
+  afterEach(() => {
+    for (const prop of ['share', 'clipboard']) {
+      Object.defineProperty(navigator, prop, { configurable: true, value: undefined })
+    }
   })
 
   // Papel e fase deixaram de trazer emoji na string i18n: o ícone é irmão do rótulo

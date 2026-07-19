@@ -430,12 +430,6 @@ function confirmLeave() {
   flex-wrap: wrap;
 }
 
-/* O BaseButton embrulha o slot num <span> inline, então o `gap` do botão não separa
-   ícone e rótulo — a margem é do ícone mesmo (mesmo padrão dos forms da home). */
-.btn-icon {
-  margin-right: var(--space-1);
-}
-
 /* Abas Votação ↔ Resumo (fase de votação) */
 .room-tabs {
   display: flex;

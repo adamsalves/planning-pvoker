@@ -206,19 +206,16 @@ function handleAdd() {
   gap: var(--space-2);
 }
 
+/* `justify-content` centraliza o bloco de texto ao lado do ícone; o `text-align`
+   segue necessário pra centralizar CADA LINHA quando o hint quebra (telas estreitas). */
 .start-hint {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
+  text-align: center;
   font-size: var(--text-xs);
   color: var(--c-text-mute);
   margin: 0;
-}
-
-/* O BaseButton embrulha o slot num <span> inline: o `gap` do botão não separa
-   ícone e rótulo, a margem tem de ser do ícone. */
-.btn-icon {
-  margin-right: var(--space-1);
 }
 </style>

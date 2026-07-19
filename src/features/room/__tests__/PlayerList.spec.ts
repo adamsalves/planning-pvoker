@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import IconCheck from '~icons/lucide/check'
+import IconHourglass from '~icons/lucide/hourglass'
 import PlayerList from '../PlayerList.vue'
 import type { Player } from '@/types'
 
@@ -27,8 +29,9 @@ describe('PlayerList.vue', () => {
     expect(html).toContain('Observer')
   })
 
-  // Os badges de status são ícones (SVG), não mais emoji: a asserção é a presença do
-  // ícone + o texto sr-only, que é o que de fato chega ao leitor de tela.
+  // Os badges de status são ícones (SVG), não mais emoji. A asserção alveja o ícone
+  // ESPECÍFICO (não "algum svg"): trocar um pelo outro inverte o significado do badge
+  // — "votou" onde deveria ser "aguardando" — e o teste tem de pegar isso.
   it('shows pending badge during voting without vote', () => {
     const wrapper = mount(PlayerList, {
       props: {
@@ -38,7 +41,9 @@ describe('PlayerList.vue', () => {
       },
     })
 
-    expect(wrapper.find('.pending-badge svg').exists()).toBe(true)
+    const badge = wrapper.find('.pending-badge')
+    expect(badge.findComponent(IconHourglass).exists()).toBe(true)
+    expect(badge.findComponent(IconCheck).exists()).toBe(false)
     expect(wrapper.text()).toContain('Aguardando voto')
   })
 
@@ -51,7 +56,9 @@ describe('PlayerList.vue', () => {
       },
     })
 
-    expect(wrapper.find('.voted-badge svg').exists()).toBe(true)
+    const badge = wrapper.find('.voted-badge')
+    expect(badge.findComponent(IconCheck).exists()).toBe(true)
+    expect(badge.findComponent(IconHourglass).exists()).toBe(false)
     expect(wrapper.text()).toContain('Votou')
     expect(wrapper.text()).not.toContain('8') // should not show value yet
   })

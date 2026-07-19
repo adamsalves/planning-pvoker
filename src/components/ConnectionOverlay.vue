@@ -152,14 +152,20 @@ onUnmounted(() => {
   animation: pp-flip 2s linear infinite;
 }
 
-/* `fill` preenche o naipe: o Lucide é stroke-only e o ♠ que ele substitui era um
-   glifo sólido. Cor fixa (não token) de propósito — é sobre a carta escura do
-   overlay, que não muda com o tema. */
+/* Cor fixa (não token) de propósito — é sobre a carta escura do overlay, que não
+   muda com o tema. */
 .pp-card__suit {
   font-size: var(--text-3xl);
   color: #fff;
-  fill: currentColor;
   line-height: 1;
+}
+
+/* Preenche o naipe: o Lucide é stroke-only e o ♠ que ele substitui era um glifo
+   sólido. Tem de mirar o <path> — o `fill="none"` que o Lucide emite é um
+   presentation attribute DELE, e atributo do próprio elemento vence herança do
+   <svg> pai (então `fill` no .pp-card__suit seria no-op). */
+.pp-card__suit :deep(path) {
+  fill: currentColor;
 }
 
 .overlay-message {
