@@ -113,6 +113,7 @@ describe('RoundControls.vue', () => {
       props: { status: 'voting', anyVoted: false, allVoted: false, isLastSubject: false },
     })
     expect(semVoto.findComponent(IconHourglass).exists()).toBe(true)
+    expect(semVoto.findComponent(IconHourglass).attributes('aria-hidden')).toBe('true')
 
     const comVoto = mount(RoundControls, {
       props: { status: 'voting', anyVoted: true, allVoted: false, isLastSubject: false },
@@ -125,12 +126,14 @@ describe('RoundControls.vue', () => {
       props: { status: 'revealed', anyVoted: true, allVoted: true, isLastSubject: false },
     })
     expect(proximo.findComponent(IconArrowRight).exists()).toBe(true)
+    expect(proximo.findComponent(IconArrowRight).attributes('aria-hidden')).toBe('true')
     expect(proximo.findComponent(IconCheck).exists()).toBe(false)
 
     const ultimo = mount(RoundControls, {
       props: { status: 'revealed', anyVoted: true, allVoted: true, isLastSubject: true },
     })
     expect(ultimo.findComponent(IconCheck).exists()).toBe(true)
+    expect(ultimo.findComponent(IconCheck).attributes('aria-hidden')).toBe('true')
     expect(ultimo.findComponent(IconArrowRight).exists()).toBe(false)
   })
 

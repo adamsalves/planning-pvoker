@@ -147,6 +147,7 @@ describe('RoomVoting.vue', () => {
     semRodada.currentRoundIndex = -1
     const espera = mountVoting({ isAdmin: false }, semRodada)
     expect(espera.findComponent(IconHourglass).exists()).toBe(true)
+    expect(espera.findComponent(IconHourglass).attributes('aria-hidden')).toBe('true')
     expect(espera.findComponent(IconEye).exists()).toBe(false)
 
     const espectador = mountVoting({ isObserver: true }, votingRoom('voting'))

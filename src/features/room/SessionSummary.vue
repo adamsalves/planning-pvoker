@@ -24,6 +24,9 @@ const { t } = useI18n()
 <template>
   <div class="session-summary">
     <div class="summary-header">
+      <!-- `circle-check` e não o `check` puro do badge de fase do RoomView (que
+           aparece junto, "Concluída"): aqui o ícone é o herói em 3rem e o círculo
+           lhe dá presença; no badge, a ~12px, o traço solto lê melhor. -->
       <IconCircleCheck class="check-icon" aria-hidden="true" />
       <h2 class="summary-title">{{ t('room.summary.title') }}</h2>
       <p class="summary-subtitle">

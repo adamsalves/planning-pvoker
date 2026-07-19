@@ -89,11 +89,11 @@ const revealedRounds = computed(() => revealedRoundsOf(roomStore.currentRoom))
   gap: var(--space-2);
 }
 
-/* Era um <p> com o emoji; agora é o SVG (inline-block em 1em pela `.app-icon`),
-   então o tamanho vem do font-size e o align-items do flex é que centraliza. */
+/* Era um <p> com o emoji; agora é o SVG, blockificado como flex item do
+   `.summary-empty` (o `margin: 0` que matava a margem default do <p> saiu junto).
+   Tamanho pelo font-size, centralização pelo align-items do flex. */
 .empty-icon {
   font-size: 2.5rem;
-  margin: 0;
 }
 
 .empty-title {
