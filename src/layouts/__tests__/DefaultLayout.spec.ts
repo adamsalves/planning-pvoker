@@ -10,6 +10,8 @@ import type { Room, RoomPhase } from '@/types'
 import IconSun from '~icons/lucide/sun'
 import IconMoon from '~icons/lucide/moon'
 import IconSunMoon from '~icons/lucide/sun-moon'
+import IconTarget from '~icons/lucide/target'
+import IconChartColumn from '~icons/lucide/chart-column'
 
 let wrapper: VueWrapper | undefined
 
@@ -136,6 +138,7 @@ describe('DefaultLayout.vue', () => {
     expect(link).toBeDefined()
     expect(link?.text()).toContain('Voltar à Sala')
     expect(link?.attributes('href')).toBe('/room/abc123')
+    expect(w.findComponent(IconTarget).exists()).toBe(true) // em andamento → alvo
   })
 
   it('labels the link "Ver Resumo" from another route when the session is completed (F5.2)', async () => {
@@ -146,6 +149,7 @@ describe('DefaultLayout.vue', () => {
     expect(link).toBeDefined()
     expect(link?.text()).toContain('Ver Resumo')
     expect(link?.attributes('href')).toBe('/room/abc123')
+    expect(w.findComponent(IconChartColumn).exists()).toBe(true) // concluída → gráfico
   })
 
   // Item #2 (ícones theme-aware): smoke de que o unplugin-icons gera um <svg> com a

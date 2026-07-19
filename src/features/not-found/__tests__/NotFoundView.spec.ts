@@ -13,6 +13,7 @@ describe('NotFoundView (F4.3)', () => {
     const home = wrapper.getComponent(RouterLinkStub)
     expect(home.props('to')).toBe('/')
     expect(home.text()).toContain('Voltar ao início')
+    expect(home.text()).not.toContain('🏠') // emoji saiu do label i18n (agora é ícone)
   })
 
   // Item #2 (ícones theme-aware): a "carta fora do baralho" agora é um SVG (spade)
