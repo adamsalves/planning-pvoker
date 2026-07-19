@@ -27,6 +27,8 @@ describe('PlayerList.vue', () => {
     expect(html).toContain('Observer')
   })
 
+  // Os badges de status são ícones (SVG), não mais emoji: a asserção é a presença do
+  // ícone + o texto sr-only, que é o que de fato chega ao leitor de tela.
   it('shows pending badge during voting without vote', () => {
     const wrapper = mount(PlayerList, {
       props: {
@@ -36,7 +38,8 @@ describe('PlayerList.vue', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('⏳')
+    expect(wrapper.find('.pending-badge svg').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Aguardando voto')
   })
 
   it('shows voted badge during voting with voted', () => {
@@ -48,7 +51,8 @@ describe('PlayerList.vue', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('✅')
+    expect(wrapper.find('.voted-badge svg').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Votou')
     expect(wrapper.text()).not.toContain('8') // should not show value yet
   })
 
@@ -62,7 +66,7 @@ describe('PlayerList.vue', () => {
     })
 
     expect(wrapper.text()).toContain('5')
-    expect(wrapper.text()).not.toContain('✅')
+    expect(wrapper.find('.voted-badge').exists()).toBe(false)
   })
 
   it('marks the admin crown as decorative with a sr-only alternative', () => {
@@ -74,7 +78,7 @@ describe('PlayerList.vue', () => {
     expect(wrapper.text()).toContain('(admin)')
   })
 
-  it('marks status emoji as decorative with sr-only alternatives', () => {
+  it('marks status icons as decorative with sr-only alternatives', () => {
     const wrapper = mount(PlayerList, {
       props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
     })

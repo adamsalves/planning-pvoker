@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
+import IconSpade from '~icons/lucide/spade'
 import ConnectionOverlay from '../ConnectionOverlay.vue'
 import { useConnectionStore } from '@/stores/connection'
 
@@ -102,5 +103,17 @@ describe('ConnectionOverlay.vue', () => {
     expect(wrapper.find('.sr-only').text()).toContain('demorando mais que o normal')
     // Still a loading state, not an error: the overlay remains visible.
     expect(overlay(wrapper).exists()).toBe(true)
+  })
+
+  it('desenha o naipe da carta com ícone, dentro da carta decorativa', async () => {
+    useConnectionStore()
+    const wrapper = mount(ConnectionOverlay)
+
+    vi.advanceTimersByTime(500)
+    await nextTick()
+
+    // O ♠ virou ícone; quem esconde da tecnologia assistiva é a carta inteira.
+    expect(wrapper.findComponent(IconSpade).exists()).toBe(true)
+    expect(wrapper.find('.pp-card').attributes('aria-hidden')).toBe('true')
   })
 })

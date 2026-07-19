@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import IconCrown from '~icons/lucide/crown'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
+import IconPencil from '~icons/lucide/pencil'
+import IconVote from '~icons/lucide/vote'
+import IconCheck from '~icons/lucide/check'
+import IconShare from '~icons/lucide/share-2'
 import RoomView from '../RoomView.vue'
 import VotingArea from '../VotingArea.vue'
 import BaseModal from '@/components/BaseModal.vue'
@@ -545,5 +552,81 @@ describe('RoomView.vue direct hit without identity (F5.3)', () => {
     // Antes ia pra '/' cru (perdia o id); agora manda pra Home com ?room=<id>, que o
     // HomeView usa pra abrir na aba "Entrar" já preenchida.
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home', query: { room: 'abc123' } })
+  })
+})
+
+describe('RoomView.vue role and phase badges (ícones theme-aware)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Papel e fase deixaram de trazer emoji na string i18n: o ícone é irmão do rótulo
+  // e sai do mesmo computed (roleBadge/phaseBadge). O rótulo textual permanece — é
+  // ele que dá o nome acessível do badge.
+  function mountAs(
+    options: {
+      role?: 'admin' | 'member' | 'observer'
+      phase?: Room['phase']
+    } = {},
+  ) {
+    setActivePinia(createPinia())
+
+    const userStore = useUserStore()
+    userStore.setPlayer('Ana', 'player-1', options.role ?? 'admin')
+
+    const room = createRoom()
+    // adminId só bate com o player quando o papel é admin — isAdmin vem do servidor.
+    if (options.role && options.role !== 'admin') room.adminId = 'someone-else'
+    if (options.phase) room.phase = options.phase
+
+    useRoomStore().syncRoom(room)
+
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  it.each([
+    ['admin' as const, IconCrown, 'Admin'],
+    ['observer' as const, IconEye, 'Espectador'],
+    ['member' as const, IconUser, 'Jogador'],
+  ])('mostra o ícone e o rótulo do papel %s', (role, Icon, label) => {
+    const badge = mountAs({ role }).find('.badge-role')
+
+    expect(badge.findComponent(Icon).exists()).toBe(true)
+    expect(badge.text()).toBe(label)
+  })
+
+  it.each([
+    ['setup' as const, IconPencil, 'Preparação'],
+    ['voting' as const, IconVote, 'Votação'],
+    ['completed' as const, IconCheck, 'Concluída'],
+  ])('mostra o ícone e o rótulo da fase %s', (phase, Icon, label) => {
+    const badge = mountAs({ phase }).find('.badge-phase')
+
+    expect(badge.findComponent(Icon).exists()).toBe(true)
+    expect(badge.text()).toBe(label)
+  })
+
+  it('esconde os ícones dos badges da tecnologia assistiva', () => {
+    const wrapper = mountAs()
+
+    for (const selector of ['.badge-role', '.badge-phase']) {
+      expect(wrapper.find(`${selector} svg`).attributes('aria-hidden')).toBe('true')
+    }
+  })
+
+  it('mostra o ícone de compartilhar só no estado ocioso do botão', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined })
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+
+    const wrapper = mountAs()
+    expect(wrapper.findComponent(IconShare).exists()).toBe(true)
+
+    // Copiado: o rótulo vira o feedback ("Link copiado!") e o ícone sai de cena, pra
+    // não sugerir que o botão ainda oferece a ação.
+    await getShareButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findComponent(IconShare).exists()).toBe(false)
   })
 })

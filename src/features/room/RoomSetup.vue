@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import IconPencil from '~icons/lucide/pencil'
 import { useRoomStore } from '@/stores/room'
 import BaseCard from '@/components/BaseCard.vue'
 import SubjectForm from './SubjectForm.vue'
@@ -35,7 +36,7 @@ const roomStore = useRoomStore()
         </template>
         <template v-else>
           <div class="waiting-message">
-            <p class="waiting-icon">📝</p>
+            <IconPencil class="waiting-icon" aria-hidden="true" />
             <p>{{ t('room.setup.waitingForAdmin') }}</p>
             <div v-if="roomStore.subjects.length > 0" class="preview-backlog">
               <p class="backlog-count">
@@ -94,6 +95,7 @@ const roomStore = useRoomStore()
 .waiting-icon {
   font-size: 2rem;
   margin-bottom: var(--space-2);
+  color: var(--c-text-mute);
 }
 
 /* Backlog em preview (visão do não-admin no setup) */

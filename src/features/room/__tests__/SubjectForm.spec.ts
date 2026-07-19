@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
+import IconPlus from '~icons/lucide/plus'
+import IconPlay from '~icons/lucide/play'
+import IconPencil from '~icons/lucide/pencil'
+import IconHourglass from '~icons/lucide/hourglass'
+import IconX from '~icons/lucide/x'
 import SubjectForm from '../SubjectForm.vue'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
@@ -134,6 +139,41 @@ describe('SubjectForm.vue', () => {
   it('esconde o hint quando a sessão já pode iniciar', () => {
     const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 2 } })
     expect(wrapper.find('.start-hint').exists()).toBe(false)
+  })
+
+  it('decorates the add and start buttons with icons kept out of the label', () => {
+    const wrapper = mount(SubjectForm, { props: defaultProps })
+
+    for (const Icon of [IconPlus, IconPlay]) {
+      const icon = wrapper.findComponent(Icon)
+      expect(icon.exists()).toBe(true)
+      expect(icon.attributes('aria-hidden')).toBe('true')
+    }
+    // O rótulo textual (nome acessível) segue sem emoji nem ícone.
+    expect(wrapper.text()).toContain('Adicionar')
+    expect(wrapper.text()).toContain('Iniciar Sessão de Votação')
+  })
+
+  // Cada motivo do hint tem o seu ícone (antes eram os emojis 📝/⏳ na string i18n):
+  // o <component :is> tem de trocar junto com o texto.
+  it('usa o ícone do motivo no hint: falta subject', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: [], playerCount: 3 } })
+    expect(wrapper.find('.start-hint').findComponent(IconPencil).exists()).toBe(true)
+    expect(wrapper.find('.start-hint').findComponent(IconHourglass).exists()).toBe(false)
+  })
+
+  it('usa o ícone do motivo no hint: faltam jogadores', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 1 } })
+    expect(wrapper.find('.start-hint').findComponent(IconHourglass).exists()).toBe(true)
+    expect(wrapper.find('.start-hint').findComponent(IconPencil).exists()).toBe(false)
+  })
+
+  it('mantém o nome acessível do botão de remover ao trocar ✕ por ícone', () => {
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 2 } })
+
+    const removeBtn = wrapper.find('.remove-btn')
+    expect(removeBtn.findComponent(IconX).exists()).toBe(true)
+    expect(removeBtn.attributes('aria-label')).toBe('Remover Login')
   })
 
   it('emits "start" when start button is clicked', async () => {

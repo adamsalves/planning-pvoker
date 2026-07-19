@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconCrown from '~icons/lucide/crown'
+import IconCheck from '~icons/lucide/check'
+import IconHourglass from '~icons/lucide/hourglass'
+import IconEye from '~icons/lucide/eye'
 import type { Player } from '@/types'
 import { activePlayersOf, observersOf } from '@/utils/players'
 
@@ -43,7 +47,7 @@ function getVote(playerId: string): string | number | undefined {
             <span class="player-avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="player-name">
               {{ player.name }}
-              <span v-if="player.role === 'admin'" class="admin-badge" aria-hidden="true">👑</span>
+              <IconCrown v-if="player.role === 'admin'" class="admin-badge" aria-hidden="true" />
               <span v-if="player.role === 'admin'" class="sr-only">{{
                 t('room.players.adminSr')
               }}</span>
@@ -57,12 +61,14 @@ function getVote(playerId: string): string | number | undefined {
                 class="voted-badge"
                 key="voted"
               >
-                <span aria-hidden="true">✅</span
-                ><span class="sr-only">{{ t('room.players.voted') }}</span>
+                <IconCheck aria-hidden="true" /><span class="sr-only">{{
+                  t('room.players.voted')
+                }}</span>
               </span>
               <span v-else-if="status === 'voting'" class="pending-badge" key="pending">
-                <span aria-hidden="true">⏳</span
-                ><span class="sr-only">{{ t('room.players.waitingVote') }}</span>
+                <IconHourglass aria-hidden="true" /><span class="sr-only">{{
+                  t('room.players.waitingVote')
+                }}</span>
               </span>
               <!-- Votos revelados: mostrar o valor -->
               <span
@@ -91,7 +97,7 @@ function getVote(playerId: string): string | number | undefined {
             }}</span>
             <span class="player-name">{{ player.name }}</span>
           </div>
-          <span class="observer-badge" aria-hidden="true">👁️</span>
+          <IconEye class="observer-badge" aria-hidden="true" />
           <span class="sr-only">{{ t('room.players.observerSr') }}</span>
         </li>
       </ul>
@@ -168,8 +174,11 @@ function getVote(playerId: string): string | number | undefined {
   gap: var(--space-1);
 }
 
+/* Ícones de papel/status: cor pelos tokens semânticos (invertem no dark, F3.9) e
+   tamanho pelo font-size do contexto — a `.app-icon` normaliza o SVG em 1em. */
 .admin-badge {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
+  color: var(--c-warning-text);
 }
 
 .player-status {
@@ -179,10 +188,12 @@ function getVote(playerId: string): string | number | undefined {
 
 .voted-badge {
   font-size: var(--text-base);
+  color: var(--c-success-text);
 }
 
 .pending-badge {
   font-size: var(--text-base);
+  color: var(--c-text-mute);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -201,7 +212,8 @@ function getVote(playerId: string): string | number | undefined {
 }
 
 .observer-badge {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
+  color: var(--c-text-mute);
 }
 
 .observer-item {

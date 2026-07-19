@@ -2,6 +2,13 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import IconCrown from '~icons/lucide/crown'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
+import IconPencil from '~icons/lucide/pencil'
+import IconVote from '~icons/lucide/vote'
+import IconCheck from '~icons/lucide/check'
+import IconShare from '~icons/lucide/share-2'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
@@ -50,6 +57,21 @@ const isAdmin = computed(() => {
   return room ? room.adminId === userStore.playerId : userStore.playerRole === 'admin'
 })
 const isObserver = computed(() => userStore.playerRole === 'observer')
+
+// Badges de papel e fase: ícone + rótulo saem juntos do mesmo computed (o ícone é o
+// COMPONENTE, renderizado por <component :is>, sem cast). O emoji saiu das strings
+// i18n — o rótulo textual continua sendo o nome acessível do badge.
+const roleBadge = computed(() => {
+  if (isAdmin.value) return { icon: IconCrown, label: t('room.roles.admin') }
+  if (isObserver.value) return { icon: IconEye, label: t('room.roles.observer') }
+  return { icon: IconUser, label: t('room.roles.player') }
+})
+
+const phaseBadge = computed(() => {
+  if (roomStore.isSetupPhase) return { icon: IconPencil, label: t('room.phases.setup') }
+  if (roomStore.isVotingPhase) return { icon: IconVote, label: t('room.phases.voting') }
+  return { icon: IconCheck, label: t('room.phases.completed') }
+})
 
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
 const deckLabel = computed(() => t(`decks.${deckType.value}`))
@@ -251,23 +273,13 @@ function confirmLeave() {
             </h1>
             <div class="room-meta">
               <span class="badge badge-role" :class="userStore.playerRole">
-                {{
-                  isAdmin
-                    ? t('room.roles.admin')
-                    : isObserver
-                      ? t('room.roles.observer')
-                      : t('room.roles.player')
-                }}
+                <component :is="roleBadge.icon" aria-hidden="true" />
+                {{ roleBadge.label }}
               </span>
               <span class="badge badge-deck">{{ deckLabel }}</span>
               <span class="badge badge-phase">
-                {{
-                  roomStore.isSetupPhase
-                    ? t('room.phases.setup')
-                    : roomStore.isVotingPhase
-                      ? t('room.phases.voting')
-                      : t('room.phases.completed')
-                }}
+                <component :is="phaseBadge.icon" aria-hidden="true" />
+                {{ phaseBadge.label }}
               </span>
             </div>
           </div>
@@ -278,7 +290,7 @@ function confirmLeave() {
               :aria-label="t('room.share.ariaLabel', { roomId })"
               @click="shareRoom"
             >
-              {{
+              <IconShare v-if="shareStatus === 'idle'" class="btn-icon" aria-hidden="true" />{{
                 shareStatus === 'copied'
                   ? t('room.share.copied')
                   : shareStatus === 'error'
@@ -418,6 +430,12 @@ function confirmLeave() {
   flex-wrap: wrap;
 }
 
+/* O BaseButton embrulha o slot num <span> inline, então o `gap` do botão não separa
+   ícone e rótulo — a margem é do ícone mesmo (mesmo padrão dos forms da home). */
+.btn-icon {
+  margin-right: var(--space-1);
+}
+
 /* Abas Votação ↔ Resumo (fase de votação) */
 .room-tabs {
   display: flex;
@@ -481,7 +499,12 @@ function confirmLeave() {
   flex-wrap: wrap;
 }
 
+/* inline-flex + gap: o ícone do badge é irmão do rótulo e herda a cor de cada
+   variante (.badge-role/.admin/.observer/.badge-phase) via currentColor. */
 .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-xs);
   padding: 2px var(--space-2);
   border-radius: var(--radius-full);
