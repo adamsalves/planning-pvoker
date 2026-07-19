@@ -5,6 +5,7 @@ import IconCrown from '~icons/lucide/crown'
 import IconCheck from '~icons/lucide/check'
 import IconHourglass from '~icons/lucide/hourglass'
 import IconEye from '~icons/lucide/eye'
+import IconUserMinus from '~icons/lucide/user-minus'
 import type { Player } from '@/types'
 import { activePlayersOf, observersOf } from '@/utils/players'
 
@@ -12,9 +13,21 @@ interface Props {
   players: Player[]
   votes: Record<string, string | number>
   status: 'waiting' | 'voting' | 'revealed'
+  // Tirados pela admin DESTA rodada — seguem nesta seção (não viram espectadores).
+  nonVoterIds?: string[]
+  // Mostra o toggle de "vota nesta rodada". Default false: o RoomSetup usa este
+  // mesmo componente sem rodada nenhuma, onde a escolha não existe.
+  votersEditable?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  nonVoterIds: () => [],
+  votersEditable: false,
+})
+
+const emit = defineEmits<{
+  'toggle-voter': [playerId: string, voting: boolean]
+}>()
 
 const { t } = useI18n()
 
@@ -29,6 +42,10 @@ function hasVoted(playerId: string): boolean {
 function getVote(playerId: string): string | number | undefined {
   return props.votes[playerId]
 }
+
+function isNonVoter(playerId: string): boolean {
+  return props.nonVoterIds.includes(playerId)
+}
 </script>
 
 <template>
@@ -41,9 +58,29 @@ function getVote(playerId: string): string | number | undefined {
           v-for="player in activePlayers"
           :key="player.id"
           class="player-item"
-          v-memo="[player.name, player.role, status, hasVoted(player.id), getVote(player.id)]"
+          :class="{ 'non-voter-item': isNonVoter(player.id) }"
+          v-memo="[
+            player.name,
+            player.role,
+            status,
+            hasVoted(player.id),
+            getVote(player.id),
+            isNonVoter(player.id),
+            votersEditable,
+          ]"
         >
           <div class="player-info">
+            <!-- Checkbox real (não div clicável): o toggle precisa ser focável e
+                 anunciado como caixa de seleção. O rótulo textual fica no sr-only,
+                 já que a linha inteira já mostra o nome visualmente. -->
+            <label v-if="votersEditable" class="voter-toggle">
+              <input
+                type="checkbox"
+                :checked="!isNonVoter(player.id)"
+                @change="emit('toggle-voter', player.id, isNonVoter(player.id))"
+              />
+              <span class="sr-only">{{ t('room.voters.toggleLabel', { name: player.name }) }}</span>
+            </label>
             <span class="player-avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="player-name">
               {{ player.name }}
@@ -55,9 +92,16 @@ function getVote(playerId: string): string | number | undefined {
           </div>
           <div class="player-status">
             <Transition name="fade" mode="out-in">
+              <!-- Fora da rodada: precede votou/pendente, senão apareceria como
+                   "aguardando voto" alguém de quem ninguém espera voto. -->
+              <span v-if="isNonVoter(player.id)" class="non-voter-badge" key="non-voter">
+                <IconUserMinus aria-hidden="true" /><span class="sr-only">{{
+                  t('room.voters.notVotingLabel')
+                }}</span>
+              </span>
               <!-- Votação em andamento: mostrar se votou ou não -->
               <span
-                v-if="status === 'voting' && hasVoted(player.id)"
+                v-else-if="status === 'voting' && hasVoted(player.id)"
                 class="voted-badge"
                 key="voted"
               >
@@ -218,6 +262,30 @@ function getVote(playerId: string): string | number | undefined {
 
 .observer-item {
   opacity: 0.7;
+}
+
+/* Fora da rodada: mesmo tom apagado do espectador, porém MENOS forte — a pessoa
+   segue na seção de jogadores e volta a votar com um clique do admin. */
+.non-voter-item {
+  opacity: 0.75;
+}
+
+.non-voter-badge {
+  font-size: var(--text-base);
+  color: var(--c-text-mute);
+}
+
+/* O checkbox fica à esquerda do avatar, alinhado com o resto da linha. */
+.voter-toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.voter-toggle input {
+  cursor: pointer;
+  accent-color: var(--c-primary);
 }
 
 /* Animations */

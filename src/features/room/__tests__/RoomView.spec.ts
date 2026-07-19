@@ -10,6 +10,7 @@ import IconVote from '~icons/lucide/vote'
 import IconCheck from '~icons/lucide/check'
 import IconShare from '~icons/lucide/share-2'
 import RoomView from '../RoomView.vue'
+import RoomVoting from '../RoomVoting.vue'
 import VotingArea from '../VotingArea.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseButton from '@/components/BaseButton.vue'
@@ -28,6 +29,7 @@ const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 const mockCastVote = vi.fn().mockResolvedValue(undefined)
 const mockDisconnect = vi.fn()
 const mockLeaveRoom = vi.fn()
+const mockSetRoundVoter = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -47,6 +49,7 @@ vi.mock('@/composables/useSocket', () => ({
     resetSession: vi.fn(),
     castVote: mockCastVote,
     revealVotes: mockRevealVotes,
+    setRoundVoter: mockSetRoundVoter,
     disconnect: mockDisconnect,
     joinRoom: mockSocketJoinRoom,
     leaveRoom: mockLeaveRoom,
@@ -636,5 +639,89 @@ describe('RoomView.vue role and phase badges (ícones theme-aware)', () => {
     await flushPromises()
 
     expect(wrapper.findComponent(IconShare).exists()).toBe(false)
+  })
+})
+
+describe('RoomView.vue quem vota na rodada', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  // Ana (admin, local), Bob e Cida — todos jogadores. `excluded` sai da rodada.
+  function votingRoom(excluded: string[], votes: Record<string, string | number> = {}): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [
+        { id: 'player-1', name: 'Ana', role: 'admin' },
+        { id: 'player-2', name: 'Bob', role: 'member' },
+        { id: 'player-3', name: 'Cida', role: 'observer' },
+      ],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes, excludedVoterIds: excluded }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  function mountVoting(room: Room, playerId = 'player-1') {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', playerId, playerId === 'player-1' ? 'admin' : 'member')
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  it('desconta os excluídos do voterCount (denominador do reveal)', async () => {
+    // 3 jogadores, sendo 1 observer → 2 votantes; excluir o Bob deixa 1.
+    const wrapper = mountVoting(votingRoom(['player-2']))
+    await flushPromises()
+
+    const voting = wrapper.findComponent(RoomVoting)
+    expect(voting.props('voterCount')).toBe(1)
+    expect(voting.props('nonVoterIds')).toEqual(['player-2'])
+  })
+
+  it('allVotersVoted ignora o voto que falta de quem foi excluído', async () => {
+    // Só a Ana votou. Com o Bob dentro seria false; com ele fora, a rodada
+    // está completa do ponto de vista de quem ela ainda espera.
+    const semExclusao = mountVoting(votingRoom([], { 'player-1': 5 }))
+    await flushPromises()
+    expect(semExclusao.findComponent(RoomVoting).props('allVotersVoted')).toBe(false)
+
+    const comExclusao = mountVoting(votingRoom(['player-2'], { 'player-1': 5 }))
+    await flushPromises()
+    expect(comExclusao.findComponent(RoomVoting).props('allVotersVoted')).toBe(true)
+  })
+
+  it('marca isVotingThisRound=false para o próprio usuário excluído', async () => {
+    const dentro = mountVoting(votingRoom([]), 'player-2')
+    await flushPromises()
+    expect(dentro.findComponent(RoomVoting).props('isVotingThisRound')).toBe(true)
+
+    const fora = mountVoting(votingRoom(['player-2']), 'player-2')
+    await flushPromises()
+    expect(fora.findComponent(RoomVoting).props('isVotingThisRound')).toBe(false)
+  })
+
+  it('encaminha o toggle-voter para o socket com o roomId da rota', async () => {
+    const wrapper = mountVoting(votingRoom([]))
+    await flushPromises()
+
+    wrapper.findComponent(RoomVoting).vm.$emit('toggle-voter', 'player-2', false)
+    await flushPromises()
+
+    expect(mockSetRoundVoter).toHaveBeenCalledWith('abc123', 'player-2', false)
+  })
+
+  it('rodada sem o campo (pré-feature) não exclui ninguém', async () => {
+    const room = votingRoom([])
+    delete room.rounds[0]!.excludedVoterIds
+    const wrapper = mountVoting(room)
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('nonVoterIds')).toEqual([])
+    expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(2)
   })
 })

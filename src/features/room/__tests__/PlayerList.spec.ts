@@ -102,4 +102,62 @@ describe('PlayerList.vue', () => {
     expect(wrapper.find('.observer-badge').attributes('aria-hidden')).toBe('true')
     expect(wrapper.text()).toContain('Espectador')
   })
+
+  describe('quem vota na rodada', () => {
+    it('só mostra o toggle quando votersEditable', () => {
+      const semToggle = mount(PlayerList, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' },
+      })
+      // Default false: o RoomSetup usa o mesmo componente e não tem rodada.
+      expect(semToggle.find('.voter-toggle').exists()).toBe(false)
+
+      const comToggle = mount(PlayerList, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', votersEditable: true },
+      })
+      // Um por jogador ativo — espectadores não entram na escolha.
+      expect(comToggle.findAll('.voter-toggle')).toHaveLength(2)
+    })
+
+    it('emite toggle-voter com o estado OPOSTO ao atual', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: mockPlayers,
+          votes: {},
+          status: 'voting',
+          nonVoterIds: ['2'],
+          votersEditable: true,
+        },
+      })
+
+      const boxes = wrapper.findAll('.voter-toggle input')
+      // Admin ('1') vota → marcado; Member ('2') excluído → desmarcado.
+      expect(boxes[0]!.attributes('checked')).toBeDefined()
+      expect(boxes[1]!.attributes('checked')).toBeUndefined()
+
+      // Tirar quem vota pede voting=false; devolver quem está fora pede true.
+      await boxes[0]!.trigger('change')
+      expect(wrapper.emitted('toggle-voter')?.[0]).toEqual(['1', false])
+      await boxes[1]!.trigger('change')
+      expect(wrapper.emitted('toggle-voter')?.[1]).toEqual(['2', true])
+    })
+
+    it('mostra "não vota" no lugar de pendente, sem sair da seção de jogadores', () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[1]!],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: ['2'],
+        },
+      })
+
+      const badge = wrapper.find('.non-voter-badge')
+      expect(badge.exists()).toBe(true)
+      expect(badge.find('.sr-only').text()).toBe('Não vota nesta rodada')
+      // Não pode aparecer como "aguardando voto": ninguém espera o voto dele.
+      expect(wrapper.find('.pending-badge').exists()).toBe(false)
+      // E segue contando como jogador, não como espectador.
+      expect(wrapper.html()).toContain('Jogadores (1)')
+    })
+  })
 })

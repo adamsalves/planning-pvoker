@@ -131,4 +131,34 @@ describe('PokerTable.vue', () => {
     })
     expect(wrapperRevealed.text()).toContain('Votos revelados!')
   })
+
+  describe('tirado da rodada', () => {
+    // A diferença que importa em relação ao espectador: o espectador SOME da
+    // mesa, o tirado da rodada CONTINUA sentado — só muda de estado visual.
+    it('continua sentado à mesa, ao contrário do espectador', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', nonVoterIds: ['2'] },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(2)
+      expect(wrapper.text()).toContain('Eve')
+      expect(wrapper.findAll('.non-voter-spot')).toHaveLength(1)
+    })
+
+    it('anuncia "não vota" em vez de "aguardando voto"', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting', nonVoterIds: ['2'] },
+      })
+
+      expect(wrapper.text()).toContain('Não vota nesta rodada')
+      expect(wrapper.text()).not.toContain('Aguardando voto')
+    })
+
+    it('sem nonVoterIds nenhum assento fica marcado (default da prop)', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' },
+      })
+      expect(wrapper.findAll('.non-voter-spot')).toHaveLength(0)
+    })
+  })
 })

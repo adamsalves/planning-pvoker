@@ -9,9 +9,14 @@ interface Props {
   players: Player[]
   votes: Record<string, string | number>
   status: 'waiting' | 'voting' | 'revealed'
+  // Tirados pelo admin DESTA rodada. Continuam sentados de propósito (some da
+  // mesa só quem é espectador da SALA) — mudam apenas de estado visual.
+  nonVoterIds?: string[]
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  nonVoterIds: () => [],
+})
 
 const { t } = useI18n()
 
@@ -20,6 +25,10 @@ const activePlayers = computed(() => activePlayersOf(props.players))
 
 function hasVoted(playerId: string) {
   return playerId in props.votes
+}
+
+function isNonVoter(playerId: string) {
+  return props.nonVoterIds.includes(playerId)
 }
 
 // Posição de cada jogador na mesa oval. O JS entrega só os fatores
@@ -58,6 +67,7 @@ function getPlayerStyle(index: number): CSSProperties {
           v-for="(player, index) in activePlayers"
           :key="player.id"
           class="player-spot"
+          :class="{ 'non-voter-spot': isNonVoter(player.id) }"
           :style="getPlayerStyle(index)"
         >
           <!-- Card Area — decorativa p/ leitores de tela: a carta é um botão desabilitado
@@ -81,7 +91,10 @@ function getPlayerStyle(index: number): CSSProperties {
           <div class="player-tag">
             <span class="avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="name">{{ player.name }}</span>
-            <span v-if="status === 'voting'" class="sr-only">
+            <span v-if="isNonVoter(player.id)" class="sr-only">
+              {{ t('room.voters.notVotingLabel') }}
+            </span>
+            <span v-else-if="status === 'voting'" class="sr-only">
               {{ hasVoted(player.id) ? t('room.players.voted') : t('room.players.waitingVote') }}
             </span>
             <span v-else-if="status === 'revealed' && hasVoted(player.id)" class="sr-only">
@@ -183,6 +196,12 @@ function getPlayerStyle(index: number): CSSProperties {
   width: 100px; /* Consistente para alinhar independente da tag/carta */
   pointer-events: auto; /* Reabilita cliques no item específico, se precisar */
   transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tirado da rodada: continua no assento, só recua visualmente. Não usa a cor de
+   "pendente" — ninguém está esperando o voto dele. */
+.non-voter-spot {
+  opacity: 0.55;
 }
 
 .card-area {

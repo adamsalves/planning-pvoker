@@ -146,6 +146,12 @@ export const ptBR = {
       waitingVote: 'Aguardando voto',
       observerSr: 'Espectador',
     },
+    voters: {
+      toggleLabel: '{name} vota nesta rodada',
+      notVotingLabel: 'Não vota nesta rodada',
+      notVotingTitle: 'Você não vota nesta rodada',
+      notVotingSub: 'A pessoa admin tirou você desta rodada. Aguarde o resultado.',
+    },
     reveal: {
       consensus: 'Consenso!',
       allVoted: 'Todos votaram',

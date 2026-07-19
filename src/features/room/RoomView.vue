@@ -12,7 +12,7 @@ import IconShare from '~icons/lucide/share-2'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { activePlayersOf } from '@/utils/players'
+import { roundVotersOf } from '@/utils/players'
 import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -39,6 +39,7 @@ const {
   resetSession,
   castVote,
   revealVotes,
+  setRoundVoter,
   disconnect,
   joinRoom,
   leaveRoom,
@@ -102,17 +103,38 @@ watch(
   },
 )
 
-// Apenas jogadores ativos (não observers) para contagem
-const activePlayerCount = computed(() => activePlayersOf(players.value).length)
+// Quem o admin tirou DESTA rodada (server: Round.excludedVoterIds). Ausente em
+// rodadas criadas antes da feature — `?? []` = ninguém fora.
+const nonVoterIds = computed(() => currentRound.value?.excludedVoterIds ?? [])
 
-const allActiveVoted = computed(() => {
+// Quem a rodada espera votar: nem observer nem excluído. É o denominador do
+// VoteReveal e a base do "todos votaram" — NÃO confundir com quem senta à mesa
+// (activePlayersOf), que inclui o excluído.
+const voterCount = computed(() => roundVotersOf(players.value, nonVoterIds.value).length)
+
+const allVotersVoted = computed(() => {
   const round = currentRound.value
   if (!round) return false
-  const active = activePlayersOf(players.value)
-  // Guard length: uma sala só de observers (zero ativos) NÃO conta como "todos
-  // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
-  return active.length > 0 && active.every((p) => p.id in round.votes)
+  const voters = roundVotersOf(players.value, nonVoterIds.value)
+  // Guard length: sala só de observers (ou todos excluídos) NÃO conta como
+  // "todos votaram" — [].every() é true e marcaria a rodada como concluída.
+  return voters.length > 0 && voters.every((p) => p.id in round.votes)
 })
+
+// O usuário local vota nesta rodada? Decide se o deck aparece pra ele.
+const isVotingThisRound = computed(
+  () => !isObserver.value && !nonVoterIds.value.includes(userStore.playerId),
+)
+
+// Ao ser tirado da rodada, o servidor já apagou o voto — limpa o otimista pra
+// carta não continuar acesa numa rodada que a pessoa não está mais votando.
+watch(isVotingThisRound, (isVoting) => {
+  if (!isVoting) optimisticVote.value = null
+})
+
+function handleToggleVoter(playerId: string, voting: boolean) {
+  setRoundVoter(roomId.value, playerId, voting)
+}
 
 // Abas da fase de votação: "Votação" (rodada atual) ↔ "Resumo" (rodadas já
 // reveladas, ao vivo). Só aparecem na fase de votação.
@@ -360,13 +382,16 @@ function confirmLeave() {
         aria-labelledby="room-tab-voting"
         :is-admin="isAdmin"
         :is-observer="isObserver"
+        :is-voting-this-round="isVotingThisRound"
         :selected-vote="selectedVote"
-        :active-player-count="activePlayerCount"
-        :all-active-voted="allActiveVoted"
+        :non-voter-ids="nonVoterIds"
+        :voter-count="voterCount"
+        :all-voters-voted="allVotersVoted"
         @vote="handleVote"
         @reveal="handleReveal"
         @next-round="handleNextRound"
         @finish="handleFinishSession"
+        @toggle-voter="handleToggleVoter"
       />
       <RoomSummary
         v-show="roomTab === 'summary'"
