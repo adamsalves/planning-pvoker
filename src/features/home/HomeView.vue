@@ -42,7 +42,9 @@ const sessionExpired = route.query.notice === 'session-expired'
   <div class="home-container">
     <!-- Hero Section -->
     <div class="hero">
-      <span class="hero-icon">🃏</span>
+      <!-- A marca fica emoji (não vira ícone), mas é decorativa: o nome do app já
+           está no <h1> logo abaixo. Mesmo tratamento da carta do 404. -->
+      <span class="hero-icon" aria-hidden="true">🃏</span>
       <h1 class="hero-title">Planning Poker</h1>
       <p class="hero-subtitle">{{ t('home.subtitle') }}</p>
     </div>

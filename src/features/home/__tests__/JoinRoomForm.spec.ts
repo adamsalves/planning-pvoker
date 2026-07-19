@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import JoinRoomForm from '../JoinRoomForm.vue'
 import IconUser from '~icons/lucide/user'
 import IconEye from '~icons/lucide/eye'
+import IconLogIn from '~icons/lucide/log-in'
 
 // A lógica de joinRoom (navegação/token) é testada em useRoom.spec; aqui o form
 // só precisa do stub para montar sem tocar em socket/router.
@@ -63,6 +64,16 @@ describe('JoinRoomForm.vue', () => {
     expect(options[0].find('svg.role-icon').exists()).toBe(true)
     expect(options[1].find('svg.role-icon').exists()).toBe(true)
     expect(wrapper.text()).not.toMatch(/🃏|👁/)
+  })
+
+  // O 🔗 saiu da string i18n e virou ícone irmão: o leitor de tela lê só o rótulo.
+  it('decorates the submit button with an icon kept out of the label', () => {
+    const wrapper = mount(JoinRoomForm)
+    const icon = wrapper.findComponent(IconLogIn)
+
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+    expect(wrapper.text()).not.toContain('🔗')
   })
 
   // Decorativos: o significado do papel vem do texto do rótulo ao lado.

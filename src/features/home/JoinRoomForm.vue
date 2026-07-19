@@ -114,7 +114,7 @@ const onSubmit = handleSubmit(async (values) => {
         {{ t(submitErrorKey) }}
       </p>
       <BaseButton type="submit" size="lg" block :loading="submitting">
-        <IconLogIn aria-hidden="true" />
+        <IconLogIn class="btn-icon" aria-hidden="true" />
         {{ t('home.joinButton') }}
       </BaseButton>
     </form>
@@ -127,6 +127,12 @@ const onSubmit = handleSubmit(async (values) => {
    ~pequena duplicação consciente, mesmo trade-off do RoomSetup/RoomVoting (F3.3). */
 .form-card {
   animation: slideUp var(--transition-normal);
+}
+
+/* Ver nota no CreateRoomForm: o slot do BaseButton é um <span> inline, então o
+   gap do botão não vale entre o ícone e o rótulo. */
+.btn-icon {
+  margin-right: var(--space-1);
 }
 
 .form {
@@ -194,6 +200,8 @@ const onSubmit = handleSubmit(async (values) => {
   outline-offset: 2px;
 }
 
+/* O ícone tem width/height: 1em (.app-icon), então o font-size é a alavanca de
+   tamanho — mesmo sendo um <svg>, que não renderiza texto. */
 .role-icon {
   font-size: var(--text-2xl);
 }

@@ -37,9 +37,12 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- MEMBER JOINS ROOM --
     await memberPage.goto('/')
-    // A aba "Entrar na Sala" — aqui o form montado ainda é o de criar, então o
-    // rótulo é único fora dele.
-    await memberPage.getByRole('button', { name: 'Entrar na Sala' }).click()
+    // A aba "Entrar na Sala". Escopado no switcher (e exact) porque o submit do form
+    // tem o mesmo nome acessível — não depender de qual form está montado agora.
+    await memberPage
+      .locator('.tab-switcher')
+      .getByRole('button', { name: 'Entrar na Sala', exact: true })
+      .click()
 
     // "Código da sala" só existe no form de entrar → sinaliza que a troca de aba concluiu.
     await expect(memberPage.getByLabel('Código da sala')).toBeVisible()
