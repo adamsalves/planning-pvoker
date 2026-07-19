@@ -146,6 +146,7 @@ export const en: MessageSchema = {
       observerSr: 'Observer',
     },
     voters: {
+      hint: 'Uncheck anyone not voting in this round',
       toggleLabel: '{name} votes in this round',
       notVotingLabel: 'Not voting in this round',
       notVotingTitle: 'You are not voting in this round',

@@ -58,6 +58,10 @@ function isNonVoter(playerId: string): boolean {
     <!-- Active Players -->
     <div class="player-section">
       <h4 class="section-title">{{ t('room.players.title', { count: activePlayers.length }) }}</h4>
+      <!-- Afordância do toggle. Precisa ser texto SEMPRE visível, não só o title:
+           tooltip depende de hover, que não existe em touch, e o problema aqui é
+           de descoberta — sem isso a admin vê só uma caixinha sem explicação. -->
+      <p v-if="votersEditable" class="voters-hint">{{ t('room.voters.hint') }}</p>
       <TransitionGroup name="player" tag="ul" class="player-list">
         <li
           v-for="player in activePlayers"
@@ -88,6 +92,7 @@ function isNonVoter(playerId: string): boolean {
               role="switch"
               class="voter-toggle"
               :aria-checked="!isNonVoter(player.id)"
+              :title="t('room.voters.toggleLabel', { name: player.name })"
               @click="emit('toggle-voter', player.id, isNonVoter(player.id))"
             >
               <IconSquareCheck v-if="!isNonVoter(player.id)" aria-hidden="true" />
@@ -286,6 +291,14 @@ function isNonVoter(playerId: string): boolean {
 .non-voter-badge {
   font-size: var(--text-base);
   color: var(--c-text-mute);
+}
+
+/* Hint da escolha de votantes: fica logo abaixo do título da seção, no mesmo
+   tom apagado, e some quando o toggle não está disponível. */
+.voters-hint {
+  font-size: var(--text-xs);
+  color: var(--c-text-mute);
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
 }
 
 /* Toggle à esquerda do avatar. min 24px nos dois eixos = alvo de toque do

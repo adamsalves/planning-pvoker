@@ -217,6 +217,19 @@ describe('PlayerList.vue', () => {
       expect(wrapper.find('.voter-toggle').exists()).toBe(true)
     })
 
+    // Afordância: sem texto visível a admin não descobre que dá pra tirar alguém
+    // da rodada — e o title sozinho não serve, porque touch não tem hover.
+    it('explica o toggle com hint visível e title, só quando editável', async () => {
+      const wrapper = mount(PlayerList, {
+        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+      })
+      expect(wrapper.find('.voters-hint').exists()).toBe(false)
+
+      await wrapper.setProps({ votersEditable: true })
+      expect(wrapper.find('.voters-hint').text()).toBe('Desmarque quem não vota nesta rodada')
+      expect(wrapper.find('.voter-toggle').attributes('title')).toBe('Member vota nesta rodada')
+    })
+
     it('mostra "não vota" no lugar de pendente, sem sair da seção de jogadores', () => {
       const wrapper = mount(PlayerList, {
         props: {

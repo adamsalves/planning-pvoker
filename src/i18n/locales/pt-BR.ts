@@ -147,6 +147,7 @@ export const ptBR = {
       observerSr: 'Espectador',
     },
     voters: {
+      hint: 'Desmarque quem não vota nesta rodada',
       toggleLabel: '{name} vota nesta rodada',
       notVotingLabel: 'Não vota nesta rodada',
       notVotingTitle: 'Você não vota nesta rodada',
