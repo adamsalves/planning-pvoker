@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import IconCheck from '~icons/lucide/check'
+import IconHourglass from '~icons/lucide/hourglass'
 import PlayerList from '../PlayerList.vue'
 import type { Player } from '@/types'
 
@@ -27,6 +29,9 @@ describe('PlayerList.vue', () => {
     expect(html).toContain('Observer')
   })
 
+  // Os badges de status são ícones (SVG), não mais emoji. A asserção alveja o ícone
+  // ESPECÍFICO (não "algum svg"): trocar um pelo outro inverte o significado do badge
+  // — "votou" onde deveria ser "aguardando" — e o teste tem de pegar isso.
   it('shows pending badge during voting without vote', () => {
     const wrapper = mount(PlayerList, {
       props: {
@@ -36,7 +41,10 @@ describe('PlayerList.vue', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('⏳')
+    const badge = wrapper.find('.pending-badge')
+    expect(badge.findComponent(IconHourglass).exists()).toBe(true)
+    expect(badge.findComponent(IconCheck).exists()).toBe(false)
+    expect(wrapper.text()).toContain('Aguardando voto')
   })
 
   it('shows voted badge during voting with voted', () => {
@@ -48,7 +56,10 @@ describe('PlayerList.vue', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('✅')
+    const badge = wrapper.find('.voted-badge')
+    expect(badge.findComponent(IconCheck).exists()).toBe(true)
+    expect(badge.findComponent(IconHourglass).exists()).toBe(false)
+    expect(wrapper.text()).toContain('Votou')
     expect(wrapper.text()).not.toContain('8') // should not show value yet
   })
 
@@ -62,7 +73,7 @@ describe('PlayerList.vue', () => {
     })
 
     expect(wrapper.text()).toContain('5')
-    expect(wrapper.text()).not.toContain('✅')
+    expect(wrapper.find('.voted-badge').exists()).toBe(false)
   })
 
   it('marks the admin crown as decorative with a sr-only alternative', () => {
@@ -74,7 +85,7 @@ describe('PlayerList.vue', () => {
     expect(wrapper.text()).toContain('(admin)')
   })
 
-  it('marks status emoji as decorative with sr-only alternatives', () => {
+  it('marks status icons as decorative with sr-only alternatives', () => {
     const wrapper = mount(PlayerList, {
       props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
     })

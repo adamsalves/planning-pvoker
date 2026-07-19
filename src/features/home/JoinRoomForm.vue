@@ -129,12 +129,6 @@ const onSubmit = handleSubmit(async (values) => {
   animation: slideUp var(--transition-normal);
 }
 
-/* Ver nota no CreateRoomForm: o slot do BaseButton é um <span> inline, então o
-   gap do botão não vale entre o ícone e o rótulo. */
-.btn-icon {
-  margin-right: var(--space-1);
-}
-
 .form {
   display: flex;
   flex-direction: column;

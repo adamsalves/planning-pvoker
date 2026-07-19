@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import IconPencil from '~icons/lucide/pencil'
 import RoomSetup from '../RoomSetup.vue'
 import SubjectForm from '../SubjectForm.vue'
 import { useRoomStore } from '@/stores/room'
@@ -66,5 +67,14 @@ describe('RoomSetup.vue', () => {
     expect(wrapper.emitted('add')?.[0]).toEqual(['Nova tarefa'])
     expect(wrapper.emitted('remove')?.[0]).toEqual([1])
     expect(wrapper.emitted('start')).toHaveLength(1)
+  })
+
+  it('marca o ícone de espera do não-admin como decorativo', () => {
+    const wrapper = mountSetup(false, roomWith())
+
+    // O 📝 virou ícone: decorativo, o texto ao lado é que carrega o significado.
+    const icon = wrapper.findComponent(IconPencil)
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
   })
 })

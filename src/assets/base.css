@@ -169,3 +169,11 @@ button {
   vertical-align: -0.125em;
   flex-shrink: 0;
 }
+
+/* Ícone que precede o rótulo dentro de um BaseButton. O botão embrulha o slot num
+   <span> inline, então o `gap` dele separa spinner e conteúdo — não o ícone do
+   texto; a margem tem de ser do próprio ícone. Global porque todo botão com ícone
+   precisa da mesma regra (era duplicada em cada componente). */
+.btn-icon {
+  margin-right: var(--space-1);
+}

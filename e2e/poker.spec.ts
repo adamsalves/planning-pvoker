@@ -29,7 +29,7 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- ADMIN ADDS SUBJECTS (setup phase) --
     await adminPage.getByLabel('Adicionar subject').fill('Fix CSS bugs')
-    await adminPage.getByRole('button', { name: '➕ Adicionar' }).click()
+    await adminPage.getByRole('button', { name: 'Adicionar', exact: true }).click()
 
     // Verify subject was added to backlog (plural nativo do i18n → singular em 1)
     await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
@@ -62,7 +62,7 @@ test.describe('Planning Poker E2E Flow', () => {
     await expect(memberPage.locator('text=Fix CSS bugs')).toBeVisible()
 
     // -- ADMIN STARTS SESSION --
-    await adminPage.getByRole('button', { name: '▶️ Iniciar Sessão de Votação' }).click()
+    await adminPage.getByRole('button', { name: 'Iniciar Sessão de Votação' }).click()
 
     // Both should see the round header with "Fix CSS bugs"
     await expect(adminPage.locator('text=Fix CSS bugs')).toBeVisible()
