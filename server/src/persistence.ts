@@ -60,6 +60,10 @@ const roomSchema = z.object({
       subject: z.string(),
       status: z.enum(['voting', 'revealed']),
       votes: z.record(z.string(), z.union([z.string(), z.number()])),
+      // OPCIONAL de propósito: snapshots gravados antes desta feature não têm o
+      // campo, e um required aqui faria o safeParse falhar — o que em loadAll
+      // significa DESCARTAR a sala. Todas as salas vivas morreriam no deploy.
+      excludedVoterIds: z.array(z.string()).optional(),
     }),
   ),
   currentRoundIndex: z.number(),

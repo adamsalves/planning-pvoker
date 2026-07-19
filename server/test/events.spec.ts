@@ -238,6 +238,7 @@ describe('authorization (requireAdmin)', () => {
   const votingActions: Array<{ event: string; payload: Record<string, unknown> }> = [
     { event: 'reveal_votes', payload: { roomId: 'r1' } },
     { event: 'next_round', payload: { roomId: 'r1' } },
+    { event: 'set_round_voter', payload: { roomId: 'r1', playerId: 'm1', voting: false } },
   ]
   for (const { event, payload } of votingActions) {
     it(`ignores ${event} from a non-admin (voting phase)`, async () => {
@@ -250,6 +251,62 @@ describe('authorization (requireAdmin)', () => {
       expect(room.rounds[room.currentRoundIndex].status).toBe('voting')
     })
   }
+})
+
+describe('set_round_voter', () => {
+  // waitForRoomWhere runs the predicate on EVERY broadcast, including the ones
+  // from before the session started (no rounds yet) — hence the length guard.
+  const excludedIds = (room: Room): string[] =>
+    room.rounds.length > 0 ? (room.rounds[0].excludedVoterIds ?? []) : []
+
+  it('broadcasts the excluded voter to the whole room', async () => {
+    const { adminClient, memberClient } = await startVotingRoom()
+    // Asserted on the MEMBER's socket: the excluded player must learn about it
+    // too — that is what hides the deck on their side.
+    const excluded = waitForRoomWhere(memberClient, (room) => excludedIds(room).includes('m1'))
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1', voting: false })
+    await excluded
+  })
+
+  it('refuses the excluded player’s vote, and takes it again once re-included', async () => {
+    const { adminClient, memberClient } = await startVotingRoom()
+    const excluded = waitForRoomWhere(adminClient, (room) => excludedIds(room).includes('m1'))
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1', voting: false })
+    await excluded
+
+    const refused = await castVote(memberClient, { roomId: 'r1', value: 5 })
+    expect(refused.error).toBe('vote_not_registered')
+
+    // Safe as a "wait for change" predicate: the exclusion above already landed,
+    // so the next broadcast is the re-inclusion.
+    const included = waitForRoomWhere(adminClient, (room) => !excludedIds(room).includes('m1'))
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1', voting: true })
+    await included
+
+    const accepted = await castVote(memberClient, { roomId: 'r1', value: 5 })
+    expect(accepted.ok).toBe(true)
+  })
+
+  // A tabela de `votingActions` acima cobre set_round_voter, mas suas asserções
+  // (phase/status) passariam mesmo se a ação de um não-admin tivesse rodado —
+  // excluir um votante não mexe em nenhuma das duas. Este caso olha o efeito real.
+  it('ignores set_round_voter from a non-admin', async () => {
+    const { memberClient, memberToken } = await startVotingRoom()
+    memberClient.emit('set_round_voter', { roomId: 'r1', playerId: 'a1', voting: false })
+    const room = roomOf(
+      await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+    )
+    expect(room.rounds[0].excludedVoterIds).toEqual([])
+  })
+
+  it('ignores a malformed payload', async () => {
+    const { adminClient, adminToken } = await startVotingRoom()
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1' }) // no `voting`
+    // State read back via a re-join on the SAME socket: FIFO guarantees it is
+    // processed after the ignored action, so no arbitrary delay is needed.
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.rounds[0].excludedVoterIds).toEqual([])
+  })
 })
 
 describe('cast_vote', () => {

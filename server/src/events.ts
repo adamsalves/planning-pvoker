@@ -6,6 +6,7 @@ import {
   addSubjectsSchema,
   removeSubjectSchema,
   castVoteSchema,
+  setRoundVoterSchema,
   isValidVoteForDeck,
 } from './validation'
 import { logger } from './logger'
@@ -246,9 +247,22 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
         notifyRoomUpdate(roomId)
         callback?.({ ok: true })
       } else {
-        // observer, ou rodada fora da fase de votação
+        // observer, excluído da rodada pelo admin, ou rodada fora da votação
         fail(callback, 'vote_not_registered')
       }
+    })
+
+    // Quem vota NESTA rodada — admin only. Sem ack, como as demais ações de
+    // admin: o estado novo volta pelo room_state_updated.
+    socket.on('set_round_voter', (data: unknown) => {
+      const parsed = setRoundVoterSchema.safeParse(data)
+      if (!parsed.success || !requireAdmin(parsed.data.roomId)) return
+      const room = roomManager.setRoundVoter(
+        parsed.data.roomId,
+        parsed.data.playerId,
+        parsed.data.voting,
+      )
+      if (room) notifyRoomUpdate(parsed.data.roomId)
     })
 
     socket.on('reveal_votes', (data: unknown) => {
