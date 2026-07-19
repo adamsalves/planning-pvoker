@@ -7,7 +7,6 @@ import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
-import IconSpade from '~icons/lucide/spade'
 import IconTarget from '~icons/lucide/target'
 import IconChartColumn from '~icons/lucide/chart-column'
 import IconSun from '~icons/lucide/sun'
@@ -78,7 +77,7 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
     <header class="navbar">
       <div class="navbar-content">
         <RouterLink to="/" class="navbar-brand">
-          <IconSpade class="logo-icon" aria-hidden="true" />
+          <span class="logo-icon">🃏</span>
           <span class="logo-text">Planning Poker</span>
         </RouterLink>
         <nav class="navbar-nav">
@@ -178,7 +177,6 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
 
 .logo-icon {
   font-size: var(--text-2xl);
-  color: var(--c-primary);
 }
 
 .logo-text {

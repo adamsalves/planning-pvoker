@@ -152,16 +152,10 @@ describe('DefaultLayout.vue', () => {
     expect(w.findComponent(IconChartColumn).exists()).toBe(true) // concluída → gráfico
   })
 
-  // Item #2 (ícones theme-aware): smoke de que o unplugin-icons gera um <svg> com a
-  // classe passada também no vitest (vite.config compartilhado) — a base de todas as
-  // fatias. A marca deixa de ser emoji 🃏 e vira o ícone spade.
-  it('renders the brand logo as an inline SVG icon', () => {
-    const w = mountLayout()
-    expect(w.find('.navbar-brand svg.logo-icon').exists()).toBe(true)
-  })
-
   // O toggle de tema mostra o ícone da preferência atual (sun/moon/sun-moon),
-  // recolorindo via currentColor — antes eram emojis ☀️/🌙/🌗 de cor fixa.
+  // recolorindo via currentColor — antes eram emojis ☀️/🌙/🌗 de cor fixa. (Também
+  // é o smoke de que o unplugin-icons gera <svg> no vitest, base das próximas fatias.)
+  // Obs.: o logo 🃏 (marca/joker) fica como emoji de propósito — não é convertido.
   it('renders the theme icon matching the current preference', async () => {
     const w = mountLayout()
     const theme = useThemeStore()

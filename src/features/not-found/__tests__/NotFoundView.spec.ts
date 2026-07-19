@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import NotFoundView from '../NotFoundView.vue'
 import router from '@/router'
+import IconHouse from '~icons/lucide/house'
 
 describe('NotFoundView (F4.3)', () => {
   it('renders the title, message and a link back home', () => {
@@ -16,15 +17,14 @@ describe('NotFoundView (F4.3)', () => {
     expect(home.text()).not.toContain('🏠') // emoji saiu do label i18n (agora é ícone)
   })
 
-  // Item #2 (ícones theme-aware): a "carta fora do baralho" agora é um SVG (spade)
-  // decorativo e aria-hidden, não mais o emoji 🃏.
-  it('renders the decorative card as an aria-hidden inline icon', () => {
+  // Item #2 (ícones theme-aware): o 🃏 (marca/joker) fica como emoji de propósito; o
+  // que muda no 404 é o botão "Voltar ao início", que ganha um ícone house (o 🏠 saiu
+  // do label i18n — asserido acima com not.toContain).
+  it('renders a house icon on the home link', () => {
     const wrapper = mount(NotFoundView, {
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
-    const icon = wrapper.find('svg.not-found-icon')
-    expect(icon.exists()).toBe(true)
-    expect(icon.attributes('aria-hidden')).toBe('true')
+    expect(wrapper.findComponent(IconHouse).exists()).toBe(true)
   })
 })
 
