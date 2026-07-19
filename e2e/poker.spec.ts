@@ -16,7 +16,9 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // Fill Create Room form (só o form "Criar" está montado → label "Seu nome" é único aqui)
     await adminPage.getByLabel('Seu nome').fill('ScrumMaster')
-    await adminPage.getByRole('button', { name: '🚀 Criar Sala' }).click()
+    // Escopado no form: a aba tem o mesmo rótulo do submit (o 🚀 saiu da string
+    // quando o botão ganhou ícone), então sem o escopo o seletor fica ambíguo.
+    await adminPage.locator('form').getByRole('button', { name: 'Criar Sala' }).click()
 
     // Wait to enter room
     await adminPage.waitForURL(/\/room\//)
@@ -35,8 +37,12 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- MEMBER JOINS ROOM --
     await memberPage.goto('/')
-    // A aba "Entrar na Sala" (exact: o botão de submit é "🔗 Entrar na Sala", substring).
-    await memberPage.getByRole('button', { name: 'Entrar na Sala', exact: true }).click()
+    // A aba "Entrar na Sala". Escopado no switcher (e exact) porque o submit do form
+    // tem o mesmo nome acessível — não depender de qual form está montado agora.
+    await memberPage
+      .locator('.tab-switcher')
+      .getByRole('button', { name: 'Entrar na Sala', exact: true })
+      .click()
 
     // "Código da sala" só existe no form de entrar → sinaliza que a troca de aba concluiu.
     await expect(memberPage.getByLabel('Código da sala')).toBeVisible()
@@ -44,8 +50,11 @@ test.describe('Planning Poker E2E Flow', () => {
     // Fill Join Room form (o Transition out-in desmonta o "Criar" → "Seu nome" é único).
     await memberPage.getByLabel('Seu nome').fill('Dev 1')
     await memberPage.getByLabel('Código da sala').fill(roomId)
-    // Role defaults to member, so we just join
-    await memberPage.getByRole('button', { name: '🔗 Entrar na Sala' }).click({ force: true })
+    // Role defaults to member, so we just join (escopado no form: a aba repete o rótulo)
+    await memberPage
+      .locator('form')
+      .getByRole('button', { name: 'Entrar na Sala' })
+      .click({ force: true })
 
     await memberPage.waitForURL(roomUrl)
 

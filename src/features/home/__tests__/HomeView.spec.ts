@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import HomeView from '../HomeView.vue'
 import { useRoomStore } from '@/stores/room'
 import type { Room } from '@/types'
+import IconTriangleAlert from '~icons/lucide/triangle-alert'
+import IconTarget from '~icons/lucide/target'
 
 let routeQuery: Record<string, string | string[] | undefined> = {}
 
@@ -108,5 +110,34 @@ describe('HomeView.vue', () => {
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
     expect(wrapper.find('.room-notice').exists()).toBe(false)
+  })
+
+  // O 🃏 do hero é a MARCA do app e fica emoji de propósito (mesma regra da navbar
+  // e do 404) — só o chrome ao redor vira ícone.
+  it('keeps the joker emoji as the hero brand mark', () => {
+    const wrapper = mount(HomeView)
+
+    expect(wrapper.find('.hero-icon').text()).toBe('🃏')
+  })
+
+  it('marks the expired-session notice with an icon instead of the ⚠️ emoji', () => {
+    routeQuery = { notice: 'session-expired' }
+
+    const wrapper = mount(HomeView)
+    const icon = wrapper.findComponent(IconTriangleAlert)
+
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+    expect(wrapper.find('[role="alert"]').text()).not.toContain('⚠️')
+  })
+
+  it('marks the active-room banner with an icon instead of the 🎯 emoji', () => {
+    useRoomStore().syncRoom(activeRoom())
+    const wrapper = mount(HomeView, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+
+    expect(wrapper.findComponent(IconTarget).exists()).toBe(true)
+    expect(wrapper.find('.room-notice').text()).not.toContain('🎯')
   })
 })

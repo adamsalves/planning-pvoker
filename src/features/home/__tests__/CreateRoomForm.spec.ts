@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CreateRoomForm from '../CreateRoomForm.vue'
+import IconRocket from '~icons/lucide/rocket'
 
 // A lógica de createRoom (navegação/token) é testada em useRoom.spec; aqui o form
 // só precisa do stub para montar sem tocar em socket/router.
@@ -49,5 +50,16 @@ describe('CreateRoomForm.vue', () => {
   it('renders its own submit button', () => {
     const wrapper = mount(CreateRoomForm)
     expect(wrapper.text()).toContain('Criar Sala')
+  })
+
+  // O 🚀 saiu da string i18n e virou ícone irmão: o leitor de tela lê só o rótulo,
+  // e o ícone acompanha o tema em vez do glyph colorido do SO.
+  it('decorates the submit button with an icon kept out of the label', () => {
+    const wrapper = mount(CreateRoomForm)
+    const icon = wrapper.findComponent(IconRocket)
+
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+    expect(wrapper.text()).not.toContain('🚀')
   })
 })

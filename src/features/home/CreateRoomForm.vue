@@ -10,6 +10,8 @@ import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
 import { getJoinErrorKey } from '@/composables/joinErrors'
 import { DECKS, DECK_TYPES } from '@/types'
+import IconTriangleAlert from '~icons/lucide/triangle-alert'
+import IconRocket from '~icons/lucide/rocket'
 
 const { t } = useI18n()
 const { createRoom } = useRoom()
@@ -109,8 +111,12 @@ const onSubmit = handleSubmit(async (values) => {
         </label>
       </div>
 
-      <p v-if="submitErrorKey" class="session-notice" role="alert">⚠️ {{ t(submitErrorKey) }}</p>
+      <p v-if="submitErrorKey" class="session-notice" role="alert">
+        <IconTriangleAlert aria-hidden="true" />
+        {{ t(submitErrorKey) }}
+      </p>
       <BaseButton type="submit" size="lg" block :loading="submitting">
+        <IconRocket class="btn-icon" aria-hidden="true" />
         {{ t('home.createButton') }}
       </BaseButton>
     </form>
@@ -123,6 +129,13 @@ const onSubmit = handleSubmit(async (values) => {
    ~pequena duplicação consciente, mesmo trade-off do RoomSetup/RoomVoting (F3.3). */
 .form-card {
   animation: slideUp var(--transition-normal);
+}
+
+/* O BaseButton embrulha o slot num <span> inline, então o gap dele não separa
+   ícone e rótulo — sem isso sobraria só o espaço em branco colapsado (~4px),
+   metade do respiro que os ícones têm na navbar e no 404. */
+.btn-icon {
+  margin-right: var(--space-1);
 }
 
 .form {
