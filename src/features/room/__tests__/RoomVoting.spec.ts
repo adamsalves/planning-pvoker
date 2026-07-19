@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import IconEye from '~icons/lucide/eye'
+import IconHourglass from '~icons/lucide/hourglass'
 import RoomVoting from '../RoomVoting.vue'
 import VotingArea from '../VotingArea.vue'
 import VoteReveal from '../VoteReveal.vue'
@@ -125,5 +127,30 @@ describe('RoomVoting.vue', () => {
     // currentRound é undefined → `v-if="isAdmin && currentRound"` barra o RoundControls,
     // então o fallback `?? {}` do anyVoted nunca é acionado em runtime (rede de segurança).
     expect(wrapper.findComponent(RoundControls).exists()).toBe(false)
+  })
+
+  // Ícones: asserção pelo COMPONENTE (não por `find('svg')`, que passaria com
+  // qualquer ícone — inclusive um de significado trocado) + o negativo do irmão.
+  it('mensagem de espectador leva o ícone de olho, decorativo', () => {
+    const wrapper = mountVoting({ isObserver: true }, votingRoom('voting'))
+
+    const icon = wrapper.findComponent(IconEye)
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+    // O significado vem do texto ao lado, não do ícone.
+    expect(wrapper.text()).toContain('Você está como espectador')
+  })
+
+  it('espera do não-admin usa a ampulheta; o espectador em votação, não', () => {
+    const semRodada = votingRoom('voting')
+    semRodada.rounds = []
+    semRodada.currentRoundIndex = -1
+    const espera = mountVoting({ isAdmin: false }, semRodada)
+    expect(espera.findComponent(IconHourglass).exists()).toBe(true)
+    expect(espera.findComponent(IconHourglass).attributes('aria-hidden')).toBe('true')
+    expect(espera.findComponent(IconEye).exists()).toBe(false)
+
+    const espectador = mountVoting({ isObserver: true }, votingRoom('voting'))
+    expect(espectador.findComponent(IconHourglass).exists()).toBe(false)
   })
 })

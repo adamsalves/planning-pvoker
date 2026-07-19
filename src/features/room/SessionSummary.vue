@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import IconCircleCheck from '~icons/lucide/circle-check'
+import IconRotateCw from '~icons/lucide/rotate-cw'
 import type { Round } from '@/types'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -22,7 +24,10 @@ const { t } = useI18n()
 <template>
   <div class="session-summary">
     <div class="summary-header">
-      <div class="check-icon">✅</div>
+      <!-- `circle-check` e não o `check` puro do badge de fase do RoomView (que
+           aparece junto, "Concluída"): aqui o ícone é o herói em 3rem e o círculo
+           lhe dá presença; no badge, a ~12px, o traço solto lê melhor. -->
+      <IconCircleCheck class="check-icon" aria-hidden="true" />
       <h2 class="summary-title">{{ t('room.summary.title') }}</h2>
       <p class="summary-subtitle">
         {{ t('room.summary.subjectsVoted', rounds.length) }}
@@ -45,7 +50,7 @@ const { t } = useI18n()
 
     <div class="summary-actions">
       <BaseButton variant="primary" size="lg" block @click="emit('newSession')">
-        {{ t('room.summary.newSession') }}
+        <IconRotateCw class="btn-icon" aria-hidden="true" />{{ t('room.summary.newSession') }}
       </BaseButton>
       <BaseButton variant="ghost" size="md" block @click="emit('leave')">
         {{ t('room.leave.button') }}
@@ -70,8 +75,11 @@ const { t } = useI18n()
   gap: var(--space-2);
 }
 
+/* Verde do token semântico (inverte no dark, F3.9): o ✅ que ele substitui já
+   carregava a cor de sucesso — sem isso o ícone herdaria o texto padrão. */
 .check-icon {
   font-size: 3rem;
+  color: var(--c-success-text);
   animation: popIn 0.4s ease-out;
 }
 

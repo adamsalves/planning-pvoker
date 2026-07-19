@@ -2,6 +2,7 @@
 import { watch, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import confetti from 'canvas-confetti'
+import IconPartyPopper from '~icons/lucide/party-popper'
 import { prefersReducedMotion } from '@/composables/matchMedia'
 import { useVoteStats } from '@/composables/useVoteStats'
 
@@ -68,7 +69,8 @@ watch(hasConsensus, (newVal) => {
   <div class="vote-reveal animate-slide-up">
     <!-- Consensus Banner -->
     <div v-if="hasConsensus" class="consensus-banner">
-      🎉 <strong>{{ t('room.reveal.consensus') }}</strong> {{ t('room.reveal.allVoted') }}
+      <IconPartyPopper class="consensus-icon" aria-hidden="true" />
+      <strong>{{ t('room.reveal.consensus') }}</strong> {{ t('room.reveal.allVoted') }}
       <span class="consensus-value">{{ consensusValue }}</span>
     </div>
 
@@ -125,6 +127,13 @@ watch(hasConsensus, (newVal) => {
   border-radius: var(--radius-lg);
   font-size: var(--text-lg);
   color: var(--c-text);
+}
+
+/* Verde do token semântico (inverte no dark, F3.9) para casar com a borda de
+   sucesso do banner — o 🎉 que ele substitui já lia como "positivo". */
+.consensus-icon {
+  color: var(--c-success-text);
+  margin-right: var(--space-1);
 }
 
 .consensus-value {

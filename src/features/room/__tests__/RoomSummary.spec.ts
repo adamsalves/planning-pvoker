@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import IconNotepadText from '~icons/lucide/notepad-text'
 import RoomSummary from '../RoomSummary.vue'
 import VoteReveal from '../VoteReveal.vue'
 import { useRoomStore } from '@/stores/room'
@@ -70,5 +71,15 @@ describe('RoomSummary.vue (live room summary)', () => {
   it('passes celebrate=false so the recap never fires confetti', () => {
     const wrapper = mountSummary([round('a', 'Login', 'revealed', { p1: 5 })])
     expect(wrapper.findComponent(VoteReveal).props('celebrate')).toBe(false)
+  })
+
+  it('o ícone do estado vazio é decorativo e some quando há recaps', () => {
+    const vazio = mountSummary([round('a', 'Login', 'voting', { p1: 5 })])
+    const icon = vazio.findComponent(IconNotepadText)
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+
+    const comRecap = mountSummary([round('a', 'Login', 'revealed', { p1: 5 })])
+    expect(comRecap.findComponent(IconNotepadText).exists()).toBe(false)
   })
 })

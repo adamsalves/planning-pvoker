@@ -83,7 +83,10 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- ADMIN REVEALS --
     await adminPage.waitForTimeout(500)
-    await adminPage.getByRole('button', { name: '👁️ Revelar Votos' }).click()
+    // Sem `exact` de propósito: aqui só o member vota (o admin conta como ativo e
+    // nunca vota), então o nome acessível é só "Revelar Votos". Se o fluxo passar a
+    // ter todos votando, o botão anexa "(todos votaram!)" e um match exato quebraria.
+    await adminPage.getByRole('button', { name: 'Revelar Votos' }).click()
 
     // -- VERIFY REVEAL --
     // A rodada revelada aparece na aba "Votação" E na "Resumo (1)" (F6.1; ambas ficam
@@ -95,7 +98,7 @@ test.describe('Planning Poker E2E Flow', () => {
     await expect(memberPage.locator('#room-panel-voting').getByText('Consenso!')).toBeVisible()
 
     // -- ADMIN FINISHES SESSION (last subject) --
-    await adminPage.getByRole('button', { name: '✅ Finalizar Sessão' }).click()
+    await adminPage.getByRole('button', { name: 'Finalizar Sessão', exact: true }).click()
 
     // Should see session summary
     await expect(adminPage.locator('text=Sessão Concluída!')).toBeVisible()

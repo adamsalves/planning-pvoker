@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import IconSparkles from '~icons/lucide/sparkles'
+import IconHourglass from '~icons/lucide/hourglass'
+import IconArrowRight from '~icons/lucide/arrow-right'
+import IconCheck from '~icons/lucide/check'
 import BaseButton from '@/components/BaseButton.vue'
 
 interface Props {
@@ -26,10 +30,15 @@ const { t } = useI18n()
          zero votos não mostra nada; o hint explica o porquê). -->
     <template v-if="status === 'voting'">
       <BaseButton variant="primary" size="lg" block :disabled="!anyVoted" @click="emit('reveal')">
-        {{ t('room.controls.reveal') }}
+        <!-- `sparkles` e não `eye`: o olho já é o ícone do PAPEL de espectador
+             (PlayerList, badge do RoomView, mensagem do RoomVoting) e um admin
+             espectador veria os dois sentidos na mesma tela. -->
+        <IconSparkles class="btn-icon" aria-hidden="true" />{{ t('room.controls.reveal') }}
         <span v-if="allVoted" class="hint">{{ t('room.controls.allVotedHint') }}</span>
       </BaseButton>
-      <p v-if="!anyVoted" class="controls-hint">{{ t('room.controls.noVotesHint') }}</p>
+      <p v-if="!anyVoted" class="controls-hint">
+        <IconHourglass class="btn-icon" aria-hidden="true" />{{ t('room.controls.noVotesHint') }}
+      </p>
     </template>
 
     <!-- Após revelar: botão de próximo ou finalizar -->
@@ -40,7 +49,7 @@ const { t } = useI18n()
       block
       @click="emit('nextRound')"
     >
-      {{ t('room.controls.next') }}
+      <IconArrowRight class="btn-icon" aria-hidden="true" />{{ t('room.controls.next') }}
     </BaseButton>
 
     <BaseButton
@@ -50,7 +59,7 @@ const { t } = useI18n()
       block
       @click="emit('finish')"
     >
-      {{ t('room.controls.finish') }}
+      <IconCheck class="btn-icon" aria-hidden="true" />{{ t('room.controls.finish') }}
     </BaseButton>
   </div>
 </template>
