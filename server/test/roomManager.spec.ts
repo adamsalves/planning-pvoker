@@ -236,6 +236,104 @@ describe('autoReveal quorum is presence-aware', () => {
   })
 })
 
+describe('setRoundVoter (admin chooses who votes in the round)', () => {
+  const other: Player = { id: 'm2', name: 'Other', role: 'member' }
+
+  // Voting room [admin, member, other, observer] on subject A, autoReveal off.
+  function seeded(autoReveal = false) {
+    const arm = new RoomManager()
+    arm.createRoom('r1', admin, { deckType: 'fibonacci', autoReveal })
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', other)
+    arm.joinRoom('r1', observer)
+    arm.addSubjects('r1', ['A', 'B'])
+    arm.startSession('r1')
+    return arm
+  }
+
+  it('starts a session with nobody excluded', () => {
+    expect(seeded().getRoom('r1')?.rounds[0].excludedVoterIds).toEqual([])
+  })
+
+  it('excludes and re-includes a player', () => {
+    const arm = seeded()
+    expect(arm.setRoundVoter('r1', 'm1', false)?.rounds[0].excludedVoterIds).toEqual(['m1'])
+    expect(arm.setRoundVoter('r1', 'm1', true)?.rounds[0].excludedVoterIds).toEqual([])
+  })
+
+  it('is idempotent — excluding twice does not duplicate the id', () => {
+    const arm = seeded()
+    arm.setRoundVoter('r1', 'm1', false)
+    expect(arm.setRoundVoter('r1', 'm1', false)?.rounds[0].excludedVoterIds).toEqual(['m1'])
+  })
+
+  it('drops a vote already cast by the player being excluded', () => {
+    const arm = seeded()
+    arm.castVote('r1', 'm1', 5)
+    const room = arm.setRoundVoter('r1', 'm1', false)
+    // Keeping it would skew the reveal stats with a vote nobody is waiting on.
+    expect(room?.rounds[0].votes['m1']).toBeUndefined()
+  })
+
+  it('lets the admin take themselves out (facilitator who does not vote)', () => {
+    expect(seeded().setRoundVoter('r1', 'a1', false)?.rounds[0].excludedVoterIds).toEqual(['a1'])
+  })
+
+  it('rejects toggling an observer, an unknown player, or a revealed round', () => {
+    const arm = seeded()
+    expect(arm.setRoundVoter('r1', 'o1', false)).toBeNull()
+    expect(arm.setRoundVoter('r1', 'ghost', false)).toBeNull()
+    arm.revealVotes('r1')
+    expect(arm.setRoundVoter('r1', 'm1', false)).toBeNull()
+  })
+
+  it('rejects when the room has no active round', () => {
+    const arm = new RoomManager()
+    arm.createRoom('r1', admin, config)
+    arm.joinRoom('r1', member)
+    expect(arm.setRoundVoter('r1', 'm1', false)).toBeNull()
+    expect(arm.setRoundVoter('nope', 'm1', false)).toBeNull()
+  })
+
+  it('refuses a vote from an excluded player, and accepts it again once re-included', () => {
+    const arm = seeded()
+    arm.setRoundVoter('r1', 'm1', false)
+    expect(arm.castVote('r1', 'm1', 5)).toBeNull()
+    arm.setRoundVoter('r1', 'm1', true)
+    expect(arm.castVote('r1', 'm1', 5)?.rounds[0].votes['m1']).toBe(5)
+  })
+
+  it('carries the selection over to the next round, as an independent copy', () => {
+    const arm = seeded()
+    arm.setRoundVoter('r1', 'm1', false)
+    const room = arm.nextRound('r1')
+    expect(room?.rounds[1].excludedVoterIds).toEqual(['m1'])
+
+    // Toggling in the new round must not rewrite the previous one's history.
+    arm.setRoundVoter('r1', 'm2', false)
+    expect(room?.rounds[0].excludedVoterIds).toEqual(['m1'])
+    expect(room?.rounds[1].excludedVoterIds).toEqual(['m1', 'm2'])
+  })
+
+  it('auto-reveals when excluding the last voter the round was waiting on', () => {
+    const arm = seeded(true)
+    arm.castVote('r1', 'a1', 3)
+    arm.castVote('r1', 'm1', 5)
+    // m2 is the only one left pending; taking them out completes the quorum.
+    const room = arm.setRoundVoter('r1', 'm2', false)
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  it('does not reveal a voteless round when every voter is excluded', () => {
+    const arm = seeded(true)
+    arm.setRoundVoter('r1', 'a1', false)
+    arm.setRoundVoter('r1', 'm1', false)
+    const room = arm.setRoundVoter('r1', 'm2', false)
+    // The `required.length > 0` guard: an empty quorum must not reveal nothing.
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+})
+
 describe('session tokens', () => {
   it('mints a non-empty token and reuses it on repeat calls', () => {
     const a = rm.getOrCreateToken('r1', 'a1')

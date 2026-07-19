@@ -51,15 +51,21 @@ export const roomActionSchema = z.object({ roomId })
 
 export const addSubjectsSchema = z.object({
   roomId,
-  subjects: z
-    .array(z.string().trim().min(1).max(MAX_SUBJECT))
-    .min(1)
-    .max(MAX_SUBJECTS_PER_CALL),
+  subjects: z.array(z.string().trim().min(1).max(MAX_SUBJECT)).min(1).max(MAX_SUBJECTS_PER_CALL),
 })
 
 export const removeSubjectSchema = z.object({
   roomId,
   index: z.number().int().nonnegative(),
+})
+
+// set_round_voter — o admin liga/desliga UM jogador da rodada corrente. Um
+// toggle por evento (em vez da lista inteira) mantém a ação idempotente e
+// dispensa cap de array.
+export const setRoundVoterSchema = z.object({
+  roomId,
+  playerId: z.string().trim().min(1).max(MAX_ID),
+  voting: z.boolean(),
 })
 
 export const castVoteSchema = z.object({

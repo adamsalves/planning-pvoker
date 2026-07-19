@@ -252,18 +252,26 @@ export class RoomManager {
 
   // --- Session Flow ---
 
+  // Single factory for both round creation sites. `excludedVoterIds` is always
+  // copied, never aliased — two rounds sharing one array would make the admin's
+  // toggle on the current round retroactively rewrite the previous one.
+  private createRound(subject: string, excludedVoterIds: string[]): Round {
+    return {
+      id: crypto.randomUUID(),
+      subject,
+      status: 'voting',
+      votes: {},
+      excludedVoterIds: [...excludedVoterIds],
+    }
+  }
+
   public startSession(roomId: string): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.phase !== 'setup') return null
     if (room.subjects.length === 0) return null
 
-    // Create round for the first subject
-    const firstRound: Round = {
-      id: crypto.randomUUID(),
-      subject: room.subjects[0],
-      status: 'voting',
-      votes: {},
-    }
+    // Create round for the first subject — a fresh session starts with everyone in.
+    const firstRound = this.createRound(room.subjects[0], [])
 
     room.phase = 'voting'
     room.rounds = [firstRound]
@@ -286,13 +294,13 @@ export class RoomManager {
       return room
     }
 
-    // Create round for the next subject
-    const newRound: Round = {
-      id: crypto.randomUUID(),
-      subject: room.subjects[nextSubjectIndex],
-      status: 'voting',
-      votes: {},
-    }
+    // Create round for the next subject, INHERITING who the admin left out: the
+    // selection is meant to carry across rounds, so they don't re-pick every time.
+    const previousExcluded =
+      room.currentRoundIndex >= 0
+        ? (room.rounds[room.currentRoundIndex].excludedVoterIds ?? [])
+        : []
+    const newRound = this.createRound(room.subjects[nextSubjectIndex], previousExcluded)
 
     room.rounds.push(newRound)
     room.currentRoundIndex = nextSubjectIndex
@@ -307,12 +315,13 @@ export class RoomManager {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null
 
-    // Only players present in the room who are not observers may vote
-    const player = room.players.find((p) => p.id === playerId)
-    if (!player || player.role === 'observer') return null
-
     const round = room.rounds[room.currentRoundIndex]
     if (round.status !== 'voting') return null
+
+    // Admission goes through the SAME seam as the quorum: a vote is accepted iff
+    // its author is one of the voters the round is waiting on. Also covers a
+    // playerId that isn't in the room at all (the filter runs over room.players).
+    if (!this.eligibleVotersOf(room, round).some((p) => p.id === playerId)) return null
 
     round.votes[playerId] = value
 
@@ -322,13 +331,46 @@ export class RoomManager {
     return room
   }
 
+  // Turns a player on/off as a voter in the CURRENT round (admin-only, enforced
+  // at the socket layer). Deliberately per-player rather than a whole-list
+  // replace: it matches the per-row toggle in the UI and stays idempotent.
+  public setRoundVoter(roomId: string, playerId: string, voting: boolean): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room || room.currentRoundIndex === -1) return null
+
+    const round = room.rounds[room.currentRoundIndex]
+    // Once revealed, who the round expected is settled history — don't rewrite it.
+    if (round.status !== 'voting') return null
+
+    // Observers are already out; flipping a role is a separate concern.
+    const player = room.players.find((p) => p.id === playerId)
+    if (!player || player.role === 'observer') return null
+
+    const excluded = round.excludedVoterIds ?? []
+    if (voting) {
+      round.excludedVoterIds = excluded.filter((id) => id !== playerId)
+    } else if (!excluded.includes(playerId)) {
+      round.excludedVoterIds = [...excluded, playerId]
+      // Drop any vote they had already cast — leaving it behind would skew the
+      // reveal stats with a vote from someone the round no longer counts.
+      delete round.votes[playerId]
+    }
+
+    // Taking the last pending voter out can complete the quorum.
+    this.maybeAutoReveal(room)
+
+    this.scheduleSave(roomId)
+    return room
+  }
+
   // --- AutoReveal quorum (presence-aware) ---
 
-  // The set of players eligible to vote in the room. Today: everyone who is not
-  // an observer. This is the single seam the quorum is built on — item #3 (admin
-  // chooses who votes) narrows this to a chosen subset and nothing else changes.
-  private eligibleVotersOf(room: Room): Player[] {
-    return room.players.filter((p) => p.role !== 'observer')
+  // The set of players the given round is waiting on: everyone who is neither an
+  // observer (room-wide) nor excluded by the admin from THIS round. Single seam
+  // shared by the quorum and by castVote's admission check.
+  private eligibleVotersOf(room: Room, round: Round): Player[] {
+    const excluded = round.excludedVoterIds ?? []
+    return room.players.filter((p) => p.role !== 'observer' && !excluded.includes(p.id))
   }
 
   // Reveals the current round when every PRESENT eligible voter has voted. Only
@@ -341,11 +383,12 @@ export class RoomManager {
     const round = room.rounds[room.currentRoundIndex]
     if (round.status !== 'voting') return
 
-    const required = this.eligibleVotersOf(room).filter((p) =>
+    const required = this.eligibleVotersOf(room, round).filter((p) =>
       this.presence.isPresent(room.id, p.id),
     )
     // Guard length: [].every() is true, which would reveal a round with no
-    // present eligible voters (e.g. observers-only) without a single vote.
+    // present eligible voters (observers-only, or an admin who excluded
+    // everyone) without a single vote.
     if (required.length > 0 && required.every((p) => round.votes[p.id] !== undefined)) {
       round.status = 'revealed'
     }

@@ -179,6 +179,28 @@ describe('RedisPersistence', () => {
     expect(snap.tokens.has('ROOM1::p2')).toBe(false) // corrupt one skipped
   })
 
+  // Guards the `.optional()` on excludedVoterIds. A snapshot written by a deploy
+  // that predates "admin chooses who votes" has no such field; if the schema ever
+  // required it, safeParse would fail and loadAll DROPS the room — every live
+  // room would die on deploy. This test fails if someone tightens it.
+  it('loadAll accepts a pre-feature round with no excludedVoterIds', async () => {
+    await redis.sadd('rooms:index', 'OLD')
+    redis.strings.set('room:OLD', {
+      id: 'OLD',
+      adminId: 'p1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [{ id: 'p1', name: 'Ana', role: 'admin' }],
+      subjects: ['S1'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'S1', status: 'voting', votes: { p1: 5 } }],
+      currentRoundIndex: 0,
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['OLD'])
+    expect(snap.rooms[0].rounds[0].excludedVoterIds).toBeUndefined()
+  })
+
   it('loadAll drops a malformed snapshot instead of throwing', async () => {
     await redis.sadd('rooms:index', 'BAD')
     redis.strings.set('room:BAD', { id: 'BAD', not: 'a room' })
