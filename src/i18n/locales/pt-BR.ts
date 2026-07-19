@@ -56,7 +56,7 @@ export const ptBR = {
   notFound: {
     title: 'Página não encontrada',
     message: 'O link pode estar quebrado ou a página não existe mais.',
-    backHome: '🏠 Voltar ao início',
+    backHome: 'Voltar ao início',
   },
   decks: {
     fibonacci: 'Fibonacci',

@@ -5,7 +5,13 @@ import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import DefaultLayout from '../DefaultLayout.vue'
 import { useRoomStore } from '@/stores/room'
+import { useThemeStore } from '@/stores/theme'
 import type { Room, RoomPhase } from '@/types'
+import IconSun from '~icons/lucide/sun'
+import IconMoon from '~icons/lucide/moon'
+import IconSunMoon from '~icons/lucide/sun-moon'
+import IconTarget from '~icons/lucide/target'
+import IconChartColumn from '~icons/lucide/chart-column'
 
 let wrapper: VueWrapper | undefined
 
@@ -132,6 +138,7 @@ describe('DefaultLayout.vue', () => {
     expect(link).toBeDefined()
     expect(link?.text()).toContain('Voltar à Sala')
     expect(link?.attributes('href')).toBe('/room/abc123')
+    expect(w.findComponent(IconTarget).exists()).toBe(true) // em andamento → alvo
   })
 
   it('labels the link "Ver Resumo" from another route when the session is completed (F5.2)', async () => {
@@ -142,5 +149,26 @@ describe('DefaultLayout.vue', () => {
     expect(link).toBeDefined()
     expect(link?.text()).toContain('Ver Resumo')
     expect(link?.attributes('href')).toBe('/room/abc123')
+    expect(w.findComponent(IconChartColumn).exists()).toBe(true) // concluída → gráfico
+  })
+
+  // O toggle de tema mostra o ícone da preferência atual (sun/moon/sun-moon),
+  // recolorindo via currentColor — antes eram emojis ☀️/🌙/🌗 de cor fixa. (Também
+  // é o smoke de que o unplugin-icons gera <svg> no vitest, base das próximas fatias.)
+  // Obs.: o logo 🃏 (marca/joker) fica como emoji de propósito — não é convertido.
+  it('renders the theme icon matching the current preference', async () => {
+    const w = mountLayout()
+    const theme = useThemeStore()
+
+    expect(w.findComponent(IconSunMoon).exists()).toBe(true) // default = 'system'
+
+    theme.setPreference('light')
+    await nextTick()
+    expect(w.findComponent(IconSun).exists()).toBe(true)
+    expect(w.findComponent(IconSunMoon).exists()).toBe(false)
+
+    theme.setPreference('dark')
+    await nextTick()
+    expect(w.findComponent(IconMoon).exists()).toBe(true)
   })
 })

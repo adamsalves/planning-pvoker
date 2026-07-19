@@ -55,7 +55,7 @@ export const en: MessageSchema = {
   notFound: {
     title: 'Page not found',
     message: 'The link may be broken or the page no longer exists.',
-    backHome: '🏠 Back to home',
+    backHome: 'Back to home',
   },
   decks: {
     fibonacci: 'Fibonacci',

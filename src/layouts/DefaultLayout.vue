@@ -7,6 +7,11 @@ import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
+import IconTarget from '~icons/lucide/target'
+import IconChartColumn from '~icons/lucide/chart-column'
+import IconSun from '~icons/lucide/sun'
+import IconMoon from '~icons/lucide/moon'
+import IconSunMoon from '~icons/lucide/sun-moon'
 
 const { t } = useI18n()
 
@@ -28,8 +33,8 @@ const showBackToRoom = computed(
 )
 const backToRoom = computed(() =>
   isCompleted.value
-    ? { icon: '📊', label: t('layout.viewSummary') }
-    : { icon: '🎯', label: t('layout.backToRoom') },
+    ? { icon: IconChartColumn, label: t('layout.viewSummary') }
+    : { icon: IconTarget, label: t('layout.backToRoom') },
 )
 
 const mainRef = ref<HTMLElement | null>(null)
@@ -50,7 +55,11 @@ const announcedTitle = computed(() => routeTitle(route.meta, route.params))
 const themeStore = useThemeStore()
 const { preference: themePreference } = storeToRefs(themeStore)
 const themeIcon = computed(() =>
-  themePreference.value === 'light' ? '☀️' : themePreference.value === 'dark' ? '🌙' : '🌗',
+  themePreference.value === 'light'
+    ? IconSun
+    : themePreference.value === 'dark'
+      ? IconMoon
+      : IconSunMoon,
 )
 const themeLabel = computed(() =>
   t('layout.theme.toggle', { name: t(`layout.theme.${themePreference.value}`) }),
@@ -77,7 +86,7 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
             :to="`/room/${currentRoom?.id}`"
             class="nav-link nav-link-room"
           >
-            <span class="room-icon" aria-hidden="true">{{ backToRoom.icon }}</span>
+            <component :is="backToRoom.icon" class="room-icon" aria-hidden="true" />
             {{ backToRoom.label }}
           </RouterLink>
           <RouterLink to="/" class="nav-link">{{ t('layout.home') }}</RouterLink>
@@ -88,7 +97,7 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
             :title="themeLabel"
             @click="themeStore.cycle()"
           >
-            <span aria-hidden="true">{{ themeIcon }}</span>
+            <component :is="themeIcon" aria-hidden="true" />
           </button>
           <button
             type="button"
