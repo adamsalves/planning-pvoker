@@ -218,6 +218,14 @@ export class RoomManager {
       next.role = 'admin'
     }
 
+    // The departing player is deliberately NOT pruned from the round's
+    // excludedVoterIds. Harmless to the quorum (eligibleVotersOf filters over
+    // room.players, so someone who is gone never counts), and it keeps the
+    // admin's choice sticky for the case that actually matters: a player who
+    // drops and comes back with the same id stays out of the round, instead of
+    // silently re-entering it. Trade-off: after an explicit "leave" and a
+    // re-join, that player is still excluded — the UI (slice 2) has to say so.
+    //
     // A present voter just left (their grace expired). If the voters who remain
     // present have all voted, the round can now auto-reveal — the departing
     // player was the last one holding it open. No-op when autoReveal is off.
@@ -252,9 +260,10 @@ export class RoomManager {
 
   // --- Session Flow ---
 
-  // Single factory for both round creation sites. `excludedVoterIds` is always
-  // copied, never aliased — two rounds sharing one array would make the admin's
-  // toggle on the current round retroactively rewrite the previous one.
+  // Single factory for both round creation sites. `excludedVoterIds` is copied,
+  // never aliased. setRoundVoter always REASSIGNS the array (never mutates in
+  // place), so sharing one wouldn't corrupt anything today — the copy is what
+  // keeps a future in-place edit from rewriting a past round's history.
   private createRound(subject: string, excludedVoterIds: string[]): Round {
     return {
       id: crypto.randomUUID(),

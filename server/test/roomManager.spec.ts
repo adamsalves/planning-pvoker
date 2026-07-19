@@ -309,6 +309,11 @@ describe('setRoundVoter (admin chooses who votes in the round)', () => {
     const room = arm.nextRound('r1')
     expect(room?.rounds[1].excludedVoterIds).toEqual(['m1'])
 
+    // Distinct arrays, not one shared reference — the assertion that actually
+    // pins the copy in createRound (the one below passes either way, since
+    // setRoundVoter reassigns instead of mutating).
+    expect(room?.rounds[0].excludedVoterIds).not.toBe(room?.rounds[1].excludedVoterIds)
+
     // Toggling in the new round must not rewrite the previous one's history.
     arm.setRoundVoter('r1', 'm2', false)
     expect(room?.rounds[0].excludedVoterIds).toEqual(['m1'])
@@ -322,6 +327,48 @@ describe('setRoundVoter (admin chooses who votes in the round)', () => {
     // m2 is the only one left pending; taking them out completes the quorum.
     const room = arm.setRoundVoter('r1', 'm2', false)
     expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  // Intersection with the presence-aware quorum (PR #51): the two filters have
+  // to compose, so the round waits on eligible ∩ present.
+  describe('composed with presence', () => {
+    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+
+    // [admin, member, ghost] voting on A, autoReveal on, ghost never present.
+    function seededWithGhost() {
+      const arm = new RoomManager()
+      arm.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+      arm.createRoom('r1', admin, { deckType: 'fibonacci', autoReveal: true })
+      arm.joinRoom('r1', member)
+      arm.joinRoom('r1', ghost)
+      arm.addSubjects('r1', ['A'])
+      arm.startSession('r1')
+      return arm
+    }
+
+    it('reveals once the only present, non-excluded voter has voted', () => {
+      const arm = seededWithGhost()
+      arm.setRoundVoter('r1', 'm1', false) // excluded; g1 is absent
+      const room = arm.castVote('r1', 'a1', 3)
+      expect(room?.rounds[0].status).toBe('revealed')
+    })
+
+    it('does not reveal while an excluded player is the only one who voted', () => {
+      const arm = seededWithGhost()
+      arm.castVote('r1', 'm1', 5)
+      arm.setRoundVoter('r1', 'm1', false)
+      // m1's vote was dropped with the exclusion, and a1 (present, eligible)
+      // still hasn't voted — the round must stay open.
+      expect(arm.getRoom('r1')?.rounds[0].status).toBe('voting')
+    })
+
+    it('does not reveal when every present voter is excluded', () => {
+      const arm = seededWithGhost()
+      arm.setRoundVoter('r1', 'a1', false)
+      const room = arm.setRoundVoter('r1', 'm1', false)
+      // Only g1 is left eligible, and it is absent — quorum is empty, guard holds.
+      expect(room?.rounds[0].status).toBe('voting')
+    })
   })
 
   it('does not reveal a voteless round when every voter is excluded', () => {

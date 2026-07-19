@@ -179,6 +179,17 @@ describe('RedisPersistence', () => {
     expect(snap.tokens.has('ROOM1::p2')).toBe(false) // corrupt one skipped
   })
 
+  // The whole point of the field is surviving a restart, so pin the round trip:
+  // sobreviver ao save→load é o que mantém a seleção do admin após um redeploy.
+  it('round-trips excludedVoterIds through save and load', async () => {
+    const room = sampleRoom('ROOM1')
+    room.rounds[0].excludedVoterIds = ['p2']
+    await persistence.saveRoom(room)
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms[0].rounds[0].excludedVoterIds).toEqual(['p2'])
+  })
+
   // Guards the `.optional()` on excludedVoterIds. A snapshot written by a deploy
   // that predates "admin chooses who votes" has no such field; if the schema ever
   // required it, safeParse would fail and loadAll DROPS the room — every live

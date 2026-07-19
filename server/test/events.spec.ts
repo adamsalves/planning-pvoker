@@ -287,6 +287,18 @@ describe('set_round_voter', () => {
     expect(accepted.ok).toBe(true)
   })
 
+  // A tabela de `votingActions` acima cobre set_round_voter, mas suas asserções
+  // (phase/status) passariam mesmo se a ação de um não-admin tivesse rodado —
+  // excluir um votante não mexe em nenhuma das duas. Este caso olha o efeito real.
+  it('ignores set_round_voter from a non-admin', async () => {
+    const { memberClient, memberToken } = await startVotingRoom()
+    memberClient.emit('set_round_voter', { roomId: 'r1', playerId: 'a1', voting: false })
+    const room = roomOf(
+      await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+    )
+    expect(room.rounds[0].excludedVoterIds).toEqual([])
+  })
+
   it('ignores a malformed payload', async () => {
     const { adminClient, adminToken } = await startVotingRoom()
     adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1' }) // no `voting`
