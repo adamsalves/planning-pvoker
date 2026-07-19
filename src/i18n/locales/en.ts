@@ -145,6 +145,13 @@ export const en: MessageSchema = {
       waitingVote: 'Waiting for vote',
       observerSr: 'Observer',
     },
+    voters: {
+      hint: 'Uncheck anyone not voting in this round',
+      toggleLabel: '{name} votes in this round',
+      notVotingLabel: 'Not voting in this round',
+      notVotingTitle: 'You are not voting in this round',
+      notVotingSub: 'The admin left you out of this round. Hang tight for the result.',
+    },
     reveal: {
       consensus: 'Consensus!',
       allVoted: 'Everyone voted',

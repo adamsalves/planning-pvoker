@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
+import { i18n } from '@/i18n'
 import IconCheck from '~icons/lucide/check'
 import IconHourglass from '~icons/lucide/hourglass'
 import PlayerList from '../PlayerList.vue'
@@ -101,5 +103,150 @@ describe('PlayerList.vue', () => {
 
     expect(wrapper.find('.observer-badge').attributes('aria-hidden')).toBe('true')
     expect(wrapper.text()).toContain('Espectador')
+  })
+
+  describe('quem vota na rodada', () => {
+    it('só mostra o toggle quando votersEditable', () => {
+      const semToggle = mount(PlayerList, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' },
+      })
+      // Default false: o RoomSetup usa o mesmo componente e não tem rodada.
+      expect(semToggle.find('.voter-toggle').exists()).toBe(false)
+
+      const comToggle = mount(PlayerList, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', votersEditable: true },
+      })
+      // Um por jogador ativo — espectadores não entram na escolha.
+      expect(comToggle.findAll('.voter-toggle')).toHaveLength(2)
+    })
+
+    it('emite toggle-voter com o estado OPOSTO ao atual', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: mockPlayers,
+          votes: {},
+          status: 'voting',
+          nonVoterIds: ['2'],
+          votersEditable: true,
+        },
+      })
+
+      const toggles = wrapper.findAll('.voter-toggle')
+      // Admin ('1') vota → ligado; Member ('2') excluído → desligado.
+      expect(toggles[0]!.attributes('aria-checked')).toBe('true')
+      expect(toggles[1]!.attributes('aria-checked')).toBe('false')
+
+      // Tirar quem vota pede voting=false; devolver quem está fora pede true.
+      await toggles[0]!.trigger('click')
+      expect(wrapper.emitted('toggle-voter')?.[0]).toEqual(['1', false])
+      await toggles[1]!.trigger('click')
+      expect(wrapper.emitted('toggle-voter')?.[1]).toEqual(['2', true])
+    })
+
+    // role="switch" em vez de checkbox justamente para não guardar estado no DOM:
+    // se o servidor não aplicar o toggle, o controle tem de continuar refletindo
+    // o estado REAL, e o próximo clique tem de repetir a mesma intenção.
+    it('não dessincroniza quando o servidor não aplica o toggle', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[0]!],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: [],
+          votersEditable: true,
+        },
+      })
+
+      const toggle = wrapper.find('.voter-toggle')
+      await toggle.trigger('click')
+      // Nenhuma prop nova chegou (o broadcast não veio).
+      expect(wrapper.find('.voter-toggle').attributes('aria-checked')).toBe('true')
+      expect(wrapper.emitted('toggle-voter')?.[1]).toBeUndefined()
+
+      await wrapper.find('.voter-toggle').trigger('click')
+      expect(wrapper.emitted('toggle-voter')?.[1]).toEqual(['1', false])
+    })
+
+    // O v-memo da linha só repinta se a dependência estiver listada — estes casos
+    // montam no estado A e vão para o B, que é o que os testes de estado final
+    // (todos os outros) não conseguem pegar.
+    it('repinta a linha quando a exclusão muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[1]!],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: [],
+          votersEditable: true,
+        },
+      })
+      expect(wrapper.find('.non-voter-badge').exists()).toBe(false)
+
+      await wrapper.setProps({ nonVoterIds: ['2'] })
+      expect(wrapper.find('.non-voter-badge').exists()).toBe(true)
+      expect(wrapper.find('.voter-toggle').attributes('aria-checked')).toBe('false')
+      expect(wrapper.find('.player-item').classes()).toContain('non-voter-item')
+    })
+
+    // O nome acessível do toggle sai de t(), que o v-memo pularia se o locale não
+    // estivesse nas deps — um controle interativo ficaria anunciado no idioma
+    // antigo enquanto o resto da linha já traduziu. O afterEach global restaura.
+    it('retraduz o nome acessível do toggle ao trocar de idioma', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[1]!],
+          votes: {},
+          status: 'voting',
+          votersEditable: true,
+        },
+      })
+      expect(wrapper.find('.voter-toggle').text()).toBe('Member vota nesta rodada')
+
+      i18n.global.locale.value = 'en'
+      await nextTick()
+      expect(wrapper.find('.voter-toggle').text()).toBe('Member votes in this round')
+    })
+
+    it('mostra/esconde o toggle quando votersEditable muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, {
+        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+      })
+      expect(wrapper.find('.voter-toggle').exists()).toBe(false)
+
+      await wrapper.setProps({ votersEditable: true })
+      expect(wrapper.find('.voter-toggle').exists()).toBe(true)
+    })
+
+    // Afordância: sem texto visível a admin não descobre que dá pra tirar alguém
+    // da rodada — e o title sozinho não serve, porque touch não tem hover.
+    it('explica o toggle com hint visível e title, só quando editável', async () => {
+      const wrapper = mount(PlayerList, {
+        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+      })
+      expect(wrapper.find('.voters-hint').exists()).toBe(false)
+
+      await wrapper.setProps({ votersEditable: true })
+      expect(wrapper.find('.voters-hint').text()).toBe('Desmarque quem não vota nesta rodada')
+      expect(wrapper.find('.voter-toggle').attributes('title')).toBe('Member vota nesta rodada')
+    })
+
+    it('mostra "não vota" no lugar de pendente, sem sair da seção de jogadores', () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[1]!],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: ['2'],
+        },
+      })
+
+      const badge = wrapper.find('.non-voter-badge')
+      expect(badge.exists()).toBe(true)
+      expect(badge.find('.sr-only').text()).toBe('Não vota nesta rodada')
+      // Não pode aparecer como "aguardando voto": ninguém espera o voto dele.
+      expect(wrapper.find('.pending-badge').exists()).toBe(false)
+      // E segue contando como jogador, não como espectador.
+      expect(wrapper.html()).toContain('Jogadores (1)')
+    })
   })
 })

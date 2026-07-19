@@ -7,10 +7,16 @@ import RoomVoting from '../RoomVoting.vue'
 import VotingArea from '../VotingArea.vue'
 import VoteReveal from '../VoteReveal.vue'
 import RoundControls from '../RoundControls.vue'
+import PokerTable from '../PokerTable.vue'
+import PlayerList from '../PlayerList.vue'
 import { useRoomStore } from '@/stores/room'
 import type { Room, RoundStatus } from '@/types'
 
-function votingRoom(status: RoundStatus, votes: Record<string, string | number> = {}): Room {
+function votingRoom(
+  status: RoundStatus,
+  votes: Record<string, string | number> = {},
+  excludedVoterIds: string[] = [],
+): Room {
   return {
     id: 'r1',
     adminId: 'p1',
@@ -18,7 +24,7 @@ function votingRoom(status: RoundStatus, votes: Record<string, string | number> 
     players: [{ id: 'p1', name: 'Ana', role: 'admin' }],
     subjects: ['A'],
     phase: 'voting',
-    rounds: [{ id: 'rd1', subject: 'A', status, votes }],
+    rounds: [{ id: 'rd1', subject: 'A', status, votes, excludedVoterIds }],
     currentRoundIndex: 0,
   }
 }
@@ -35,9 +41,11 @@ const stubs = {
 type PropsOverride = Partial<{
   isAdmin: boolean
   isObserver: boolean
+  isVotingThisRound: boolean
   selectedVote: string | number | null
-  activePlayerCount: number
-  allActiveVoted: boolean
+  nonVoterIds: string[]
+  voterCount: number
+  allVotersVoted: boolean
 }>
 
 function mountVoting(props: PropsOverride, room: Room) {
@@ -47,9 +55,11 @@ function mountVoting(props: PropsOverride, room: Room) {
     props: {
       isAdmin: false,
       isObserver: false,
+      isVotingThisRound: true,
       selectedVote: null,
-      activePlayerCount: 1,
-      allActiveVoted: false,
+      nonVoterIds: [],
+      voterCount: 1,
+      allVotersVoted: false,
       ...props,
     },
     global: { stubs },
@@ -62,10 +72,66 @@ describe('RoomVoting.vue', () => {
     expect(wrapper.findComponent(VotingArea).exists()).toBe(true)
   })
 
+  // Espectador da SALA: o RoomView deriva isVotingThisRound de isObserver, então
+  // a combinação coerente é as duas props juntas.
   it('espectador em votação vê a mensagem de observador, não a área de votação', () => {
-    const wrapper = mountVoting({ isObserver: true }, votingRoom('voting'))
+    const wrapper = mountVoting(
+      { isObserver: true, isVotingThisRound: false },
+      votingRoom('voting'),
+    )
     expect(wrapper.findComponent(VotingArea).exists()).toBe(false)
     expect(wrapper.text()).toContain('Você está como espectador')
+  })
+
+  it('tirado da rodada vê a mensagem própria — nem deck, nem a de espectador', () => {
+    const wrapper = mountVoting(
+      { isObserver: false, isVotingThisRound: false, nonVoterIds: ['p1'] },
+      votingRoom('voting', {}, ['p1']),
+    )
+    expect(wrapper.findComponent(VotingArea).exists()).toBe(false)
+    expect(wrapper.text()).toContain('Você não vota nesta rodada')
+    // Não pode cair na mensagem de espectador: é outro estado (papel da sala).
+    expect(wrapper.text()).not.toContain('Você está como espectador')
+  })
+
+  // As três ramificações (deck / espectador / fora-da-rodada) têm de ser
+  // mutuamente exclusivas: um espectador NÃO pode ver os dois cards.
+  it('espectador vê só o card de espectador, nunca também o de fora-da-rodada', () => {
+    const wrapper = mountVoting(
+      { isObserver: true, isVotingThisRound: false, nonVoterIds: ['p1'] },
+      votingRoom('voting', {}, ['p1']),
+    )
+    expect(wrapper.text()).toContain('Você está como espectador')
+    expect(wrapper.text()).not.toContain('Você não vota nesta rodada')
+  })
+
+  it('repassa nonVoterIds à mesa e à lista, e a lista só é editável pelo admin', () => {
+    const wrapper = mountVoting(
+      { isAdmin: true, nonVoterIds: ['p2'] },
+      votingRoom('voting', {}, ['p2']),
+    )
+    expect(wrapper.findComponent(PokerTable).props('nonVoterIds')).toEqual(['p2'])
+    expect(wrapper.findComponent(PlayerList).props('votersEditable')).toBe(true)
+  })
+
+  it('não deixa a lista editável para não-admin nem com a rodada revelada', () => {
+    const naoAdmin = mountVoting({ isAdmin: false }, votingRoom('voting'))
+    expect(naoAdmin.findComponent(PlayerList).props('votersEditable')).toBe(false)
+
+    // Revelada: quem a rodada esperava já é histórico, não se mexe mais.
+    const revelada = mountVoting({ isAdmin: true }, votingRoom('revealed', { p1: 5 }))
+    expect(revelada.findComponent(PlayerList).props('votersEditable')).toBe(false)
+  })
+
+  it('re-emite o toggle-voter da lista de jogadores', () => {
+    const wrapper = mountVoting({ isAdmin: true }, votingRoom('voting'))
+    wrapper.findComponent(PlayerList).vm.$emit('toggle-voter', 'p2', false)
+    expect(wrapper.emitted('toggle-voter')?.[0]).toEqual(['p2', false])
+  })
+
+  it('usa voterCount (e não o total de jogadores) como denominador do VoteReveal', () => {
+    const wrapper = mountVoting({ voterCount: 2 }, votingRoom('revealed', { p1: 5 }))
+    expect(wrapper.findComponent(VoteReveal).props('playerCount')).toBe(2)
   })
 
   it('após revelar mostra o VoteReveal', () => {

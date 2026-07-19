@@ -34,6 +34,11 @@ export interface Round {
   subject: string
   status: RoundStatus
   votes: Record<string, string | number> // playerId -> vote value
+  // Jogadores que o admin tirou DESTA rodada. Lista de EXCLUSÃO (e não de
+  // votantes) de propósito: quem entra na sala depois não está nela, então
+  // entra votando, e `[]` significa "todos votam". Opcional porque rodadas
+  // criadas antes da feature não têm o campo. Espelha server/src/types.ts.
+  excludedVoterIds?: string[]
 }
 
 export interface RoomConfig {
