@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import JoinRoomForm from '../JoinRoomForm.vue'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
 
 // A lógica de joinRoom (navegação/token) é testada em useRoom.spec; aqui o form
 // só precisa do stub para montar sem tocar em socket/router.
@@ -48,5 +50,27 @@ describe('JoinRoomForm.vue', () => {
   it('renders its own submit button', () => {
     const wrapper = mount(JoinRoomForm)
     expect(wrapper.text()).toContain('Entrar na Sala')
+  })
+
+  // Os dois papéis usam ícone (não emoji): aqui o 🃏 era rótulo de papel, não a marca,
+  // então vira `user` junto com o `eye` — o seletor inteiro recolore via currentColor.
+  it('labels both roles with theme-aware icons instead of emojis', () => {
+    const wrapper = mount(JoinRoomForm)
+    const options = wrapper.findAll('.role-option')
+
+    expect(wrapper.findComponent(IconUser).exists()).toBe(true)
+    expect(wrapper.findComponent(IconEye).exists()).toBe(true)
+    expect(options[0].find('svg.role-icon').exists()).toBe(true)
+    expect(options[1].find('svg.role-icon').exists()).toBe(true)
+    expect(wrapper.text()).not.toMatch(/🃏|👁/)
+  })
+
+  // Decorativos: o significado do papel vem do texto do rótulo ao lado.
+  it('hides the role icons from assistive tech', () => {
+    const wrapper = mount(JoinRoomForm)
+
+    for (const icon of wrapper.findAll('svg.role-icon')) {
+      expect(icon.attributes('aria-hidden')).toBe('true')
+    }
   })
 })

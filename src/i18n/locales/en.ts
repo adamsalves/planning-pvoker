@@ -37,7 +37,7 @@ export const en: MessageSchema = {
     namePlaceholderJoin: 'E.g.: Mary',
     deckTypeLabel: 'Deck Type',
     autoReveal: 'Auto-reveal when everyone has voted',
-    createButton: '🚀 Create Room',
+    createButton: 'Create Room',
     roomCodeLabel: 'Room code',
     roomCodePlaceholder: 'E.g.: a1b2c3d4',
     joinAsLabel: 'Join as',
@@ -45,7 +45,7 @@ export const en: MessageSchema = {
     roleMemberDesc: 'Votes on estimates',
     roleObserver: 'Observer',
     roleObserverDesc: 'Just watches',
-    joinButton: '🔗 Join Room',
+    joinButton: 'Join Room',
     validation: {
       nameMin: 'Name must be at least 2 characters',
       nameMax: 'Name must be at most 20 characters',

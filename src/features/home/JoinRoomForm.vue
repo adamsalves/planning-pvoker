@@ -10,6 +10,10 @@ import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
 import { getJoinErrorKey } from '@/composables/joinErrors'
 import { JOINABLE_ROLES } from '@/types'
+import IconTriangleAlert from '~icons/lucide/triangle-alert'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
+import IconLogIn from '~icons/lucide/log-in'
 
 // Código pré-preenchido quando o usuário chega por link de convite (?room=...).
 // O HomeView lê a query, decide a aba e repassa o valor já normalizado aqui.
@@ -85,7 +89,7 @@ const onSubmit = handleSubmit(async (values) => {
         <div class="role-options">
           <label :class="['role-option', { selected: role === 'member' }]">
             <input type="radio" value="member" v-model="role" v-bind="roleAttrs" class="sr-only" />
-            <span class="role-icon">🃏</span>
+            <IconUser class="role-icon" aria-hidden="true" />
             <span class="role-label">{{ t('home.roleMember') }}</span>
             <span class="role-desc">{{ t('home.roleMemberDesc') }}</span>
           </label>
@@ -98,15 +102,19 @@ const onSubmit = handleSubmit(async (values) => {
               v-bind="roleAttrs"
               class="sr-only"
             />
-            <span class="role-icon">👁️</span>
+            <IconEye class="role-icon" aria-hidden="true" />
             <span class="role-label">{{ t('home.roleObserver') }}</span>
             <span class="role-desc">{{ t('home.roleObserverDesc') }}</span>
           </label>
         </div>
       </div>
 
-      <p v-if="submitErrorKey" class="session-notice" role="alert">⚠️ {{ t(submitErrorKey) }}</p>
+      <p v-if="submitErrorKey" class="session-notice" role="alert">
+        <IconTriangleAlert aria-hidden="true" />
+        {{ t(submitErrorKey) }}
+      </p>
       <BaseButton type="submit" size="lg" block :loading="submitting">
+        <IconLogIn aria-hidden="true" />
         {{ t('home.joinButton') }}
       </BaseButton>
     </form>

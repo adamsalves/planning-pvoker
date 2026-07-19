@@ -10,6 +10,8 @@ import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
 import { getJoinErrorKey } from '@/composables/joinErrors'
 import { DECKS, DECK_TYPES } from '@/types'
+import IconTriangleAlert from '~icons/lucide/triangle-alert'
+import IconRocket from '~icons/lucide/rocket'
 
 const { t } = useI18n()
 const { createRoom } = useRoom()
@@ -109,8 +111,12 @@ const onSubmit = handleSubmit(async (values) => {
         </label>
       </div>
 
-      <p v-if="submitErrorKey" class="session-notice" role="alert">⚠️ {{ t(submitErrorKey) }}</p>
+      <p v-if="submitErrorKey" class="session-notice" role="alert">
+        <IconTriangleAlert aria-hidden="true" />
+        {{ t(submitErrorKey) }}
+      </p>
       <BaseButton type="submit" size="lg" block :loading="submitting">
+        <IconRocket aria-hidden="true" />
         {{ t('home.createButton') }}
       </BaseButton>
     </form>

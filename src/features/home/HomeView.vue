@@ -6,6 +6,8 @@ import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import CreateRoomForm from './CreateRoomForm.vue'
 import JoinRoomForm from './JoinRoomForm.vue'
+import IconTriangleAlert from '~icons/lucide/triangle-alert'
+import IconTarget from '~icons/lucide/target'
 
 const { t } = useI18n()
 
@@ -47,12 +49,13 @@ const sessionExpired = route.query.notice === 'session-expired'
 
     <!-- Aviso de sessão expirada (redirecionado do RoomView) -->
     <p v-if="sessionExpired" class="session-notice" role="alert">
-      ⚠️ {{ t('home.sessionExpired') }}
+      <IconTriangleAlert aria-hidden="true" />
+      {{ t('home.sessionExpired') }}
     </p>
 
     <!-- F5.4 — pista de sala ativa: você navegou pra Home sem sair da sala. -->
     <RouterLink v-if="currentRoom" :to="`/room/${currentRoom.id}`" class="room-notice">
-      <span aria-hidden="true">🎯</span>
+      <IconTarget aria-hidden="true" />
       <span>{{ t('home.inRoom') }}</span>
       <span class="room-notice-action">{{ t('layout.backToRoom') }}</span>
     </RouterLink>

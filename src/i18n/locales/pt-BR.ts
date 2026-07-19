@@ -38,7 +38,7 @@ export const ptBR = {
     namePlaceholderJoin: 'Ex: Maria',
     deckTypeLabel: 'Tipo de Baralho',
     autoReveal: 'Auto-revelar quando todos votarem',
-    createButton: '🚀 Criar Sala',
+    createButton: 'Criar Sala',
     roomCodeLabel: 'Código da sala',
     roomCodePlaceholder: 'Ex: a1b2c3d4',
     joinAsLabel: 'Entrar como',
@@ -46,7 +46,7 @@ export const ptBR = {
     roleMemberDesc: 'Vota nas estimativas',
     roleObserver: 'Espectador',
     roleObserverDesc: 'Apenas assiste',
-    joinButton: '🔗 Entrar na Sala',
+    joinButton: 'Entrar na Sala',
     validation: {
       nameMin: 'Nome deve ter pelo menos 2 caracteres',
       nameMax: 'Nome deve ter no máximo 20 caracteres',
