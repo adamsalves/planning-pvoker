@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import IconSpade from '~icons/lucide/spade'
+import IconHouse from '~icons/lucide/house'
 
 const { t } = useI18n()
 </script>
 
 <template>
   <div class="not-found">
-    <span class="not-found-icon" aria-hidden="true">🃏</span>
+    <IconSpade class="not-found-icon" aria-hidden="true" />
     <h1 class="not-found-title">{{ t('notFound.title') }}</h1>
     <p class="not-found-message">{{ t('notFound.message') }}</p>
-    <RouterLink to="/" class="not-found-home">{{ t('notFound.backHome') }}</RouterLink>
+    <RouterLink to="/" class="not-found-home">
+      <IconHouse aria-hidden="true" />
+      {{ t('notFound.backHome') }}
+    </RouterLink>
   </div>
 </template>
 
@@ -28,6 +33,7 @@ const { t } = useI18n()
 
 .not-found-icon {
   font-size: 4rem;
+  color: var(--c-text-mute);
   /* Carta "fora do baralho": leve rotação reforça o tom de erro sem um X vermelho. */
   display: inline-block;
   transform: rotate(-8deg);
@@ -47,6 +53,9 @@ const { t } = useI18n()
 }
 
 .not-found-home {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   margin-top: var(--space-2);
   padding: var(--space-3) var(--space-6);
   background: var(--c-primary);

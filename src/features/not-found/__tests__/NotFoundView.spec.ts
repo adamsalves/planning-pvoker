@@ -14,6 +14,17 @@ describe('NotFoundView (F4.3)', () => {
     expect(home.props('to')).toBe('/')
     expect(home.text()).toContain('Voltar ao início')
   })
+
+  // Item #2 (ícones theme-aware): a "carta fora do baralho" agora é um SVG (spade)
+  // decorativo e aria-hidden, não mais o emoji 🃏.
+  it('renders the decorative card as an aria-hidden inline icon', () => {
+    const wrapper = mount(NotFoundView, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    const icon = wrapper.find('svg.not-found-icon')
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+  })
 })
 
 describe('router catch-all → 404 (F4.3)', () => {

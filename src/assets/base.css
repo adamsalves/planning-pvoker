@@ -156,3 +156,16 @@ button {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* Ícones (unplugin-icons): classe aplicada a todo SVG via defaultClass no
+   vite.config. Tamanho e cor vêm por herança — 1em acompanha o font-size do
+   contexto e currentColor recolore com o tema (recolorir é o motivo da troca
+   dos emojis). vertical-align alinha opticamente com o texto em fluxo inline;
+   flex-shrink:0 impede o ícone de encolher dentro de containers flex. */
+.app-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+}

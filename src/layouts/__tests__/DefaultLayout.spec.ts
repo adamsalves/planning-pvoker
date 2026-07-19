@@ -5,7 +5,11 @@ import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import DefaultLayout from '../DefaultLayout.vue'
 import { useRoomStore } from '@/stores/room'
+import { useThemeStore } from '@/stores/theme'
 import type { Room, RoomPhase } from '@/types'
+import IconSun from '~icons/lucide/sun'
+import IconMoon from '~icons/lucide/moon'
+import IconSunMoon from '~icons/lucide/sun-moon'
 
 let wrapper: VueWrapper | undefined
 
@@ -142,5 +146,31 @@ describe('DefaultLayout.vue', () => {
     expect(link).toBeDefined()
     expect(link?.text()).toContain('Ver Resumo')
     expect(link?.attributes('href')).toBe('/room/abc123')
+  })
+
+  // Item #2 (ícones theme-aware): smoke de que o unplugin-icons gera um <svg> com a
+  // classe passada também no vitest (vite.config compartilhado) — a base de todas as
+  // fatias. A marca deixa de ser emoji 🃏 e vira o ícone spade.
+  it('renders the brand logo as an inline SVG icon', () => {
+    const w = mountLayout()
+    expect(w.find('.navbar-brand svg.logo-icon').exists()).toBe(true)
+  })
+
+  // O toggle de tema mostra o ícone da preferência atual (sun/moon/sun-moon),
+  // recolorindo via currentColor — antes eram emojis ☀️/🌙/🌗 de cor fixa.
+  it('renders the theme icon matching the current preference', async () => {
+    const w = mountLayout()
+    const theme = useThemeStore()
+
+    expect(w.findComponent(IconSunMoon).exists()).toBe(true) // default = 'system'
+
+    theme.setPreference('light')
+    await nextTick()
+    expect(w.findComponent(IconSun).exists()).toBe(true)
+    expect(w.findComponent(IconSunMoon).exists()).toBe(false)
+
+    theme.setPreference('dark')
+    await nextTick()
+    expect(w.findComponent(IconMoon).exists()).toBe(true)
   })
 })
