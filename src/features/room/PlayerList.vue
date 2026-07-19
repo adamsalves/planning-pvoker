@@ -6,6 +6,8 @@ import IconCheck from '~icons/lucide/check'
 import IconHourglass from '~icons/lucide/hourglass'
 import IconEye from '~icons/lucide/eye'
 import IconUserMinus from '~icons/lucide/user-minus'
+import IconSquare from '~icons/lucide/square'
+import IconSquareCheck from '~icons/lucide/square-check'
 import type { Player } from '@/types'
 import { activePlayersOf, observersOf } from '@/utils/players'
 
@@ -29,7 +31,10 @@ const emit = defineEmits<{
   'toggle-voter': [playerId: string, voting: boolean]
 }>()
 
-const { t } = useI18n()
+// `locale` entra nas deps do v-memo da linha: sem ele o nome acessível do toggle
+// (interpolado com t()) congela no idioma antigo enquanto o badge ao lado já
+// traduziu. Regra da lista: TODO input reativo lido dentro do <li> vai nas deps.
+const { t, locale } = useI18n()
 
 // Separar jogadores ativos dos espectadores
 const activePlayers = computed(() => activePlayersOf(props.players))
@@ -67,20 +72,28 @@ function isNonVoter(playerId: string): boolean {
             getVote(player.id),
             isNonVoter(player.id),
             votersEditable,
+            locale,
           ]"
         >
           <div class="player-info">
-            <!-- Checkbox real (não div clicável): o toggle precisa ser focável e
-                 anunciado como caixa de seleção. O rótulo textual fica no sr-only,
-                 já que a linha inteira já mostra o nome visualmente. -->
-            <label v-if="votersEditable" class="voter-toggle">
-              <input
-                type="checkbox"
-                :checked="!isNonVoter(player.id)"
-                @change="emit('toggle-voter', player.id, isNonVoter(player.id))"
-              />
+            <!-- role="switch" em vez de <input type="checkbox">: o input guarda
+                 estado NO DOM e o browser já o inverte no clique, antes do handler.
+                 Se o servidor não aplicar a ação (socket morto, emit recusado — é
+                 fire-and-forget, sem ack), as props voltam iguais, o binding
+                 :checked não muda entre vnodes, o Vue não repinta e o DOM fica
+                 mentindo. Um botão não tem estado próprio: ele só reflete a prop. -->
+            <button
+              v-if="votersEditable"
+              type="button"
+              role="switch"
+              class="voter-toggle"
+              :aria-checked="!isNonVoter(player.id)"
+              @click="emit('toggle-voter', player.id, isNonVoter(player.id))"
+            >
+              <IconSquareCheck v-if="!isNonVoter(player.id)" aria-hidden="true" />
+              <IconSquare v-else aria-hidden="true" />
               <span class="sr-only">{{ t('room.voters.toggleLabel', { name: player.name }) }}</span>
-            </label>
+            </button>
             <span class="player-avatar">{{ player.name.charAt(0).toUpperCase() }}</span>
             <span class="player-name">
               {{ player.name }}
@@ -275,17 +288,30 @@ function isNonVoter(playerId: string): boolean {
   color: var(--c-text-mute);
 }
 
-/* O checkbox fica à esquerda do avatar, alinhado com o resto da linha. */
+/* Toggle à esquerda do avatar. min 24px nos dois eixos = alvo de toque do
+   WCAG 2.2 AA (2.5.8); o ícone em si é ~1em e ficaria bem abaixo disso. */
 .voter-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--c-text-mute);
   cursor: pointer;
   flex-shrink: 0;
+  font-size: var(--text-base);
+  transition: color var(--transition-fast);
 }
 
-.voter-toggle input {
-  cursor: pointer;
-  accent-color: var(--c-primary);
+.voter-toggle[aria-checked='true'] {
+  color: var(--c-primary);
+}
+
+.voter-toggle:hover {
+  color: var(--c-text);
 }
 
 /* Animations */

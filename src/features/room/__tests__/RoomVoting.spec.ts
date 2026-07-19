@@ -94,6 +94,17 @@ describe('RoomVoting.vue', () => {
     expect(wrapper.text()).not.toContain('Você está como espectador')
   })
 
+  // As três ramificações (deck / espectador / fora-da-rodada) têm de ser
+  // mutuamente exclusivas: um espectador NÃO pode ver os dois cards.
+  it('espectador vê só o card de espectador, nunca também o de fora-da-rodada', () => {
+    const wrapper = mountVoting(
+      { isObserver: true, isVotingThisRound: false, nonVoterIds: ['p1'] },
+      votingRoom('voting', {}, ['p1']),
+    )
+    expect(wrapper.text()).toContain('Você está como espectador')
+    expect(wrapper.text()).not.toContain('Você não vota nesta rodada')
+  })
+
   it('repassa nonVoterIds à mesa e à lista, e a lista só é editável pelo admin', () => {
     const wrapper = mountVoting(
       { isAdmin: true, nonVoterIds: ['p2'] },

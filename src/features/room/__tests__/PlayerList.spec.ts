@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
+import { i18n } from '@/i18n'
 import IconCheck from '~icons/lucide/check'
 import IconHourglass from '~icons/lucide/hourglass'
 import PlayerList from '../PlayerList.vue'
@@ -129,16 +131,90 @@ describe('PlayerList.vue', () => {
         },
       })
 
-      const boxes = wrapper.findAll('.voter-toggle input')
-      // Admin ('1') vota → marcado; Member ('2') excluído → desmarcado.
-      expect(boxes[0]!.attributes('checked')).toBeDefined()
-      expect(boxes[1]!.attributes('checked')).toBeUndefined()
+      const toggles = wrapper.findAll('.voter-toggle')
+      // Admin ('1') vota → ligado; Member ('2') excluído → desligado.
+      expect(toggles[0]!.attributes('aria-checked')).toBe('true')
+      expect(toggles[1]!.attributes('aria-checked')).toBe('false')
 
       // Tirar quem vota pede voting=false; devolver quem está fora pede true.
-      await boxes[0]!.trigger('change')
+      await toggles[0]!.trigger('click')
       expect(wrapper.emitted('toggle-voter')?.[0]).toEqual(['1', false])
-      await boxes[1]!.trigger('change')
+      await toggles[1]!.trigger('click')
       expect(wrapper.emitted('toggle-voter')?.[1]).toEqual(['2', true])
+    })
+
+    // role="switch" em vez de checkbox justamente para não guardar estado no DOM:
+    // se o servidor não aplicar o toggle, o controle tem de continuar refletindo
+    // o estado REAL, e o próximo clique tem de repetir a mesma intenção.
+    it('não dessincroniza quando o servidor não aplica o toggle', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[0]!],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: [],
+          votersEditable: true,
+        },
+      })
+
+      const toggle = wrapper.find('.voter-toggle')
+      await toggle.trigger('click')
+      // Nenhuma prop nova chegou (o broadcast não veio).
+      expect(wrapper.find('.voter-toggle').attributes('aria-checked')).toBe('true')
+      expect(wrapper.emitted('toggle-voter')?.[1]).toBeUndefined()
+
+      await wrapper.find('.voter-toggle').trigger('click')
+      expect(wrapper.emitted('toggle-voter')?.[1]).toEqual(['1', false])
+    })
+
+    // O v-memo da linha só repinta se a dependência estiver listada — estes casos
+    // montam no estado A e vão para o B, que é o que os testes de estado final
+    // (todos os outros) não conseguem pegar.
+    it('repinta a linha quando a exclusão muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[1]!],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: [],
+          votersEditable: true,
+        },
+      })
+      expect(wrapper.find('.non-voter-badge').exists()).toBe(false)
+
+      await wrapper.setProps({ nonVoterIds: ['2'] })
+      expect(wrapper.find('.non-voter-badge').exists()).toBe(true)
+      expect(wrapper.find('.voter-toggle').attributes('aria-checked')).toBe('false')
+      expect(wrapper.find('.player-item').classes()).toContain('non-voter-item')
+    })
+
+    // O nome acessível do toggle sai de t(), que o v-memo pularia se o locale não
+    // estivesse nas deps — um controle interativo ficaria anunciado no idioma
+    // antigo enquanto o resto da linha já traduziu. O afterEach global restaura.
+    it('retraduz o nome acessível do toggle ao trocar de idioma', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [mockPlayers[1]!],
+          votes: {},
+          status: 'voting',
+          votersEditable: true,
+        },
+      })
+      expect(wrapper.find('.voter-toggle').text()).toBe('Member vota nesta rodada')
+
+      i18n.global.locale.value = 'en'
+      await nextTick()
+      expect(wrapper.find('.voter-toggle').text()).toBe('Member votes in this round')
+    })
+
+    it('mostra/esconde o toggle quando votersEditable muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, {
+        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+      })
+      expect(wrapper.find('.voter-toggle').exists()).toBe(false)
+
+      await wrapper.setProps({ votersEditable: true })
+      expect(wrapper.find('.voter-toggle').exists()).toBe(true)
     })
 
     it('mostra "não vota" no lugar de pendente, sem sair da seção de jogadores', () => {

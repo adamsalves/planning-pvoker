@@ -725,3 +725,50 @@ describe('RoomView.vue quem vota na rodada', () => {
     expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(2)
   })
 })
+
+describe('RoomView.vue voto otimista × exclusão', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+    mockCastVote.mockResolvedValue(undefined)
+  })
+
+  function room(excluded: string[], votes: Record<string, string | number> = {}): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [
+        { id: 'player-1', name: 'Ana', role: 'admin' },
+        { id: 'player-2', name: 'Bob', role: 'member' },
+      ],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes, excludedVoterIds: excluded }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  // O servidor apaga o voto de quem é excluído. Sem limpar o otimista, a carta
+  // continuaria acesa numa rodada que a pessoa não está mais votando — e ela
+  // acharia que votou.
+  it('limpa o voto otimista quando o jogador é tirado da rodada', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    const roomStore = useRoomStore()
+    roomStore.syncRoom(room([]))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    wrapper.findComponent(RoomVoting).vm.$emit('vote', 8)
+    await flushPromises()
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBe(8)
+
+    // Admin tira o Bob: o servidor devolve a rodada sem o voto dele.
+    roomStore.syncRoom(room(['player-2']))
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('isVotingThisRound')).toBe(false)
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBeNull()
+  })
+})
