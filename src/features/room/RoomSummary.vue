@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconNotepadText from '~icons/lucide/notepad-text'
 import { useRoomStore } from '@/stores/room'
 import { revealedRoundsOf } from '@/utils/rounds'
 import BaseCard from '@/components/BaseCard.vue'
@@ -18,7 +19,7 @@ const revealedRounds = computed(() => revealedRoundsOf(roomStore.currentRoom))
 <template>
   <div class="room-summary">
     <div v-if="revealedRounds.length === 0" class="summary-empty">
-      <p class="empty-icon" aria-hidden="true">🗒️</p>
+      <IconNotepadText class="empty-icon" aria-hidden="true" />
       <p class="empty-title">{{ t('room.summary.liveEmpty') }}</p>
       <p class="empty-hint">{{ t('room.summary.liveEmptyHint') }}</p>
     </div>
@@ -88,6 +89,8 @@ const revealedRounds = computed(() => revealedRoundsOf(roomStore.currentRoom))
   gap: var(--space-2);
 }
 
+/* Era um <p> com o emoji; agora é o SVG (inline-block em 1em pela `.app-icon`),
+   então o tamanho vem do font-size e o align-items do flex é que centraliza. */
 .empty-icon {
   font-size: 2.5rem;
   margin: 0;

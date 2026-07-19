@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import IconPartyPopper from '~icons/lucide/party-popper'
 import VoteReveal from '../VoteReveal.vue'
 import confetti from 'canvas-confetti'
 
@@ -148,5 +149,15 @@ describe('VoteReveal.vue', () => {
     })
 
     expect(wrapper.text()).not.toContain('Consenso!')
+  })
+
+  it('só o banner de consenso traz o party-popper, decorativo', () => {
+    const consenso = mount(VoteReveal, { props: { votes: { p1: 5, p2: 5 }, playerCount: 2 } })
+    const icon = consenso.findComponent(IconPartyPopper)
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+
+    const divergente = mount(VoteReveal, { props: { votes: { p1: 13, p2: 8 }, playerCount: 2 } })
+    expect(divergente.findComponent(IconPartyPopper).exists()).toBe(false)
   })
 })

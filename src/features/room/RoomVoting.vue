@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconEye from '~icons/lucide/eye'
+import IconHourglass from '~icons/lucide/hourglass'
 import { useRoomStore } from '@/stores/room'
 import BaseCard from '@/components/BaseCard.vue'
 import RoundHeader from './RoundHeader.vue'
@@ -70,7 +72,7 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
       <!-- Mensagem para o espectador -->
       <BaseCard v-if="currentRound?.status === 'voting' && isObserver" class="section-card">
         <div class="observer-message">
-          <p>{{ t('room.voting.observerTitle') }}</p>
+          <p><IconEye class="btn-icon" aria-hidden="true" />{{ t('room.voting.observerTitle') }}</p>
           <p class="observer-sub">{{ t('room.voting.observerWaiting') }}</p>
         </div>
       </BaseCard>
@@ -95,7 +97,7 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
       <!-- Espera: não é admin e ainda não há rodada -->
       <BaseCard v-if="!currentRound && !isAdmin" class="section-card">
         <div class="waiting-message">
-          <p class="waiting-icon">⏳</p>
+          <IconHourglass class="waiting-icon" aria-hidden="true" />
           <p>{{ t('room.voting.waitingForStart') }}</p>
         </div>
       </BaseCard>
@@ -149,6 +151,8 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
   margin-top: var(--space-1);
 }
 
+/* Era um <p> com o emoji; agora é o SVG, que a `.app-icon` deixa inline-block em
+   1em — o font-size é que dá o tamanho e o text-align do pai é que centraliza. */
 .waiting-icon {
   font-size: 2rem;
   margin-bottom: var(--space-2);

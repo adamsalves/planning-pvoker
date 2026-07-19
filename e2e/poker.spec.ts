@@ -83,7 +83,9 @@ test.describe('Planning Poker E2E Flow', () => {
 
     // -- ADMIN REVEALS --
     await adminPage.waitForTimeout(500)
-    await adminPage.getByRole('button', { name: '👁️ Revelar Votos' }).click()
+    // Sem `exact`: com todos votando o botão anexa o hint "(todos votaram!)" ao
+    // nome acessível — o ícone (sparkles) é aria-hidden e não entra no nome.
+    await adminPage.getByRole('button', { name: 'Revelar Votos' }).click()
 
     // -- VERIFY REVEAL --
     // A rodada revelada aparece na aba "Votação" E na "Resumo (1)" (F6.1; ambas ficam
@@ -95,7 +97,7 @@ test.describe('Planning Poker E2E Flow', () => {
     await expect(memberPage.locator('#room-panel-voting').getByText('Consenso!')).toBeVisible()
 
     // -- ADMIN FINISHES SESSION (last subject) --
-    await adminPage.getByRole('button', { name: '✅ Finalizar Sessão' }).click()
+    await adminPage.getByRole('button', { name: 'Finalizar Sessão', exact: true }).click()
 
     // Should see session summary
     await expect(adminPage.locator('text=Sessão Concluída!')).toBeVisible()

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import IconSparkles from '~icons/lucide/sparkles'
+import IconHourglass from '~icons/lucide/hourglass'
+import IconArrowRight from '~icons/lucide/arrow-right'
+import IconCheck from '~icons/lucide/check'
+import IconEye from '~icons/lucide/eye'
 import RoundControls from '../RoundControls.vue'
 
 describe('RoundControls.vue', () => {
@@ -86,6 +91,47 @@ describe('RoundControls.vue', () => {
 
     await wrapper.find('button').trigger('click')
     expect(wrapper.emitted()).toHaveProperty('finish')
+  })
+
+  // Ícones: asserção pelo COMPONENTE (não por `find('svg')`, que passaria com
+  // qualquer ícone — inclusive um de significado trocado) + o negativo do irmão.
+  it('usa sparkles no revelar — e nunca o eye, que é o ícone de espectador', () => {
+    const wrapper = mount(RoundControls, {
+      props: { status: 'voting', anyVoted: true, allVoted: false, isLastSubject: false },
+    })
+
+    const icon = wrapper.findComponent(IconSparkles)
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+    // O olho já significa "espectador" em PlayerList/RoomView/RoomVoting: usá-lo
+    // aqui daria dois sentidos ao mesmo glifo para um admin espectador.
+    expect(wrapper.findComponent(IconEye).exists()).toBe(false)
+  })
+
+  it('mostra a ampulheta apenas no hint de "nenhum voto ainda"', () => {
+    const semVoto = mount(RoundControls, {
+      props: { status: 'voting', anyVoted: false, allVoted: false, isLastSubject: false },
+    })
+    expect(semVoto.findComponent(IconHourglass).exists()).toBe(true)
+
+    const comVoto = mount(RoundControls, {
+      props: { status: 'voting', anyVoted: true, allVoted: false, isLastSubject: false },
+    })
+    expect(comVoto.findComponent(IconHourglass).exists()).toBe(false)
+  })
+
+  it('distingue os ícones de próximo (seta) e finalizar (check)', () => {
+    const proximo = mount(RoundControls, {
+      props: { status: 'revealed', anyVoted: true, allVoted: true, isLastSubject: false },
+    })
+    expect(proximo.findComponent(IconArrowRight).exists()).toBe(true)
+    expect(proximo.findComponent(IconCheck).exists()).toBe(false)
+
+    const ultimo = mount(RoundControls, {
+      props: { status: 'revealed', anyVoted: true, allVoted: true, isLastSubject: true },
+    })
+    expect(ultimo.findComponent(IconCheck).exists()).toBe(true)
+    expect(ultimo.findComponent(IconArrowRight).exists()).toBe(false)
   })
 
   it('renders nothing when status is waiting', () => {
