@@ -183,6 +183,10 @@ export class RoomManager {
     } else {
       existingPlayer.name = player.name
       existingPlayer.role = player.role
+      // Reenviada pelo cliente a cada join (vem do user store persistido), então
+      // sobrescreve como name/role — inclusive limpando (undefined) se a pessoa
+      // tirou a tag. A tag NÃO é atribuída por outro caminho no server.
+      existingPlayer.tag = player.tag
     }
 
     this.scheduleSave(roomId)

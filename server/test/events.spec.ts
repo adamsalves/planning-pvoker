@@ -194,6 +194,26 @@ describe('join_room', () => {
     expect(ack.room?.adminId).toBe('a1')
     expect(ack.room?.players.find((p) => p.id === 'm1')?.role).toBe('member')
   })
+
+  it('accepts a join carrying a player tag and stores it on the room player', async () => {
+    const client = await connect()
+    const ack = await join(client, { roomId: 'r1', player: { ...admin, tag: 'design' }, config })
+    expect(ack.success).toBe(true)
+    // Guards the whole inbound path: playerSchema KEEPS the tag and the handler
+    // spreads it through to the room (a field-by-field rebuild would drop it).
+    expect(ack.room?.players.find((p) => p.id === 'a1')?.tag).toBe('design')
+  })
+
+  it('drops an unknown player tag but still lets the join succeed', async () => {
+    const client = await connect()
+    const ack = await join(client, { roomId: 'r1', player: { ...admin, tag: 'devops' }, config })
+    // A tag é cosmética e mora no localStorage do cliente; um valor fora da lista
+    // atual (deploy-skew) NÃO tranca o join — degrada p/ "sem tag", espelhando o
+    // .catch da persistência. Falha se o ingress voltar a um .optional() puro
+    // (join rejeitado) ou a z.string() (tag 'devops' aceita literalmente).
+    expect(ack.success).toBe(true)
+    expect(ack.room?.players.find((p) => p.id === 'a1')?.tag).toBeUndefined()
+  })
 })
 
 describe('authorization (requireAdmin)', () => {

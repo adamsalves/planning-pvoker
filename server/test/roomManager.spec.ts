@@ -45,6 +45,17 @@ describe('joinRoom', () => {
     })
   })
 
+  it('carries a new player tag and overwrites it on re-join (like name/role)', () => {
+    rm.createRoom('r1', admin, config)
+    const joined = rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member', tag: 'dev' })
+    expect(joined?.players.find((p) => p.id === 'm1')?.tag).toBe('dev')
+
+    // The client re-sends its current tag on every join; here it dropped the tag,
+    // so the upsert clears it — same overwrite path as name/role.
+    const rejoined = rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member' })
+    expect(rejoined?.players.find((p) => p.id === 'm1')?.tag).toBeUndefined()
+  })
+
   it('returns null for a missing room', () => {
     expect(rm.joinRoom('nope', member)).toBeNull()
   })
@@ -64,6 +75,15 @@ describe('leaveRoom', () => {
     const room = rm.leaveRoom('r1', 'a1')
     expect(room?.adminId).toBe('m1')
     expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('admin')
+  })
+
+  it('keeps a promoted player tag when the admin leaves', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member', tag: 'qa' })
+    const room = rm.leaveRoom('r1', 'a1') // admin leaves → m1 promoted in-place
+    const promoted = room?.players.find((p) => p.id === 'm1')
+    expect(promoted?.role).toBe('admin')
+    expect(promoted?.tag).toBe('qa') // in-place role mutation must not drop the tag
   })
 
   it('deletes the room when the last player leaves', () => {
