@@ -77,6 +77,15 @@ describe('leaveRoom', () => {
     expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('admin')
   })
 
+  it('keeps a promoted player tag when the admin leaves', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member', tag: 'qa' })
+    const room = rm.leaveRoom('r1', 'a1') // admin leaves → m1 promoted in-place
+    const promoted = room?.players.find((p) => p.id === 'm1')
+    expect(promoted?.role).toBe('admin')
+    expect(promoted?.tag).toBe('qa') // in-place role mutation must not drop the tag
+  })
+
   it('deletes the room when the last player leaves', () => {
     rm.createRoom('r1', admin, config)
     expect(rm.leaveRoom('r1', 'a1')).toBeNull()

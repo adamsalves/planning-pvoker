@@ -6,8 +6,9 @@ export type RoomPhase = 'setup' | 'voting' | 'completed'
 
 // Área/disciplina auto-declarada pelo jogador na entrada. Enum fixo (single
 // source) reusado pela validação de entrada (validation.ts) e pela guarda de
-// persistência; o cliente espelha esta lista e a traduz (i18n `tags.*`).
-// `other` é o escape para quem não se encaixa. Espelha src/types/index.ts.
+// persistência; o cliente espelhará esta lista e a traduzirá (i18n `tags.*`) na
+// fatia 2. `other` é o escape para quem não se encaixa. A espelhar em
+// src/types/index.ts.
 export const PLAYER_TAGS = ['dev', 'design', 'qa', 'product', 'other'] as const
 export type PlayerTag = (typeof PLAYER_TAGS)[number]
 

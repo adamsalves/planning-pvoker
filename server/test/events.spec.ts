@@ -204,11 +204,15 @@ describe('join_room', () => {
     expect(ack.room?.players.find((p) => p.id === 'a1')?.tag).toBe('design')
   })
 
-  it('rejects a join whose player tag is outside the fixed set', async () => {
+  it('drops an unknown player tag but still lets the join succeed', async () => {
     const client = await connect()
     const ack = await join(client, { roomId: 'r1', player: { ...admin, tag: 'devops' }, config })
-    expect(ack.error).toBeDefined()
-    expect(ack.success).toBeUndefined()
+    // A tag é cosmética e mora no localStorage do cliente; um valor fora da lista
+    // atual (deploy-skew) NÃO tranca o join — degrada p/ "sem tag", espelhando o
+    // .catch da persistência. Falha se o ingress voltar a um .optional() puro
+    // (join rejeitado) ou a z.string() (tag 'devops' aceita literalmente).
+    expect(ack.success).toBe(true)
+    expect(ack.room?.players.find((p) => p.id === 'a1')?.tag).toBeUndefined()
   })
 })
 
