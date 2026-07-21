@@ -45,6 +45,17 @@ describe('joinRoom', () => {
     })
   })
 
+  it('carries a new player tag and overwrites it on re-join (like name/role)', () => {
+    rm.createRoom('r1', admin, config)
+    const joined = rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member', tag: 'dev' })
+    expect(joined?.players.find((p) => p.id === 'm1')?.tag).toBe('dev')
+
+    // The client re-sends its current tag on every join; here it dropped the tag,
+    // so the upsert clears it — same overwrite path as name/role.
+    const rejoined = rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member' })
+    expect(rejoined?.players.find((p) => p.id === 'm1')?.tag).toBeUndefined()
+  })
+
   it('returns null for a missing room', () => {
     expect(rm.joinRoom('nope', member)).toBeNull()
   })

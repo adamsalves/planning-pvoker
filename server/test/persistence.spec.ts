@@ -212,6 +212,41 @@ describe('RedisPersistence', () => {
     expect(snap.rooms[0].rounds[0].excludedVoterIds).toBeUndefined()
   })
 
+  // Mesma régua do excludedVoterIds: sobreviver ao save→load é o contrato do
+  // campo, então fixa o round trip da tag através de um redeploy.
+  it('round-trips a player tag through save and load', async () => {
+    const room = sampleRoom('ROOM1')
+    room.players[0].tag = 'design'
+    await persistence.saveRoom(room)
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms[0].players[0].tag).toBe('design')
+  })
+
+  // Guards the `.catch(undefined)` on tag. Tags are a PRODUCT enum likely to
+  // change; a snapshot carrying a value later dropped from the list must degrade
+  // to "no tag", NOT drop the whole room (that would kill every live room on the
+  // deploy that removed the value). Fails if someone swaps .catch for a bare
+  // .optional(): the invalid value would then fail safeParse and the room would
+  // be discarded, emptying snap.rooms.
+  it('loadAll degrades an unknown player tag to undefined but keeps the room', async () => {
+    await redis.sadd('rooms:index', 'DRIFT')
+    redis.strings.set('room:DRIFT', {
+      id: 'DRIFT',
+      adminId: 'p1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [{ id: 'p1', name: 'Ana', role: 'admin', tag: 'devops' }], // fora de PLAYER_TAGS
+      subjects: ['S1'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'S1', status: 'voting', votes: { p1: 5 } }],
+      currentRoundIndex: 0,
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['DRIFT'])
+    expect(snap.rooms[0].players[0].tag).toBeUndefined()
+  })
+
   it('loadAll drops a malformed snapshot instead of throwing', async () => {
     await redis.sadd('rooms:index', 'BAD')
     redis.strings.set('room:BAD', { id: 'BAD', not: 'a room' })

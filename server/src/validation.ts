@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DeckType } from './types'
+import { DeckType, PLAYER_TAGS } from './types'
 
 // Limites defensivos: as salas vivem in-memory, então payloads sem limite
 // permitiriam um cliente malicioso estourar a memória do processo.
@@ -29,6 +29,9 @@ const playerSchema = z.object({
   id: z.string().trim().min(1).max(MAX_ID),
   name: z.string().trim().min(1).max(MAX_NAME),
   role: z.enum(['admin', 'member', 'observer']),
+  // Auto-declarada e opcional. Enum: uma tag forjada fora da lista é REJEITADA
+  // no join (é entrada do cliente, o trust boundary), não aceita em silêncio.
+  tag: z.enum(PLAYER_TAGS).optional(),
 })
 
 const roomConfigSchema = z.object({
