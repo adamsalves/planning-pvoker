@@ -4,11 +4,16 @@
 export const DECK_TYPES = ['fibonacci', 'tshirt', 'sequential'] as const
 export const PLAYER_ROLES = ['admin', 'member', 'observer'] as const
 export const JOINABLE_ROLES = ['member', 'observer'] as const
+// Área/disciplina auto-declarada pelo jogador na entrada. Enum fixo (single
+// source): o schema dos forms e o badge da PlayerList derivam desta lista, e o
+// catálogo i18n `tags.*` a traduz. Espelha PLAYER_TAGS em server/src/types.ts.
+export const PLAYER_TAGS = ['dev', 'design', 'qa', 'product', 'other'] as const
 
 // Tipos derivados das constantes — sempre sincronizados
 export type DeckType = (typeof DECK_TYPES)[number]
 export type PlayerRole = (typeof PLAYER_ROLES)[number]
 export type JoinableRole = (typeof JOINABLE_ROLES)[number]
+export type PlayerTag = (typeof PLAYER_TAGS)[number]
 
 export type RoundStatus = 'waiting' | 'voting' | 'revealed'
 export type RoomPhase = 'setup' | 'voting' | 'completed'
@@ -22,6 +27,9 @@ export interface Player {
   id: string
   name: string
   role: PlayerRole
+  // Área opcional e auto-declarada (dev, design, ...). Puramente informativa —
+  // não afeta voto/quórum. Espelha server/src/types.ts.
+  tag?: PlayerTag
 }
 
 export interface Vote {

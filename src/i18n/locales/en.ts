@@ -35,6 +35,8 @@ export const en: MessageSchema = {
     nameLabel: 'Your name',
     namePlaceholderCreate: 'E.g.: John',
     namePlaceholderJoin: 'E.g.: Mary',
+    tagLabel: 'Your area (optional)',
+    tagNone: 'No area',
     deckTypeLabel: 'Deck Type',
     autoReveal: 'Auto-reveal when everyone has voted',
     createButton: 'Create Room',
@@ -61,6 +63,14 @@ export const en: MessageSchema = {
     fibonacci: 'Fibonacci',
     tshirt: 'T-Shirt Sizes',
     sequential: 'Sequential',
+  },
+  // Player area labels (form selector + PlayerList badge).
+  tags: {
+    dev: 'Dev',
+    design: 'Design',
+    qa: 'QA',
+    product: 'Product',
+    other: 'Other',
   },
   errors: {
     transient: "Couldn't connect right now. Please try again in a moment.",
@@ -140,6 +150,7 @@ export const en: MessageSchema = {
       title: 'Players ({count})',
       observersTitle: 'Observers ({count})',
       adminSr: '(admin)',
+      tagSr: 'Area',
       voted: 'Voted',
       votedValue: 'Voted {value}',
       waitingVote: 'Waiting for vote',

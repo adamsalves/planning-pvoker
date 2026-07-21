@@ -9,7 +9,7 @@ import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
 import { getJoinErrorKey } from '@/composables/joinErrors'
-import { JOINABLE_ROLES } from '@/types'
+import { JOINABLE_ROLES, PLAYER_TAGS } from '@/types'
 import IconTriangleAlert from '~icons/lucide/triangle-alert'
 import IconUser from '~icons/lucide/user'
 import IconEye from '~icons/lucide/eye'
@@ -33,6 +33,9 @@ const joinSchema = toTypedSchema(
     playerName: z.string().min(2, 'home.validation.nameMin').max(20, 'home.validation.nameMax'),
     roomCode: z.string().min(1, 'home.validation.roomCodeRequired'),
     role: z.enum(JOINABLE_ROLES),
+    // Área opcional. O `<select>` já restringe aos valores do enum; ausência =
+    // "sem área".
+    tag: z.enum(PLAYER_TAGS).optional(),
   }),
 )
 
@@ -42,19 +45,21 @@ const { handleSubmit, errors, defineField } = useForm({
     playerName: '',
     roomCode: props.initialRoomCode ?? '',
     role: JOINABLE_ROLES[0], // 'member' — inferido como JoinableRole, não string
+    tag: undefined,
   },
 })
 
 const [playerName, playerNameAttrs] = defineField('playerName')
 const [roomCode, roomCodeAttrs] = defineField('roomCode')
 const [role, roleAttrs] = defineField('role')
+const [tag, tagAttrs] = defineField('tag')
 
 const onSubmit = handleSubmit(async (values) => {
   // values.role já é "member" | "observer" — sem cast!
   submitErrorKey.value = ''
   submitting.value = true
   try {
-    await joinRoom(values.playerName, values.roomCode, values.role)
+    await joinRoom(values.playerName, values.roomCode, values.role, values.tag)
   } catch (error) {
     submitErrorKey.value = getJoinErrorKey(error)
   } finally {
@@ -74,6 +79,16 @@ const onSubmit = handleSubmit(async (values) => {
         :error="errors.playerName ? t(errors.playerName) : undefined"
         required
       />
+
+      <label class="field-group tag-field">
+        <span class="field-label">{{ t('home.tagLabel') }}</span>
+        <select v-model="tag" v-bind="tagAttrs" class="tag-select">
+          <option :value="undefined">{{ t('home.tagNone') }}</option>
+          <option v-for="tagOption in PLAYER_TAGS" :key="tagOption" :value="tagOption">
+            {{ t(`tags.${tagOption}`) }}
+          </option>
+        </select>
+      </label>
 
       <BaseInput
         v-model="roomCode"
@@ -145,6 +160,35 @@ const onSubmit = handleSubmit(async (values) => {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--c-text-soft);
+}
+
+/* Seletor de área (tag): <select> nativo com os tokens do tema, largura total
+   como os BaseInput. Label implícito (o <select> vive dentro do <label>). */
+.tag-field {
+  cursor: pointer;
+}
+
+.tag-select {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.tag-select:hover {
+  border-color: var(--c-border-hover);
+}
+
+.tag-select:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-color: var(--c-primary);
 }
 
 .session-notice {

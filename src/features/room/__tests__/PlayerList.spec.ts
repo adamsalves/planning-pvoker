@@ -249,4 +249,61 @@ describe('PlayerList.vue', () => {
       expect(wrapper.html()).toContain('Jogadores (1)')
     })
   })
+
+  describe('badge de área (tag)', () => {
+    it('mostra o badge da área do jogador ativo, com prefixo sr-only', () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [{ id: '1', name: 'Ana', role: 'member', tag: 'design' }],
+          votes: {},
+          status: 'waiting',
+        },
+      })
+
+      const badge = wrapper.find('.player-tag-badge')
+      expect(badge.exists()).toBe(true)
+      expect(badge.text()).toContain('Design')
+      expect(badge.find('.sr-only').text()).toBe('Área:')
+    })
+
+    it('não mostra badge quando o jogador não tem área', () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [{ id: '1', name: 'Ana', role: 'member' }],
+          votes: {},
+          status: 'waiting',
+        },
+      })
+      expect(wrapper.find('.player-tag-badge').exists()).toBe(false)
+    })
+
+    it('mostra o badge também para espectadores', () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [{ id: '1', name: 'Olga', role: 'observer', tag: 'product' }],
+          votes: {},
+          status: 'waiting',
+        },
+      })
+      const badge = wrapper.find('.observer-item .player-tag-badge')
+      expect(badge.exists()).toBe(true)
+      expect(badge.text()).toContain('Produto')
+    })
+
+    // v-memo: player.tag TEM de estar nas deps, senão a linha não repinta quando
+    // a área chega/muda depois do mount (mesma armadilha dos outros v-memo).
+    it('repinta o badge quando a área muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, {
+        props: {
+          players: [{ id: '1', name: 'Ana', role: 'member' }],
+          votes: {},
+          status: 'voting',
+        },
+      })
+      expect(wrapper.find('.player-tag-badge').exists()).toBe(false)
+
+      await wrapper.setProps({ players: [{ id: '1', name: 'Ana', role: 'member', tag: 'qa' }] })
+      expect(wrapper.find('.player-tag-badge').text()).toContain('QA')
+    })
+  })
 })

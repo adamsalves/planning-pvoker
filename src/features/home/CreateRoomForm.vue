@@ -9,7 +9,7 @@ import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { useRoom } from '@/composables/useRoom'
 import { getJoinErrorKey } from '@/composables/joinErrors'
-import { DECKS, DECK_TYPES } from '@/types'
+import { DECKS, DECK_TYPES, PLAYER_TAGS } from '@/types'
 import IconTriangleAlert from '~icons/lucide/triangle-alert'
 import IconRocket from '~icons/lucide/rocket'
 
@@ -34,6 +34,9 @@ const createSchema = toTypedSchema(
     playerName: z.string().min(2, 'home.validation.nameMin').max(20, 'home.validation.nameMax'),
     deckType: z.enum(DECK_TYPES),
     autoReveal: z.boolean(),
+    // Área opcional. O `<select>` já restringe aos valores do enum, então não há
+    // mensagem de validação — ausência = "sem área".
+    tag: z.enum(PLAYER_TAGS).optional(),
   }),
 )
 
@@ -43,19 +46,21 @@ const { handleSubmit, errors, defineField } = useForm({
     playerName: '',
     deckType: DECK_TYPES[0], // 'fibonacci' — inferido como DeckType, não string
     autoReveal: false,
+    tag: undefined,
   },
 })
 
 const [playerName, playerNameAttrs] = defineField('playerName')
 const [deckType, deckTypeAttrs] = defineField('deckType')
 const [autoReveal, autoRevealAttrs] = defineField('autoReveal')
+const [tag, tagAttrs] = defineField('tag')
 
 const onSubmit = handleSubmit(async (values) => {
   // values.deckType já é DeckType — sem cast!
   submitErrorKey.value = ''
   submitting.value = true
   try {
-    await createRoom(values.playerName, values.deckType, values.autoReveal)
+    await createRoom(values.playerName, values.deckType, values.autoReveal, values.tag)
   } catch (error) {
     submitErrorKey.value = getJoinErrorKey(error)
   } finally {
@@ -75,6 +80,16 @@ const onSubmit = handleSubmit(async (values) => {
         :error="errors.playerName ? t(errors.playerName) : undefined"
         required
       />
+
+      <label class="field-group tag-field">
+        <span class="field-label">{{ t('home.tagLabel') }}</span>
+        <select v-model="tag" v-bind="tagAttrs" class="tag-select">
+          <option :value="undefined">{{ t('home.tagNone') }}</option>
+          <option v-for="tagOption in PLAYER_TAGS" :key="tagOption" :value="tagOption">
+            {{ t(`tags.${tagOption}`) }}
+          </option>
+        </select>
+      </label>
 
       <div class="field-group">
         <label class="field-label">{{ t('home.deckTypeLabel') }}</label>
@@ -147,6 +162,36 @@ const onSubmit = handleSubmit(async (values) => {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--c-text-soft);
+}
+
+/* Seletor de área (tag): <select> nativo com os tokens do tema, largura total
+   como os BaseInput. A associação do label é implícita (o <select> vive dentro
+   do <label class="tag-field">). */
+.tag-field {
+  cursor: pointer;
+}
+
+.tag-select {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.tag-select:hover {
+  border-color: var(--c-border-hover);
+}
+
+.tag-select:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-color: var(--c-primary);
 }
 
 .field-error {

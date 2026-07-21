@@ -16,8 +16,18 @@ describe('user store', () => {
     expect(store.playerName).toBe('')
     expect(store.playerId).toBe('')
     expect(store.playerRole).toBe('member')
+    expect(store.playerTag).toBeUndefined()
     expect(store.activeRoomId).toBeNull()
     expect(store.sessionToken).toBeNull()
+  })
+
+  it('setPlayer grava a área (tag) e clearPlayer a limpa', () => {
+    const store = useUserStore()
+    store.setPlayer('Ana', 'p1', 'member', 'design')
+    expect(store.playerTag).toBe('design')
+
+    store.clearPlayer()
+    expect(store.playerTag).toBeUndefined()
   })
 
   it('setPlayer grava nome, id e papel', () => {

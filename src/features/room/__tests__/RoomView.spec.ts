@@ -201,6 +201,23 @@ describe('RoomView.vue rejoin', () => {
 
     expect(mockSocketJoinRoom).toHaveBeenCalledTimes(1)
   })
+
+  // Regressão (pego no smoke): o upsert do servidor sobrescreve a tag a cada join,
+  // então o re-join (mount + reconexão) TEM de reenviá-la, senão ela some logo após
+  // o create/join inicial. Vem persistida do userStore.
+  it('re-sends the persisted area tag on rejoin so the server upsert keeps it', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin', 'dev')
+    useRoomStore().syncRoom(createRoom())
+
+    mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    expect(mockSocketJoinRoom).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ id: 'player-1', name: 'Ana', role: 'admin', tag: 'dev' }),
+    )
+  })
 })
 
 describe('RoomView.vue auto-reveal (server is the single source)', () => {
