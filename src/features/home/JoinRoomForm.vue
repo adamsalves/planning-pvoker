@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import BaseInput from '@/components/BaseInput.vue'
+import TagSelect from './TagSelect.vue'
 import { useRoom } from '@/composables/useRoom'
 import { getJoinErrorKey } from '@/composables/joinErrors'
 import { JOINABLE_ROLES, PLAYER_TAGS } from '@/types'
@@ -80,15 +81,7 @@ const onSubmit = handleSubmit(async (values) => {
         required
       />
 
-      <label class="field-group tag-field">
-        <span class="field-label">{{ t('home.tagLabel') }}</span>
-        <select v-model="tag" v-bind="tagAttrs" class="tag-select">
-          <option :value="undefined">{{ t('home.tagNone') }}</option>
-          <option v-for="tagOption in PLAYER_TAGS" :key="tagOption" :value="tagOption">
-            {{ t(`tags.${tagOption}`) }}
-          </option>
-        </select>
-      </label>
+      <TagSelect v-model="tag" v-bind="tagAttrs" />
 
       <BaseInput
         v-model="roomCode"
@@ -160,35 +153,6 @@ const onSubmit = handleSubmit(async (values) => {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--c-text-soft);
-}
-
-/* Seletor de área (tag): <select> nativo com os tokens do tema, largura total
-   como os BaseInput. Label implícito (o <select> vive dentro do <label>). */
-.tag-field {
-  cursor: pointer;
-}
-
-.tag-select {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: 2px solid var(--c-border);
-  border-radius: var(--radius-lg);
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-family: inherit;
-  font-size: var(--text-base);
-  cursor: pointer;
-  transition: border-color var(--transition-fast);
-}
-
-.tag-select:hover {
-  border-color: var(--c-border-hover);
-}
-
-.tag-select:focus-visible {
-  outline: 2px solid var(--c-primary);
-  outline-offset: 2px;
-  border-color: var(--c-primary);
 }
 
 .session-notice {

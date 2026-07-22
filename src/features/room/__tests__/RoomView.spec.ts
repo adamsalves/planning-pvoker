@@ -218,6 +218,26 @@ describe('RoomView.vue rejoin', () => {
       expect.objectContaining({ id: 'player-1', name: 'Ana', role: 'admin', tag: 'dev' }),
     )
   })
+
+  // A tag também tem de sobreviver a uma reconexão transparente (novo socket id):
+  // o rejoin roda de novo e, sem reenviar a tag, o upsert do servidor a apagaria.
+  it('re-sends the area tag on a transparent reconnect too', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin', 'dev')
+    useRoomStore().syncRoom(createRoom())
+
+    mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+    mockSocketJoinRoom.mockClear() // ignora o join do mount
+
+    useConnectionStore().setReconnected()
+    await flushPromises()
+
+    expect(mockSocketJoinRoom).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ id: 'player-1', tag: 'dev' }),
+    )
+  })
 })
 
 describe('RoomView.vue auto-reveal (server is the single source)', () => {
