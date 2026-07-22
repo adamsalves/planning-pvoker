@@ -74,6 +74,35 @@ describe('useRoom', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'room', params: { id: 'room-xyz' } })
   })
 
+  it('threads the area tag into the local player and the socket join (create)', async () => {
+    const { createRoom } = useRoom()
+    const userStore = useUserStore()
+
+    await createRoom('Adam', 'fibonacci', true, 'design')
+
+    expect(userStore.playerTag).toBe('design')
+    expect(mockSocketJoin).toHaveBeenCalledWith(
+      'mocked-u',
+      { id: 'mocked-uuid-1234', name: 'Adam', role: 'admin', tag: 'design' },
+      { deckType: 'fibonacci', autoReveal: true },
+    )
+  })
+
+  it('threads the area tag into the local player and the socket join (join)', async () => {
+    const { joinRoom } = useRoom()
+    const userStore = useUserStore()
+
+    await joinRoom('Maria', 'room-xyz', 'observer', 'qa')
+
+    expect(userStore.playerTag).toBe('qa')
+    expect(mockSocketJoin).toHaveBeenCalledWith('room-xyz', {
+      id: 'mocked-uuid-1234',
+      name: 'Maria',
+      role: 'observer',
+      tag: 'qa',
+    })
+  })
+
   it('propagates the error and does not navigate when the join is rejected', async () => {
     mockSocketJoin.mockRejectedValueOnce(new Error('Sessão inválida'))
     const { joinRoom } = useRoom()

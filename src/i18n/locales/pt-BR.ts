@@ -36,6 +36,8 @@ export const ptBR = {
     nameLabel: 'Seu nome',
     namePlaceholderCreate: 'Ex: João',
     namePlaceholderJoin: 'Ex: Maria',
+    tagLabel: 'Sua área (opcional)',
+    tagNone: 'Sem área',
     deckTypeLabel: 'Tipo de Baralho',
     autoReveal: 'Auto-revelar quando todos votarem',
     createButton: 'Criar Sala',
@@ -62,6 +64,14 @@ export const ptBR = {
     fibonacci: 'Fibonacci',
     tshirt: 'T-Shirt Sizes',
     sequential: 'Sequencial',
+  },
+  // Rótulos das áreas do jogador (seletor nos forms + badge na PlayerList).
+  tags: {
+    dev: 'Dev',
+    design: 'Design',
+    qa: 'QA',
+    product: 'Produto',
+    other: 'Outro',
   },
   errors: {
     transient: 'Não foi possível conectar agora. Tente novamente em instantes.',
@@ -141,6 +151,7 @@ export const ptBR = {
       title: 'Jogadores ({count})',
       observersTitle: 'Espectadores ({count})',
       adminSr: '(admin)',
+      tagSr: 'Área',
       voted: 'Votou',
       votedValue: 'Votou {value}',
       waitingVote: 'Aguardando voto',

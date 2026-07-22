@@ -1,18 +1,24 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CreateRoomForm from '../CreateRoomForm.vue'
 import IconRocket from '~icons/lucide/rocket'
 
-// A lógica de createRoom (navegação/token) é testada em useRoom.spec; aqui o form
-// só precisa do stub para montar sem tocar em socket/router.
+// Mock estável (hoisted) para asserir os args do submit; a lógica de createRoom
+// (navegação/token) segue testada em useRoom.spec.
+const { createRoomMock, joinRoomMock } = vi.hoisted(() => ({
+  createRoomMock: vi.fn(),
+  joinRoomMock: vi.fn(),
+}))
 vi.mock('@/composables/useRoom', () => ({
-  useRoom: () => ({
-    createRoom: vi.fn(),
-    joinRoom: vi.fn(),
-  }),
+  useRoom: () => ({ createRoom: createRoomMock, joinRoom: joinRoomMock }),
 }))
 
 describe('CreateRoomForm.vue', () => {
+  beforeEach(() => {
+    createRoomMock.mockClear()
+    joinRoomMock.mockClear()
+  })
+
   it('renders the three decks with the first one selected by default', () => {
     const wrapper = mount(CreateRoomForm)
     const options = wrapper.findAll('.deck-option')
@@ -61,5 +67,40 @@ describe('CreateRoomForm.vue', () => {
     expect(icon.exists()).toBe(true)
     expect(icon.attributes('aria-hidden')).toBe('true')
     expect(wrapper.text()).not.toContain('🚀')
+  })
+
+  it('renders an optional area selector defaulting to "no area"', () => {
+    const wrapper = mount(CreateRoomForm)
+    const select = wrapper.find('select.tag-select')
+
+    expect(select.exists()).toBe(true)
+    // "Sem área" + os 5 valores do enum (dev/design/qa/product/other)
+    expect(select.findAll('option')).toHaveLength(6)
+    expect(select.findAll('option')[0].text()).toBe('Sem área')
+    expect(wrapper.text()).toContain('Sua área (opcional)')
+  })
+
+  it('passes the picked area tag to createRoom on submit', async () => {
+    const wrapper = mount(CreateRoomForm)
+    await wrapper.find('input[placeholder="Ex: João"]').setValue('Adams')
+    await wrapper.find('select.tag-select').setValue('design')
+    await wrapper.find('form').trigger('submit')
+
+    // Guarda o threading do onSubmit (values.tag = 4º arg). vi.waitFor aguarda a
+    // validação async do vee-validate + o handler — um flushPromises só não basta
+    // e a chamada vazaria para o próximo teste.
+    await vi.waitFor(() =>
+      expect(createRoomMock).toHaveBeenCalledWith('Adams', 'fibonacci', false, 'design'),
+    )
+  })
+
+  it('submits with no tag when the area is left unset', async () => {
+    const wrapper = mount(CreateRoomForm)
+    await wrapper.find('input[placeholder="Ex: João"]').setValue('Adams')
+    await wrapper.find('form').trigger('submit')
+
+    await vi.waitFor(() =>
+      expect(createRoomMock).toHaveBeenCalledWith('Adams', 'fibonacci', false, undefined),
+    )
   })
 })

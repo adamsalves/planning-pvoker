@@ -181,6 +181,10 @@ function rejoinActiveRoom() {
     id: userStore.playerId,
     name: userStore.playerName,
     role: userStore.playerRole,
+    // A tag PRECISA ir no re-join: o upsert do servidor sobrescreve a tag do
+    // player a cada join, então omiti-la aqui a apagaria logo após o create/join
+    // inicial (e a cada reconexão). Vem persistida do userStore.
+    tag: userStore.playerTag,
   }).catch((err) => {
     // A distinção-chave: SÓ um erro de ACK do servidor (sessão inválida / sala
     // inexistente) limpa o token e volta pra Home. Falha de conexão / cold start

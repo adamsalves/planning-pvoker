@@ -71,6 +71,7 @@ function isNonVoter(playerId: string): boolean {
           v-memo="[
             player.name,
             player.role,
+            player.tag,
             status,
             hasVoted(player.id),
             getVote(player.id),
@@ -106,6 +107,10 @@ function isNonVoter(playerId: string): boolean {
               <span v-if="player.role === 'admin'" class="sr-only">{{
                 t('room.players.adminSr')
               }}</span>
+            </span>
+            <span v-if="player.tag" class="player-tag-badge">
+              <span class="sr-only">{{ t('room.players.tagSr') }}: </span
+              >{{ t(`tags.${player.tag}`) }}
             </span>
           </div>
           <div class="player-status">
@@ -158,6 +163,10 @@ function isNonVoter(playerId: string): boolean {
               player.name.charAt(0).toUpperCase()
             }}</span>
             <span class="player-name">{{ player.name }}</span>
+            <span v-if="player.tag" class="player-tag-badge">
+              <span class="sr-only">{{ t('room.players.tagSr') }}: </span
+              >{{ t(`tags.${player.tag}`) }}
+            </span>
           </div>
           <IconEye class="observer-badge" aria-hidden="true" />
           <span class="sr-only">{{ t('room.players.observerSr') }}</span>
@@ -234,6 +243,21 @@ function isNonVoter(playerId: string): boolean {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+/* Chip da área (tag) do jogador, ao lado do nome. Tom neutro de propósito: não
+   compete com o crown do admin nem com os badges coloridos de status/voto. */
+.player-tag-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--c-text-soft);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-full);
+  padding: 1px var(--space-2);
+  line-height: 1.5;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Ícones de papel/status: cor pelos tokens semânticos (invertem no dark, F3.9) e
