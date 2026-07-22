@@ -36,8 +36,8 @@ function makeRoom(phase: RoomPhase): Room {
   }
 }
 
-function backToRoomLink(w: VueWrapper) {
-  return w.findAll('a').find((a) => a.classes().includes('nav-link-room'))
+function activeRoomBanner(w: VueWrapper) {
+  return w.findAll('a').find((a) => a.classes().includes('room-notice'))
 }
 
 describe('DefaultLayout.vue', () => {
@@ -108,47 +108,52 @@ describe('DefaultLayout.vue', () => {
     expect(document.documentElement.lang).toBe('pt-BR')
   })
 
-  // F5.1/F5.2/F5.4 — visibilidade e rótulo do "Voltar à Sala" do header. Aparece em
-  // rotas fora da sala (ex.: 404), mas NÃO na Home (lá o banner F5.4 já cobre o
-  // retorno — evita CTA duplicado) nem na própria sala.
-  it('does not show "Voltar à Sala" when there is no active room', async () => {
+  // Item #5 — banner ÚNICO de "sala ativa" no topo do <main>: aparece em QUALQUER
+  // rota com sala ativa (Home, 404), MENOS a própria sala; vira "Ver Resumo" quando
+  // concluída. Unifica os dois afordances antigos da F5 (botão do navbar + banner da Home).
+  it('does not show the active-room banner when there is no active room', async () => {
     await router.push('/unknown/route')
     const w = mountLayout()
-    expect(backToRoomLink(w)).toBeUndefined()
+    expect(activeRoomBanner(w)).toBeUndefined()
   })
 
-  it('hides "Voltar à Sala" while on the room route itself (F5.1)', async () => {
+  it('hides the active-room banner while on the room route itself', async () => {
     useRoomStore().syncRoom(makeRoom('voting'))
     await router.push({ name: 'room', params: { id: 'abc123' } })
     const w = mountLayout()
-    expect(backToRoomLink(w)).toBeUndefined()
+    expect(activeRoomBanner(w)).toBeUndefined()
   })
 
-  it('hides "Voltar à Sala" on Home even with an active session (redundante com o banner F5.4)', () => {
+  // Antes (F5) o botão do header era escondido na Home; unificado, o banner PASSA a
+  // aparecer nela (era o banner só-da-Home que cobria isso, agora é o mesmo elemento).
+  it('SHOWS the active-room banner on Home when a session is active (item #5)', () => {
     useRoomStore().syncRoom(makeRoom('voting'))
     const w = mountLayout() // beforeEach já posicionou em '/'
-    expect(backToRoomLink(w)).toBeUndefined()
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.text()).toContain('Voltar à Sala')
+    expect(banner?.attributes('href')).toBe('/room/abc123')
   })
 
-  it('shows "Voltar à Sala" from another route (404) while a session is in progress (F5.1/F5.2)', async () => {
+  it('shows the active-room banner from another route (404) while a session is in progress', async () => {
     useRoomStore().syncRoom(makeRoom('voting'))
     await router.push('/unknown/route')
     const w = mountLayout()
-    const link = backToRoomLink(w)
-    expect(link).toBeDefined()
-    expect(link?.text()).toContain('Voltar à Sala')
-    expect(link?.attributes('href')).toBe('/room/abc123')
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.text()).toContain('Voltar à Sala')
+    expect(banner?.attributes('href')).toBe('/room/abc123')
     expect(w.findComponent(IconTarget).exists()).toBe(true) // em andamento → alvo
   })
 
-  it('labels the link "Ver Resumo" from another route when the session is completed (F5.2)', async () => {
+  it('labels the banner "Ver Resumo" when the session is completed', async () => {
     useRoomStore().syncRoom(makeRoom('completed'))
     await router.push('/unknown/route')
     const w = mountLayout()
-    const link = backToRoomLink(w)
-    expect(link).toBeDefined()
-    expect(link?.text()).toContain('Ver Resumo')
-    expect(link?.attributes('href')).toBe('/room/abc123')
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.text()).toContain('Ver Resumo')
+    expect(banner?.attributes('href')).toBe('/room/abc123')
     expect(w.findComponent(IconChartColumn).exists()).toBe(true) // concluída → gráfico
   })
 

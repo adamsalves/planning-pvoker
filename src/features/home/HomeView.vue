@@ -2,12 +2,9 @@
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { storeToRefs } from 'pinia'
-import { useRoomStore } from '@/stores/room'
 import CreateRoomForm from './CreateRoomForm.vue'
 import JoinRoomForm from './JoinRoomForm.vue'
 import IconTriangleAlert from '~icons/lucide/triangle-alert'
-import IconTarget from '~icons/lucide/target'
 
 const { t } = useI18n()
 
@@ -15,11 +12,6 @@ const { t } = useI18n()
 const activeTab = ref<'create' | 'join'>('create')
 
 const route = useRoute()
-
-// F5.4 — navegar pra Home NÃO sai da sala (o modelo do F5): se ainda há sala ativa,
-// um banner lembra disso e oferece o retorno. Na Home o header NÃO mostra "Voltar à
-// Sala" (evita CTA duplicado), então este banner é o caminho de volta aqui.
-const { currentRoom } = storeToRefs(useRoomStore())
 
 function setTab(tab: 'create' | 'join') {
   activeTab.value = tab
@@ -54,13 +46,6 @@ const sessionExpired = route.query.notice === 'session-expired'
       <IconTriangleAlert aria-hidden="true" />
       {{ t('home.sessionExpired') }}
     </p>
-
-    <!-- F5.4 — pista de sala ativa: você navegou pra Home sem sair da sala. -->
-    <RouterLink v-if="currentRoom" :to="`/room/${currentRoom.id}`" class="room-notice">
-      <IconTarget aria-hidden="true" />
-      <span>{{ t('home.inRoom') }}</span>
-      <span class="room-notice-action">{{ t('layout.backToRoom') }}</span>
-    </RouterLink>
 
     <!-- Tab Switcher -->
     <div class="tab-switcher">
@@ -126,33 +111,6 @@ const sessionExpired = route.query.notice === 'session-expired'
   font-size: var(--text-sm);
   text-align: center;
   animation: slideUp var(--transition-normal);
-}
-
-/* F5.4 — banner de sala ativa (link de retorno) */
-.room-notice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--c-primary-soft);
-  color: var(--c-primary);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  text-align: center;
-  animation: slideUp var(--transition-normal);
-}
-
-.room-notice:hover {
-  background: var(--c-bg-mute);
-}
-
-.room-notice-action {
-  font-weight: 700;
-  text-decoration: underline;
 }
 
 /* Tab Switcher */

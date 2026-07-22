@@ -14,6 +14,7 @@ export const en: MessageSchema = {
   layout: {
     backToRoom: 'Back to Room',
     viewSummary: 'View Summary',
+    activeRoom: 'You have an active room',
     home: 'Home',
     madeBy: 'made by',
     theme: {
@@ -27,7 +28,6 @@ export const en: MessageSchema = {
   home: {
     subtitle: 'Agile estimates with your team, in real time',
     sessionExpired: 'Your session expired or the room is no longer available. Join again.',
-    inRoom: 'You have a session in progress.',
     tabs: {
       create: 'Create Room',
       join: 'Join Room',
