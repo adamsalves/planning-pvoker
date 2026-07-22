@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { routeTitle } from '@/router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
+import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
 import IconTarget from '~icons/lucide/target'
@@ -15,8 +16,16 @@ import IconSunMoon from '~icons/lucide/sun-moon'
 
 const { t } = useI18n()
 
+// isCompleted (in-memory) decide o rótulo QUANDO a sala está carregada; após um
+// reload não está, e o rótulo degrada p/ "Voltar à Sala" (ver backToRoom).
 const roomStore = useRoomStore()
-const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
+const { isCompleted } = storeToRefs(roomStore)
+
+// O banner de "sala ativa" chaveia pelo activeRoomId PERSISTIDO (localStorage), não
+// pelo currentRoom in-memory — assim sobrevive a reload/hard-nav (o currentRoom zera
+// no boot, mas o activeRoomId fica). É limpo no leave e no JoinAckError (RoomView).
+const userStore = useUserStore()
+const { activeRoomId } = storeToRefs(userStore)
 
 // F2.8 — troca de rota move o foco pro <main> e anuncia o título via aria-live,
 // já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
@@ -25,10 +34,8 @@ const route = useRoute()
 // Afordance ÚNICO de retorno (item #5): um banner no topo do <main> que aparece em
 // QUALQUER rota com sala ativa, exceto a própria sala (lá seria redundante). Unifica
 // os dois afordances antigos da F5 (botão do navbar só-na-404 + banner só-na-Home)
-// num só lugar — mesmo objetivo (um CTA só), sem as regras de exclusão por rota.
-// Mesmo concluída, a sala segue em /room/:id, então o retorno vira "Ver Resumo" pra
-// não prometer uma sessão ainda em andamento.
-const showActiveRoomBanner = computed(() => isInRoom.value && route.name !== 'room')
+// num só lugar. Chaveia pelo activeRoomId PERSISTIDO (ver acima) → sobrevive a reload.
+const showActiveRoomBanner = computed(() => activeRoomId.value !== null && route.name !== 'room')
 const backToRoom = computed(() =>
   isCompleted.value
     ? { icon: IconChartColumn, label: t('layout.viewSummary') }
@@ -109,7 +116,7 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
       <!-- Banner único de "sala ativa" (item #5): aparece em qualquer rota com sala
            ativa, menos a própria sala. Fica no topo do <main> (a região que recebe
            foco na navegação, F2.8), então quem usa leitor de tela o encontra primeiro. -->
-      <RouterLink v-if="showActiveRoomBanner" :to="`/room/${currentRoom?.id}`" class="room-notice">
+      <RouterLink v-if="showActiveRoomBanner" :to="`/room/${activeRoomId}`" class="room-notice">
         <component :is="backToRoom.icon" aria-hidden="true" />
         <span>{{ t('layout.activeRoom') }}</span>
         <span class="room-notice-action">{{ backToRoom.label }}</span>

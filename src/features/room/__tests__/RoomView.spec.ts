@@ -170,9 +170,11 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
-    // currentRoom precisa ser limpo: senão a Home mostraria o banner "Voltar à Sala"
-    // (F5.4) junto do aviso "sessão expirou" — um retorno quebrado.
+    // currentRoom E activeRoomId precisam ser limpos: o banner de "sala ativa" lê o
+    // activeRoomId (persistido), então sem limpá-lo a Home mostraria o retorno "Voltar
+    // à Sala" apontando pra sala morta, junto do aviso "sessão expirou" (F5.4).
     expect(useRoomStore().currentRoom).toBeNull()
+    expect(userStore.activeRoomId).toBeNull()
   })
 
   it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {

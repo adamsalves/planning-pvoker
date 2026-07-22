@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import DefaultLayout from '../DefaultLayout.vue'
 import { useRoomStore } from '@/stores/room'
+import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import type { Room, RoomPhase } from '@/types'
 import IconSun from '~icons/lucide/sun'
@@ -155,6 +156,20 @@ describe('DefaultLayout.vue', () => {
     expect(banner?.text()).toContain('Ver Resumo')
     expect(banner?.attributes('href')).toBe('/room/abc123')
     expect(w.findComponent(IconChartColumn).exists()).toBe(true) // concluída → gráfico
+  })
+
+  // O sinal do banner é o activeRoomId PERSISTIDO, não o currentRoom in-memory: assim
+  // ele sobrevive a um reload/hard-nav (o currentRoom zera no boot, mas o activeRoomId
+  // fica no localStorage). Sem a sala carregada (só o id persistido), o rótulo degrada
+  // p/ "Voltar à Sala" — sem currentRoom não dá pra saber se está concluída.
+  it('shows the banner from the persisted activeRoomId even without a loaded room (survives reload)', async () => {
+    useUserStore().setActiveRoom('abc123') // só o id persistido; currentRoom fica null
+    await router.push('/unknown/route')
+    const w = mountLayout()
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.attributes('href')).toBe('/room/abc123')
+    expect(banner?.text()).toContain('Voltar à Sala')
   })
 
   // O toggle de tema mostra o ícone da preferência atual (sun/moon/sun-moon),
