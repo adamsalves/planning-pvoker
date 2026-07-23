@@ -193,10 +193,12 @@ function rejoinActiveRoom() {
     if (err instanceof JoinAckError) {
       userStore.setSessionToken(null)
       // A sala REALMENTE não existe mais (reset/cold-start): descarta o estado
-      // obsoleto além do token. Sem isso, o `currentRoom` preso faria a Home
-      // mostrar o aviso "sessão expirou" JUNTO com o banner/link "Voltar à Sala"
-      // (F5.4) — um retorno quebrado que só reentra no erro.
+      // obsoleto além do token — o `currentRoom` in-memory E o `activeRoomId`
+      // PERSISTIDO. O banner de "sala ativa" do layout lê o activeRoomId (pra
+      // sobreviver a reload); sem limpá-lo aqui, ele apontaria pra sala morta junto
+      // do aviso "sessão expirou" — um retorno quebrado que só reentra no erro (F5.4).
       roomStore.leaveRoom()
+      userStore.setActiveRoom(null)
       router.push({ name: 'home', query: { notice: 'session-expired' } })
     }
   })

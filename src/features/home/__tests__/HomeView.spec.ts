@@ -1,26 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, RouterLinkStub } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
+import { mount } from '@vue/test-utils'
 import HomeView from '../HomeView.vue'
-import { useRoomStore } from '@/stores/room'
-import type { Room } from '@/types'
 import IconTriangleAlert from '~icons/lucide/triangle-alert'
-import IconTarget from '~icons/lucide/target'
 
 let routeQuery: Record<string, string | string[] | undefined> = {}
-
-function activeRoom(): Room {
-  return {
-    id: 'abc123',
-    adminId: 'p1',
-    config: { deckType: 'fibonacci', autoReveal: false },
-    players: [],
-    subjects: [],
-    phase: 'voting',
-    rounds: [],
-    currentRoundIndex: -1,
-  }
-}
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -37,8 +20,8 @@ vi.mock('@/composables/useRoom', () => ({
 
 describe('HomeView.vue', () => {
   beforeEach(() => {
-    // HomeView passou a ler o roomStore (banner F5.4), então precisa de Pinia ativo.
-    setActivePinia(createPinia())
+    // HomeView não lê mais nenhum store (o banner de sala ativa virou responsabilidade
+    // do DefaultLayout, item #5) — só precisa resetar a query mockada da rota.
     routeQuery = {}
   })
 
@@ -90,28 +73,6 @@ describe('HomeView.vue', () => {
     expect(checkbox.element.checked).toBe(true)
   })
 
-  // F5.4 — banner de sala ativa (navegar pra Home não sai da sala).
-  it('shows the active-room banner linking back to the room when a session is active', () => {
-    useRoomStore().syncRoom(activeRoom())
-    const wrapper = mount(HomeView, {
-      global: { stubs: { RouterLink: RouterLinkStub } },
-    })
-
-    const banner = wrapper
-      .findAllComponents(RouterLinkStub)
-      .find((c) => c.classes().includes('room-notice'))
-    expect(banner).toBeDefined()
-    expect(banner?.props('to')).toBe('/room/abc123')
-    expect(banner?.text()).toContain('Você está numa sala')
-  })
-
-  it('hides the active-room banner when there is no active room', () => {
-    const wrapper = mount(HomeView, {
-      global: { stubs: { RouterLink: RouterLinkStub } },
-    })
-    expect(wrapper.find('.room-notice').exists()).toBe(false)
-  })
-
   // O 🃏 do hero é a MARCA do app e fica emoji de propósito (mesma regra da navbar
   // e do 404) — só o chrome ao redor vira ícone.
   it('keeps the joker emoji as the hero brand mark', () => {
@@ -129,15 +90,5 @@ describe('HomeView.vue', () => {
     expect(icon.exists()).toBe(true)
     expect(icon.attributes('aria-hidden')).toBe('true')
     expect(wrapper.find('[role="alert"]').text()).not.toContain('⚠️')
-  })
-
-  it('marks the active-room banner with an icon instead of the 🎯 emoji', () => {
-    useRoomStore().syncRoom(activeRoom())
-    const wrapper = mount(HomeView, {
-      global: { stubs: { RouterLink: RouterLinkStub } },
-    })
-
-    expect(wrapper.findComponent(IconTarget).exists()).toBe(true)
-    expect(wrapper.find('.room-notice').text()).not.toContain('🎯')
   })
 })

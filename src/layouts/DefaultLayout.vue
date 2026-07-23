@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { routeTitle } from '@/router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
+import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
 import IconTarget from '~icons/lucide/target'
@@ -15,22 +16,26 @@ import IconSunMoon from '~icons/lucide/sun-moon'
 
 const { t } = useI18n()
 
+// isCompleted (in-memory) decide o rótulo QUANDO a sala está carregada; após um
+// reload não está, e o rótulo degrada p/ "Voltar à Sala" (ver backToRoom).
 const roomStore = useRoomStore()
-const { currentRoom, isInRoom, isCompleted } = storeToRefs(roomStore)
+const { isCompleted } = storeToRefs(roomStore)
+
+// O banner de "sala ativa" chaveia pelo activeRoomId PERSISTIDO (localStorage), não
+// pelo currentRoom in-memory — assim sobrevive a reload/hard-nav (o currentRoom zera
+// no boot, mas o activeRoomId fica). É limpo no leave e no JoinAckError (RoomView).
+const userStore = useUserStore()
+const { activeRoomId } = storeToRefs(userStore)
 
 // F2.8 — troca de rota move o foco pro <main> e anuncia o título via aria-live,
 // já que o SPA não recarrega a página (o leitor de tela não percebe a navegação sozinho).
 const route = useRoute()
 
-// F5.1/F5.2 — "Voltar à Sala" aparece quando há sala ativa e você NÃO está na rota
-// dela (na própria sala seria redundante) NEM na Home (lá o banner F5.4 já oferece o
-// retorno — dois CTAs idênticos na mesma tela). Sobra pra 404, onde o header é o
-// único caminho de volta em 1 clique. Sem o antigo `!isCompleted`: mesmo
-// concluída, o resumo continua em /room/:id, então o botão segue sendo a volta — e
-// vira "Ver Resumo" pra não prometer uma sessão ainda em andamento.
-const showBackToRoom = computed(
-  () => isInRoom.value && route.name !== 'room' && route.name !== 'home',
-)
+// Afordance ÚNICO de retorno (item #5): um banner no topo do <main> que aparece em
+// QUALQUER rota com sala ativa, exceto a própria sala (lá seria redundante). Unifica
+// os dois afordances antigos da F5 (botão do navbar só-na-404 + banner só-na-Home)
+// num só lugar. Chaveia pelo activeRoomId PERSISTIDO (ver acima) → sobrevive a reload.
+const showActiveRoomBanner = computed(() => activeRoomId.value !== null && route.name !== 'room')
 const backToRoom = computed(() =>
   isCompleted.value
     ? { icon: IconChartColumn, label: t('layout.viewSummary') }
@@ -81,14 +86,6 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
           <span class="logo-text">Planning Poker</span>
         </RouterLink>
         <nav class="navbar-nav">
-          <RouterLink
-            v-if="showBackToRoom"
-            :to="`/room/${currentRoom?.id}`"
-            class="nav-link nav-link-room"
-          >
-            <component :is="backToRoom.icon" class="room-icon" aria-hidden="true" />
-            {{ backToRoom.label }}
-          </RouterLink>
           <RouterLink to="/" class="nav-link">{{ t('layout.home') }}</RouterLink>
           <button
             type="button"
@@ -116,6 +113,14 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
          região estivesse dentro, o leitor de tela poderia anunciar o título duas vezes. -->
     <p class="sr-only" aria-live="polite">{{ announcedTitle }}</p>
     <main ref="mainRef" class="main-content" tabindex="-1">
+      <!-- Banner único de "sala ativa" (item #5): aparece em qualquer rota com sala
+           ativa, menos a própria sala. Fica no topo do <main> (a região que recebe
+           foco na navegação, F2.8), então quem usa leitor de tela o encontra primeiro. -->
+      <RouterLink v-if="showActiveRoomBanner" :to="`/room/${activeRoomId}`" class="room-notice">
+        <component :is="backToRoom.icon" aria-hidden="true" />
+        <span>{{ t('layout.activeRoom') }}</span>
+        <span class="room-notice-action">{{ backToRoom.label }}</span>
+      </RouterLink>
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />
@@ -209,20 +214,6 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
   background: var(--c-primary-soft);
 }
 
-.nav-link-room {
-  background: var(--c-primary);
-  color: white;
-}
-
-.nav-link-room:hover {
-  background: var(--c-primary-hover);
-  color: white;
-}
-
-.nav-link-room .room-icon {
-  margin-right: 4px;
-}
-
 .main-content {
   flex: 1;
   max-width: 1200px;
@@ -238,6 +229,36 @@ const localeTarget = computed(() => (locale.value === 'pt-BR' ? 'EN' : 'PT'))
    Tab mantêm seu próprio :focus-visible normalmente. */
 .main-content:focus {
   outline: none;
+}
+
+/* Banner único de "sala ativa" (item #5): no topo do <main>, centralizado e com
+   largura própria pra ficar consistente em qualquer rota (a Home tem coluna de
+   520px, a 404 é mais larga). Reusa o visual primary-soft do antigo banner da Home. */
+.room-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-width: 560px;
+  margin: 0 auto var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: center;
+  animation: slideUp var(--transition-normal);
+}
+
+.room-notice:hover {
+  background: var(--c-bg-mute);
+}
+
+.room-notice-action {
+  font-weight: 700;
+  text-decoration: underline;
 }
 
 .footer {

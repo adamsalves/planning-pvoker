@@ -15,6 +15,7 @@ export const ptBR = {
   layout: {
     backToRoom: 'Voltar à Sala',
     viewSummary: 'Ver Resumo',
+    activeRoom: 'Você tem uma sala ativa',
     home: 'Home',
     madeBy: 'feito por',
     theme: {
@@ -28,7 +29,6 @@ export const ptBR = {
   home: {
     subtitle: 'Estimativas ágeis com seu time, em tempo real',
     sessionExpired: 'Sua sessão expirou ou a sala não está mais disponível. Entre novamente.',
-    inRoom: 'Você está numa sala em andamento.',
     tabs: {
       create: 'Criar Sala',
       join: 'Entrar na Sala',
