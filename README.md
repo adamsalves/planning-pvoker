@@ -10,7 +10,6 @@ Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com
 - **Papéis Dedicados:** Jogue como _Scrum Master (Admin)_, _Membro_ ativo ou _Espectador_ passivo.
 - **Auto-Reveal:** Opção de revelar os votos automaticamente quando todos os jogadores votarem.
 - **Estatísticas ao Vivo:** Média, mínimo, máximo e distribuição de votos exibidos após revelação, com confetti quando há consenso 🎉
-- **Gráficos e Histórico:** Persistência local (localStorage via Pinia Persisted) de sessões com gráficos de rodadas (Chart.js + `vue-chartjs`).
 - **Acessibilidade (A11y):** Navegação completa por teclado, atributos _WAI-ARIA_ dinâmicos (`aria-busy`, `aria-describedby`, `aria-pressed`, `aria-invalid`).
 - **Performance:** _Lazy Loading_ de todas as rotas, `v-memo` para listas de alta frequência e `shallowRef` para estados complexos.
 
@@ -98,7 +97,6 @@ npm run test:e2e
 | **Roteamento** | Vue Router 5               | SPA com lazy loading                      |
 | **Real-time**  | Socket.IO                  | Comunicação bidirecional cliente-servidor |
 | **Validação**  | VeeValidate + Zod          | Formulários type-safe                     |
-| **Gráficos**   | Chart.js + vue-chartjs     | Visualização de histórico                 |
 | **Servidor**   | Express 5 + Socket.IO      | Backend em memória (Node.js)              |
 | **Testes**     | Vitest + Playwright        | Unitários + E2E                           |
 | **Linting**    | ESLint + oxlint + Prettier | Qualidade e formatação                    |
