@@ -52,3 +52,20 @@ jobs:
       - name: Test (vitest)
         run: npm test
         working-directory: server
+
+  knip:
+    name: Dead code (knip)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install (root)
+        run: npm ci
+      - name: Install (server)
+        run: npm ci
+        working-directory: server
+      - name: Knip
+        run: npm run knip
