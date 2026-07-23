@@ -32,11 +32,6 @@ export interface Player {
   tag?: PlayerTag
 }
 
-export interface Vote {
-  playerId: string
-  value: string | number | null
-}
-
 export interface Round {
   id: string
   subject: string
