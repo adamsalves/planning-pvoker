@@ -25,6 +25,19 @@ export class RoomManager {
   // player.id === adminId and escalate to admin. The token is the proof that a
   // socket really owns that identity. Stable across rejoins (reused, not
   // regenerated) so a refresh or a second tab isn't locked out.
+  //
+  // Cleanup invariant (backlog 6.8): this Map has NO whole-room purge, and it
+  // doesn't need one TODAY. Tokens are dropped per-player in clearToken (called
+  // from leaveRoom), and the ONLY in-memory room-destroy site — this.rooms.delete
+  // in leaveRoom — is reached solely once the room is already empty, i.e. after
+  // every player's token was cleared one by one. So a destroyed room leaves no
+  // orphan token behind. If you EVER add a path that removes a room (or clears its
+  // players) WITHOUT going through per-player leaveRoom — a "kick all", an admin
+  // "close room", an in-memory idle reaper — add a clearRoomTokens(roomId) that
+  // deletes every `${roomId}::*` key and call it at that destroy site, or these
+  // tokens orphan for the life of the process. The persistence mirror already
+  // covers its own side: persistence.deleteRoom drops the whole `tokens:${roomId}`
+  // hash wholesale (see persistence.ts).
   private tokens: Map<string, string> = new Map()
 
   // Write-through coalescing state: at most one save per room is in flight; a
@@ -205,7 +218,10 @@ export class RoomManager {
     // leaveRoom is NOT called, so a refreshing player keeps their token.
     this.clearToken(roomId, playerId)
 
-    // If room becomes empty, destroy it
+    // If room becomes empty, destroy it. The last player's token was just cleared
+    // above (clearToken) and every earlier player cleared theirs on their own
+    // leave, so tearing the room down here orphans no token. Read the cleanup
+    // invariant on the `tokens` field before adding ANY other room-destroy path.
     if (room.players.length === 0) {
       this.rooms.delete(roomId)
       // Schedule AFTER the delete: flushSave reads the current map state, so it now
