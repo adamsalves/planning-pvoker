@@ -26,6 +26,12 @@ export const useUserStore = defineStore(
       playerTag.value = tag
     }
 
+    // NÃO limpa o activeRoomId de propósito: o banner de "sala ativa" do layout
+    // chaveia por ele, e quem o zera é o fluxo de leave (setActiveRoom(null) na
+    // RoomView) + o JoinAckError — não o reset de identidade. Hoje só os testes
+    // chamam clearPlayer; se um dia ligá-lo a um "logout", zere TAMBÉM o
+    // activeRoomId (setActiveRoom(null)), senão o banner sobrevive apontando pra
+    // sala morta e sem identidade pra se auto-curar no clique.
     function clearPlayer() {
       playerName.value = ''
       playerId.value = ''
