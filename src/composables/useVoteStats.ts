@@ -40,10 +40,13 @@ export function useVoteStats(votesSource: MaybeRefOrGetter<Votes>) {
     numericVotes.value.length > 0 ? Math.max(...numericVotes.value) : null,
   )
 
-  // Consenso = todos os votos iguais (numéricos OU textuais) e pelo menos um voto.
+  // Consenso = todos os votos iguais (numéricos OU textuais) e pelo menos DOIS
+  // votos. Um voto sozinho não é consenso: não há com quem concordar — e o
+  // every() de um único elemento é trivialmente true, o que dava falso consenso
+  // (banner + confetti) em rodadas de 1 votante.
   // Vale também para decks textuais (T-Shirt): todos "M" contam como consenso.
   const hasConsensus = computed(() => {
-    if (values.value.length === 0) return false
+    if (values.value.length < 2) return false
     const first = values.value[0]
     return values.value.every((v) => v === first)
   })
