@@ -2,6 +2,9 @@
 
 // Constantes como "single source of truth" — tanto os tipos quanto o Zod derivam delas
 export const DECK_TYPES = ['fibonacci', 'tshirt', 'sequential'] as const
+// Valor referenciado só neste arquivo (deriva o tipo `Role`); @public evita que o
+// knip reporte o export como desnecessário (antes coberto por ignoreExportsUsedInFile).
+/** @public */
 export const PLAYER_ROLES = ['admin', 'member', 'observer'] as const
 export const JOINABLE_ROLES = ['member', 'observer'] as const
 // Área/disciplina auto-declarada pelo jogador na entrada. Enum fixo (single

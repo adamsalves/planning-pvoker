@@ -1,10 +1,5 @@
 {
-  "$schema": "https://unpkg.com/knip@6/schema.json",
-  // Exports referenciados só dentro do próprio arquivo não são mortos. Cobre o
-  // padrão "single source of truth" `export const X = [...] as const` +
-  // `type T = (typeof X)[number]` (src/types/index.ts, src/i18n/index.ts): o
-  // valor é a fonte que deriva o tipo. Sem isto o knip flagra PLAYER_ROLES/APP_LOCALES.
-  "ignoreExportsUsedInFile": true,
+  "$schema": "https://unpkg.com/knip@6.29.0/schema.json",
   "workspaces": {
     // App Vite/Vue: os plugins (vite/vitest/vue) já detectam entries e arquivos.
     ".": {},
@@ -14,10 +9,7 @@
     // tratar src/index.ts como entry — senão tudo do server vira falso-positivo.
     "server": {
       "entry": ["src/index.ts", "test/**/*.spec.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"],
-      // ts-node é usado IMPLICITAMENTE pelo nodemon (execMap default .ts→ts-node)
-      // no `npm run dev` do server; o knip não enxerga essa invocação.
-      "ignoreDependencies": ["ts-node"]
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     }
   }
 }

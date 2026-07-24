@@ -62,6 +62,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
       - name: Install (root)
         run: npm ci
       - name: Install (server)
