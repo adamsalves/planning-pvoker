@@ -15,10 +15,11 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/",
+    "knip": "knip",
     "test:unit": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "validate": "oxlint . && eslint . && npm run type-check && vitest run && npm --prefix server run build && npm --prefix server test && playwright test --reporter=line",
+    "validate": "oxlint . && eslint . && npm run knip && npm run type-check && vitest run && npm --prefix server run build && npm --prefix server test && playwright test --reporter=line",
     "prepare": "husky"
   },
   "dependencies": {
@@ -52,6 +53,7 @@
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
     "jsdom": "^28.1.0",
+    "knip": "^6.29.0",
     "lint-staged": "^17.0.8",
     "npm-run-all2": "^8.0.4",
     "oxlint": "~1.47.0",

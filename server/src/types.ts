@@ -1,7 +1,12 @@
 // Types mirrored from the Frontend
 
+// @public: exportados de propósito (módulo de tipos do domínio), mas hoje usados
+// só neste arquivo (tipam os campos de Player/Room). O tag evita o knip reportá-los
+// como over-export sem precisar do ignoreExportsUsedInFile global.
+/** @public */
 export type Role = 'admin' | 'member' | 'observer'
 export type DeckType = 'fibonacci' | 'tshirt' | 'sequential'
+/** @public */
 export type RoomPhase = 'setup' | 'voting' | 'completed'
 
 // Área/disciplina auto-declarada pelo jogador na entrada. Enum fixo (single
@@ -10,6 +15,7 @@ export type RoomPhase = 'setup' | 'voting' | 'completed'
 // fatia 2. `other` é o escape para quem não se encaixa. A espelhar em
 // src/types/index.ts.
 export const PLAYER_TAGS = ['dev', 'design', 'qa', 'product', 'other'] as const
+/** @public */
 export type PlayerTag = (typeof PLAYER_TAGS)[number]
 
 export interface Player {
