@@ -16,6 +16,15 @@ describe('useVoteStats', () => {
     expect(s.numericVotes.value).toEqual([])
   })
 
+  it('voto único → sem consenso (consenso exige ≥2 votos)', () => {
+    // Um voto sozinho não é consenso: não há com quem concordar. Antes o
+    // every() de 1 elemento dava falso consenso (banner + confetti). Regressão.
+    const s = useVoteStats({ a: 5 })
+    expect(s.count.value).toBe(1)
+    expect(s.hasConsensus.value).toBe(false)
+    expect(s.consensusValue.value).toBeNull()
+  })
+
   it('votos numéricos distintos → média/min/max, sem consenso', () => {
     const s = useVoteStats({ a: 1, b: 2, c: 3 })
     expect(s.count.value).toBe(3)
@@ -86,9 +95,9 @@ describe('useVoteStats', () => {
   })
 
   it('recomputa reativamente quando os votos mudam', () => {
-    const votes = ref<Votes>({ a: 1 })
+    const votes = ref<Votes>({ a: 5, b: 5 })
     const s = useVoteStats(votes)
-    expect(s.count.value).toBe(1)
+    expect(s.count.value).toBe(2)
     expect(s.hasConsensus.value).toBe(true)
 
     votes.value = { a: 1, b: 8 }

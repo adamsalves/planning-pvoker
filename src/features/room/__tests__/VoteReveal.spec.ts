@@ -151,6 +151,45 @@ describe('VoteReveal.vue', () => {
     expect(wrapper.text()).not.toContain('Consenso!')
   })
 
+  it('voto único não é consenso: sem banner nem confetti (rodada de 1 votante)', () => {
+    // Um voto sozinho não é consenso — não há com quem concordar. Antes dava
+    // banner + confetti falsos numa rodada de 1 votante. Regressão.
+    vi.mocked(confetti).mockClear()
+
+    const wrapper = mount(VoteReveal, {
+      props: {
+        votes: { p1: 5 },
+        playerCount: 1,
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('Consenso!')
+    expect(wrapper.findComponent(IconPartyPopper).exists()).toBe(false)
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it('flip 1→2 votos iguais: banner e confetti disparam quando o consenso passa a valer', async () => {
+    // Guarda o watch(hasConsensus): uma rodada que começa com 1 voto (sem consenso)
+    // e ganha um 2º voto igual deve, aí sim, celebrar — o confetti dispara no flip
+    // false→true, não só on-mount.
+    vi.mocked(confetti).mockClear()
+
+    const wrapper = mount(VoteReveal, {
+      props: { votes: { p1: 5 }, playerCount: 2 },
+    })
+
+    // 1 voto → ainda não é consenso: sem banner nem confetti.
+    expect(wrapper.text()).not.toContain('Consenso!')
+    expect(confetti).not.toHaveBeenCalled()
+
+    // Chega o 2º voto igual → consenso passa a valer.
+    await wrapper.setProps({ votes: { p1: 5, p2: 5 } })
+
+    expect(wrapper.text()).toContain('Consenso!')
+    expect(wrapper.find('.consensus-value').text()).toBe('5')
+    expect(confetti).toHaveBeenCalled()
+  })
+
   it('só o banner de consenso traz o party-popper, decorativo', () => {
     const consenso = mount(VoteReveal, { props: { votes: { p1: 5, p2: 5 }, playerCount: 2 } })
     const icon = consenso.findComponent(IconPartyPopper)

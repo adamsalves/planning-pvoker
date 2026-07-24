@@ -91,11 +91,16 @@ test.describe('Planning Poker E2E Flow', () => {
     // -- VERIFY REVEAL --
     // A rodada revelada aparece na aba "Votação" E na "Resumo (1)" (F6.1; ambas ficam
     // montadas via v-show) → escopar no painel de votação visível p/ evitar ambiguidade.
+    // Aqui só o member votou → 1 voto. Um voto sozinho NÃO é consenso (não há com quem
+    // concordar), então o reveal mostra os stats mas SEM o banner "Consenso!".
+    // Guarda de regressão, ponta a ponta, do falso consenso de 1 votante.
     const adminVoting = adminPage.locator('#room-panel-voting')
-    await expect(adminVoting.getByText('Consenso!')).toBeVisible()
     await expect(adminVoting.locator('.stat-value:has-text("5")').first()).toBeVisible()
+    await expect(adminVoting.getByText('Consenso!')).toHaveCount(0)
 
-    await expect(memberPage.locator('#room-panel-voting').getByText('Consenso!')).toBeVisible()
+    const memberVoting = memberPage.locator('#room-panel-voting')
+    await expect(memberVoting.locator('.stat-value:has-text("5")').first()).toBeVisible()
+    await expect(memberVoting.getByText('Consenso!')).toHaveCount(0)
 
     // -- ADMIN FINISHES SESSION (last subject) --
     await adminPage.getByRole('button', { name: 'Finalizar Sessão', exact: true }).click()
