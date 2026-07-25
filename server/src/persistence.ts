@@ -75,7 +75,7 @@ const roomShapeSchema = z.object({
   currentRoundIndex: z.number().int(),
 })
 
-// The shape above plus the one invariant that spans two fields. Kept as a separate
+// The shape above plus the invariants that span two fields. Kept as a separate
 // step so the field list stays a plain object literal.
 //
 // Cross-field guard: zod validates each field in isolation, so without this a
@@ -87,12 +87,34 @@ const roomShapeSchema = z.object({
 // whole process down with it. Rejecting here means such a snapshot is DISCARDED
 // like any other malformed one (loadAll drops it and self-heals the index): the
 // affected room is lost, every other room boots fine.
-const roomSchema = roomShapeSchema.refine(
-  (room) =>
-    room.currentRoundIndex === -1 ||
-    (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
-  { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
-)
+//
+// Second guard, same reasoning, different symptom: an adminId that names nobody in
+// `players` crashes nothing, it QUIETLY BRICKS the room. requireAdmin (events.ts)
+// compares the caller's id against adminId, so no admin command ever passes; and
+// leaveRoom's `wasAdmin` check never fires either, so the handover that exists to
+// rescue a room with no one driving it can't trigger. The room stays alive and
+// un-driveable until its TTL. In-process this is unreachable — createRoom takes
+// adminId from a player it just seated, and leaveRoom always repoints it at a
+// remaining player — so, again, only a rehydrated snapshot gets here. This also
+// covers `players: []`: a room only empties through leaveRoom, which destroys it.
+//
+// Other cross-field mismatches were considered and left alone deliberately, but
+// they are NOT all harmless: votes keyed by non-players and orphan excludedVoterIds
+// really are cosmetic, while a `phase: 'setup'` carrying non-empty `rounds` passes
+// both refines and then loses that history the moment startSession overwrites
+// `room.rounds`. Silent data loss, not a crash — and still not worth a third guard,
+// because discarding the room destroys the same history plus the rest of the
+// session. Rejecting is reserved for damage the room can't absorb.
+const roomSchema = roomShapeSchema
+  .refine(
+    (room) =>
+      room.currentRoundIndex === -1 ||
+      (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
+    { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
+  )
+  .refine((room) => room.players.some((p) => p.id === room.adminId), {
+    message: 'adminId must name one of the room players',
+  })
 
 // A room's token hash read back from Redis: { playerId -> token }. Values are
 // validated PER FIELD in loadAll (a single corrupt field must not drop the whole
@@ -173,9 +195,24 @@ export class RedisPersistence implements RoomPersistence {
     const staleIds: string[] = []
 
     for (const id of ids) {
-      const parsedRoom = roomSchema.safeParse(await this.redis.get(roomKey(id)))
+      const raw = await this.redis.get(roomKey(id))
+      const parsedRoom = roomSchema.safeParse(raw)
       if (!parsedRoom.success) {
         // Missing (expired via TTL) or malformed (schema drift/corruption) — forget it.
+        //
+        // Say WHY when there was actually something there to reject. Dropping a room
+        // is the one operation here that destroys user-visible state, and hydrate()
+        // only ever logs the SURVIVORS ("Rehydrated N room(s)") — so without this an
+        // operator sees a room vanish with no way to tell what was wrong with it. The
+        // refine messages above exist precisely to be read here.
+        //
+        // A null/undefined value is the ROUTINE case (the room's TTL lapsed while its
+        // index entry lingered) and stays silent: it isn't corruption, and warning on
+        // every expired room would bury the reports that matter.
+        if (raw !== null && raw !== undefined) {
+          const reasons = parsedRoom.error.issues.map((issue) => issue.message).join('; ')
+          logger.warn(`🗄️  Discarding malformed snapshot for room ${id}: ${reasons}`)
+        }
         staleIds.push(id)
         continue
       }

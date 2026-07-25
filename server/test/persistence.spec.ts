@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { RedisPersistence, NullPersistence, type RedisClient } from '../src/persistence'
+import { logger } from '../src/logger'
 import type { Room } from '../src/types'
 
 // In-memory fake of the narrow RedisClient port. Backs commands with plain Maps
@@ -109,10 +110,19 @@ const sampleRoom = (id = 'ROOM1'): Room => ({
 describe('RedisPersistence', () => {
   let redis: FakeRedis
   let persistence: RedisPersistence
+  // Stubbed for every test: several cases here feed loadAll a deliberately broken
+  // snapshot, which now warns — without this the suite output is buried in the very
+  // noise those tests are producing on purpose. Also what the two logging tests assert on.
+  let warn: ReturnType<typeof vi.spyOn<typeof logger, 'warn'>>
 
   beforeEach(() => {
     redis = new FakeRedis()
     persistence = new RedisPersistence(redis, 100) // fixed TTL for assertions
+    warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('saveRoom stores the room, indexes it, and refreshes the token TTL', async () => {
@@ -272,6 +282,87 @@ describe('RedisPersistence', () => {
     const snap = await persistence.loadAll()
     expect(snap.rooms).toEqual([])
     expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('BROKEN')
+  })
+
+  // Sibling of the case above, with the opposite failure mode: an orphan adminId
+  // throws nothing, it leaves the room permanently un-driveable (requireAdmin never
+  // matches, and leaveRoom's wasAdmin never fires, so no handover rescues it).
+  // Dropping the room is the lesser loss. `players: []` is the degenerate case —
+  // an empty room is destroyed in-process, so a snapshot of one is already broken.
+  it.each([
+    ['adminId names nobody in players', { adminId: 'ghost' }],
+    ['no players at all', { players: [] }],
+  ])('loadAll drops a snapshot with an orphan adminId: %s', async (_, broken) => {
+    await redis.sadd('rooms:index', 'ORPHAN')
+    redis.strings.set('room:ORPHAN', { ...sampleRoom(), id: 'ORPHAN', ...broken })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms).toEqual([])
+    expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('ORPHAN')
+  })
+
+  // Every other case here seats a SINGLE player, where "some player matches" is
+  // indistinguishable from "the first one does", "the last one does", or "all of
+  // them do". This one separates them: a room whose admin is neither first nor last
+  // must survive. Without it the suite green-lights a guard that would discard most
+  // multi-player rooms on the deploy that shipped it — the mass-loss failure mode
+  // the excludedVoterIds and tag tests above already exist to prevent.
+  it('loadAll keeps a multi-player room whose admin is not the first player', async () => {
+    await redis.sadd('rooms:index', 'CROWD')
+    redis.strings.set('room:CROWD', {
+      ...sampleRoom(),
+      id: 'CROWD',
+      adminId: 'p2',
+      players: [
+        { id: 'p1', name: 'Ana', role: 'member' },
+        { id: 'p2', name: 'Bia', role: 'admin' },
+        { id: 'p3', name: 'Caio', role: 'observer' },
+      ],
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['CROWD'])
+    expect(snap.rooms[0].adminId).toBe('p2')
+  })
+
+  // The guard must key off membership, not role: leaveRoom's observers-only
+  // fallback and the join normalization can both leave the admin seated with a
+  // role the client renders differently. Only "is anybody there?" is structural.
+  it('loadAll keeps a room whose admin is seated but not roled admin', async () => {
+    await redis.sadd('rooms:index', 'ROLEY')
+    redis.strings.set('room:ROLEY', {
+      ...sampleRoom(),
+      id: 'ROLEY',
+      adminId: 'p1',
+      players: [{ id: 'p1', name: 'Ana', role: 'observer' }],
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['ROLEY'])
+  })
+
+  // Dropping a room destroys user-visible state, and hydrate() only logs the
+  // survivors — so the refine messages have to reach an operator, or a room vanishes
+  // with no explanation. Pins the reason, not just the fact that something was said.
+  it('loadAll reports WHY it discarded a snapshot', async () => {
+    await redis.sadd('rooms:index', 'ORPHAN')
+    redis.strings.set('room:ORPHAN', { ...sampleRoom(), id: 'ORPHAN', adminId: 'ghost' })
+
+    await persistence.loadAll()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('ORPHAN')
+    expect(warn.mock.calls[0][0]).toContain('adminId must name one of the room players')
+  })
+
+  // The other half of the contract: an index entry whose room simply expired is the
+  // ROUTINE case, not corruption. Warning on it would fire on every boot with an idle
+  // room and bury the reports above. Fails if someone logs unconditionally.
+  it('loadAll stays silent when the room is merely gone (TTL)', async () => {
+    await persistence.saveRoom(sampleRoom('ALIVE'))
+    await redis.sadd('rooms:index', 'GHOST') // indexed but no room:GHOST
+
+    await persistence.loadAll()
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('loadAll keeps a consistent -1 index (a room still in setup)', async () => {
