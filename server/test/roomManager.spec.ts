@@ -3,15 +3,26 @@ import { RoomManager } from '../src/roomManager'
 import type { Player, RoomConfig, Room } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
-const config: RoomConfig = { deckType: 'fibonacci', autoReveal: false }
-const admin: Player = { id: 'a1', name: 'Admin', role: 'admin' }
-const member: Player = { id: 'm1', name: 'Member', role: 'member' }
-const observer: Player = { id: 'o1', name: 'Obs', role: 'observer' }
+// Frozen because createRoom keeps it BY REFERENCE as room.config: a stray write
+// would leak into every later test. Nothing mutates it today — the freeze is what
+// keeps that true. Same reasoning as the per-test player fixtures below.
+const config: Readonly<RoomConfig> = Object.freeze({ deckType: 'fibonacci', autoReveal: false })
+
+// Rebuilt per test, never shared: createRoom/joinRoom store these objects BY
+// REFERENCE, and the admin handover promotes in place (next.role = 'admin'), so
+// a module-level fixture would carry that role into every later test. These three
+// can't be frozen instead — they are the ones the handover legitimately mutates.
+let admin: Player
+let member: Player
+let observer: Player
 
 let rm: RoomManager
 
 beforeEach(() => {
   rm = new RoomManager()
+  admin = { id: 'a1', name: 'Admin', role: 'admin' }
+  member = { id: 'm1', name: 'Member', role: 'member' }
+  observer = { id: 'o1', name: 'Obs', role: 'observer' }
 })
 
 describe('createRoom', () => {
@@ -84,6 +95,56 @@ describe('leaveRoom', () => {
     const promoted = room?.players.find((p) => p.id === 'm1')
     expect(promoted?.role).toBe('admin')
     expect(promoted?.tag).toBe('qa') // in-place role mutation must not drop the tag
+  })
+
+  it('skips observers when handing over admin, even if one sits first in the list', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer) // sits BEFORE the member in players[]
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.adminId).toBe('m1')
+    expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('observer')
+  })
+
+  it('promotes an observer only when nobody else is left to drive the room', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer)
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.adminId).toBe('o1')
+    // Fallback: a room with no players left would be undrivable otherwise.
+    expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('admin')
+  })
+
+  // Characterization, NOT an endorsement: the fallback promotion is permanent, so
+  // its "no quorum to break" justification expires as soon as someone joins. See
+  // the comment on the handover in roomManager for why removing this residue costs
+  // more than it's worth. If that ever changes, this test SHOULD fail.
+  it('leaves the fallback-promoted observer in the quorum once the room fills up again', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', observer)
+    rm.leaveRoom('r1', 'a1') // observers-only room → o1 promoted by the fallback
+    rm.joinRoom('r1', member) // ...and now the room has a real voter again
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    const room = rm.castVote('r1', 'm1', 5)
+    // The round still waits on the ex-observer, who is now a full voter.
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  it('does not add an observer to the quorum by handing them admin', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', observer)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    rm.leaveRoom('r1', 'a1') // admin goes to m1, o1 stays out of the round
+    const room = rm.castVote('r1', 'm1', 5)
+
+    // The only eligible voter voted, so autoReveal fires. With the observer
+    // promoted the round would stay open on a vote that can never come.
+    expect(room?.rounds[0].status).toBe('revealed')
   })
 
   it('deletes the room when the last player leaves', () => {
@@ -196,7 +257,7 @@ describe('autoReveal quorum is presence-aware', () => {
   const autoRevealConfig: RoomConfig = { deckType: 'fibonacci', autoReveal: true }
   // A third eligible voter that stands in for a rehydration ghost: eligible to
   // vote, but never present (no socket, no grace timer).
-  const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+  const ghost: Readonly<Player> = Object.freeze({ id: 'g1', name: 'Ghost', role: 'member' })
 
   // Seeds a voting room [admin, member, ghost] with autoReveal on, and an oracle
   // where only admin + member are present.
@@ -257,7 +318,8 @@ describe('autoReveal quorum is presence-aware', () => {
 })
 
 describe('setRoundVoter (admin chooses who votes in the round)', () => {
-  const other: Player = { id: 'm2', name: 'Other', role: 'member' }
+  // Frozen for the same reason as `config` — shared across this describe's tests.
+  const other: Readonly<Player> = Object.freeze({ id: 'm2', name: 'Other', role: 'member' })
 
   // Voting room [admin, member, other, observer] on subject A, autoReveal off.
   function seeded(autoReveal = false) {
@@ -352,7 +414,7 @@ describe('setRoundVoter (admin chooses who votes in the round)', () => {
   // Intersection with the presence-aware quorum (PR #51): the two filters have
   // to compose, so the round waits on eligible ∩ present.
   describe('composed with presence', () => {
-    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+    const ghost: Readonly<Player> = Object.freeze({ id: 'g1', name: 'Ghost', role: 'member' })
 
     // [admin, member, ghost] voting on A, autoReveal on, ghost never present.
     function seededWithGhost() {
