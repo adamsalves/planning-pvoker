@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import IconCrown from '~icons/lucide/crown'
@@ -9,10 +9,11 @@ import IconPencil from '~icons/lucide/pencil'
 import IconVote from '~icons/lucide/vote'
 import IconCheck from '~icons/lucide/check'
 import IconShare from '~icons/lucide/share-2'
+import type { PlayerRole } from '@/types'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { roundVotersOf } from '@/utils/players'
+import { isObserver as isObserverPlayer, roundVotersOf } from '@/utils/players'
 import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -57,15 +58,34 @@ const isAdmin = computed(() => {
   const room = roomStore.currentRoom
   return room ? room.adminId === userStore.playerId : userStore.playerRole === 'admin'
 })
-const isObserver = computed(() => userStore.playerRole === 'observer')
+// O usuário local dentro da lista do servidor — a fonte da verdade do papel dele.
+const localPlayer = computed(() => roomStore.players.find((p) => p.id === userStore.playerId))
+
+// Espectador também é derivado do servidor (mesmo princípio do isAdmin acima): o
+// papel do localStorage envelhece. Um observer promovido a admin (o servidor faz
+// isso quando o admin sai) passa a CONTAR no quórum do servidor, mas continuaria
+// espectador no client dele — e a rodada nunca fecharia, esperando um voto que a
+// UI não deixa ele dar. Fallback pro papel local só até o primeiro
+// room_state_updated chegar — a guarda aqui é o jogador ESTAR na lista, e não o
+// `currentRoom` existir como no isAdmin: a diferença é deliberada, porque o papel
+// mora no Player e o adminId mora na Room.
+const isObserver = computed(() =>
+  localPlayer.value ? isObserverPlayer(localPlayer.value) : userStore.playerRole === 'observer',
+)
 
 // Badges de papel e fase: ícone + rótulo saem juntos do mesmo computed (o ícone é o
 // COMPONENTE, renderizado por <component :is>, sem cast). O emoji saiu das strings
 // i18n — o rótulo textual continua sendo o nome acessível do badge.
-const roleBadge = computed(() => {
-  if (isAdmin.value) return { icon: IconCrown, label: t('room.roles.admin') }
-  if (isObserver.value) return { icon: IconEye, label: t('room.roles.observer') }
-  return { icon: IconUser, label: t('room.roles.player') }
+// `variant` é a classe CSS da cor do badge: sai do MESMO computed que o ícone e o
+// rótulo pra não divergir deles (antes vinha do userStore.playerRole, que envelhece
+// — quem era promovido a admin ganhava a coroa com a cor de jogador). Tipado como
+// PlayerRole de propósito: as regras CSS são .badge-role.admin/.observer, então um
+// typo na classe vira erro de compilação em vez de badge sem cor.
+const roleBadge = computed<{ icon: Component; label: string; variant: PlayerRole }>(() => {
+  if (isAdmin.value) return { icon: IconCrown, label: t('room.roles.admin'), variant: 'admin' }
+  if (isObserver.value)
+    return { icon: IconEye, label: t('room.roles.observer'), variant: 'observer' }
+  return { icon: IconUser, label: t('room.roles.player'), variant: 'member' }
 })
 
 const phaseBadge = computed(() => {
@@ -300,7 +320,7 @@ function confirmLeave() {
               {{ t('room.title') }} <span class="room-code">{{ roomId }}</span>
             </h1>
             <div class="room-meta">
-              <span class="badge badge-role" :class="userStore.playerRole">
+              <span class="badge badge-role" :class="roleBadge.variant">
                 <component :is="roleBadge.icon" aria-hidden="true" />
                 {{ roleBadge.label }}
               </span>

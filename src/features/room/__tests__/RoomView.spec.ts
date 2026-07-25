@@ -621,12 +621,15 @@ describe('RoomView.vue role and phase badges (ícones theme-aware)', () => {
   ) {
     setActivePinia(createPinia())
 
+    const role = options.role ?? 'admin'
     const userStore = useUserStore()
-    userStore.setPlayer('Ana', 'player-1', options.role ?? 'admin')
+    userStore.setPlayer('Ana', 'player-1', role)
 
     const room = createRoom()
-    // adminId só bate com o player quando o papel é admin — isAdmin vem do servidor.
-    if (options.role && options.role !== 'admin') room.adminId = 'someone-else'
+    // O papel do badge vem do SERVIDOR (adminId + role na lista de jogadores), não
+    // do localStorage — por isso os dois lados são preparados juntos aqui.
+    room.players = [{ id: 'player-1', name: 'Ana', role }]
+    if (role !== 'admin') room.adminId = 'someone-else'
     if (options.phase) room.phase = options.phase
 
     useRoomStore().syncRoom(room)
@@ -762,6 +765,93 @@ describe('RoomView.vue quem vota na rodada', () => {
 
     expect(wrapper.findComponent(RoomVoting).props('nonVoterIds')).toEqual([])
     expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(2)
+  })
+})
+
+describe('RoomView.vue papel local × papel do servidor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function mountWith(localRole: 'admin' | 'member' | 'observer', room: Room) {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Cida', 'player-3', localRole)
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  function votingRoom(players: Room['players'], adminId: string): Room {
+    return {
+      id: 'abc123',
+      adminId,
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players,
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes: {}, excludedVoterIds: [] }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  // Regressão do quórum que nunca fechava: a Cida entrou como espectadora, o admin
+  // saiu e o SERVIDOR a promoveu (roomManager.leaveRoom). O quórum do servidor já
+  // contava com ela, mas o papel do localStorage seguia 'observer' — a UI não dava
+  // o deck pra ela votar, e a rodada ficava esperando um voto impossível.
+  it('segue o papel do servidor quando o local está defasado (observer promovido)', async () => {
+    const wrapper = mountWith(
+      'observer',
+      votingRoom(
+        [
+          { id: 'player-3', name: 'Cida', role: 'admin' },
+          { id: 'player-2', name: 'Bob', role: 'member' },
+        ],
+        'player-3',
+      ),
+    )
+    await flushPromises()
+
+    const voting = wrapper.findComponent(RoomVoting)
+    expect(voting.props('isObserver')).toBe(false)
+    expect(voting.props('isVotingThisRound')).toBe(true)
+    // Ela agora é o denominador junto com o Bob — o mesmo que o servidor espera.
+    expect(voting.props('voterCount')).toBe(2)
+    expect(wrapper.find('.badge-role').classes()).toContain('admin')
+  })
+
+  // O outro lado: papel local otimista não coloca ninguém na rodada.
+  it('trata como espectador quem o servidor lista como observer', async () => {
+    const wrapper = mountWith(
+      'member',
+      votingRoom(
+        [
+          { id: 'player-1', name: 'Ana', role: 'admin' },
+          { id: 'player-3', name: 'Cida', role: 'observer' },
+        ],
+        'player-1',
+      ),
+    )
+    await flushPromises()
+
+    const voting = wrapper.findComponent(RoomVoting)
+    expect(voting.props('isObserver')).toBe(true)
+    expect(voting.props('isVotingThisRound')).toBe(false)
+    expect(voting.props('voterCount')).toBe(1)
+  })
+
+  // Fallback: entre o mount e o primeiro room_state_updated o usuário ainda não
+  // está na lista — aí o papel local é tudo o que existe. Este caso passaria
+  // TAMBÉM com o bug antigo (o papel local dava a mesma resposta): é cobertura do
+  // ramo do fallback, não guarda de regressão — os dois casos acima é que são.
+  it('usa o papel local enquanto o servidor não lista o jogador', async () => {
+    const wrapper = mountWith(
+      'observer',
+      votingRoom([{ id: 'player-1', name: 'Ana', role: 'admin' }], 'player-1'),
+    )
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('isObserver')).toBe(true)
+    expect(wrapper.find('.badge-role').text()).toBe('Espectador')
   })
 })
 
