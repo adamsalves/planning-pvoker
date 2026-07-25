@@ -280,6 +280,24 @@ export class RoomManager {
     // silently re-entering it. Trade-off: after an explicit "leave" and a
     // re-join, that player is still excluded — the UI (slice 2) has to say so.
     //
+    // Their VOTE, on the other hand, goes — the same rule setRoundVoter already
+    // applies when the admin takes someone out of a round: a vote from someone the
+    // round no longer counts skews the reveal. The server never noticed, because
+    // every quorum path iterates room.players; the client is what breaks. It feeds
+    // the raw votes map to useVoteStats, so a leftover vote still lands in the
+    // count, the average, the distribution and — worst — in hasConsensus, where it
+    // resurrects the false consensus that the "at least 2 votes" guard exists to
+    // prevent: one present voter plus one ghost vote reads as agreement, banner and
+    // confetti included.
+    //
+    // Only the round in progress. A revealed round is settled history — the room
+    // already saw that result, and rewriting it would retroactively change what was
+    // shown (same reason setRoundVoter refuses to touch a revealed round).
+    if (room.currentRoundIndex !== -1) {
+      const currentRound = room.rounds[room.currentRoundIndex]
+      if (currentRound.status === 'voting') delete currentRound.votes[playerId]
+    }
+
     // A present voter just left (their grace expired). If the voters who remain
     // present have all voted, the round can now auto-reveal — the departing
     // player was the last one holding it open. No-op when autoReveal is off.

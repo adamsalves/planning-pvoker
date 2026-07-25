@@ -325,9 +325,17 @@ describe('RedisPersistence', () => {
     expect(snap.rooms[0].adminId).toBe('p2')
   })
 
-  // The guard must key off membership, not role: leaveRoom's observers-only
-  // fallback and the join normalization can both leave the admin seated with a
-  // role the client renders differently. Only "is anybody there?" is structural.
+  // Deliberately PERMISSIVE, and not for the reason an earlier version of this
+  // comment claimed. In-process the admin always carries role 'admin' — createRoom
+  // forces it, the join normalization resolves the role FROM adminId, and the
+  // handover in leaveRoom sets next.role = 'admin' even in the observers-only
+  // fallback. So this snapshot is as unreachable as an orphan adminId.
+  //
+  // It is kept anyway because the room still WORKS: the admin is merely left out of
+  // the quorum (eligibleVotersOf drops observers), and the state SELF-HEALS on the
+  // next join, which re-derives the role from adminId. Discarding a functioning,
+  // self-healing room fails the bar the refines are held to — rejection is for
+  // damage the room can't absorb. Fails if someone tightens the guard to role.
   it('loadAll keeps a room whose admin is seated but not roled admin', async () => {
     await redis.sadd('rooms:index', 'ROLEY')
     redis.strings.set('room:ROLEY', {
