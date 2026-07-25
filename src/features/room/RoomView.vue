@@ -2,10 +2,17 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import IconCrown from '~icons/lucide/crown'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
+import IconPencil from '~icons/lucide/pencil'
+import IconVote from '~icons/lucide/vote'
+import IconCheck from '~icons/lucide/check'
+import IconShare from '~icons/lucide/share-2'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { activePlayersOf } from '@/utils/players'
+import { roundVotersOf } from '@/utils/players'
 import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -17,7 +24,6 @@ import SessionSummary from './SessionSummary.vue'
 import { useSocket } from '@/composables/useSocket'
 import { useShareRoom } from '@/composables/useShareRoom'
 import { JoinAckError } from '@/composables/joinErrors'
-import { useHistoryStore } from '@/stores/history'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -25,7 +31,6 @@ const router = useRouter()
 const userStore = useUserStore()
 const roomStore = useRoomStore()
 const connectionStore = useConnectionStore()
-const historyStore = useHistoryStore()
 const {
   addSubjects,
   removeSubject,
@@ -34,6 +39,7 @@ const {
   resetSession,
   castVote,
   revealVotes,
+  setRoundVoter,
   disconnect,
   joinRoom,
   leaveRoom,
@@ -52,6 +58,21 @@ const isAdmin = computed(() => {
   return room ? room.adminId === userStore.playerId : userStore.playerRole === 'admin'
 })
 const isObserver = computed(() => userStore.playerRole === 'observer')
+
+// Badges de papel e fase: ícone + rótulo saem juntos do mesmo computed (o ícone é o
+// COMPONENTE, renderizado por <component :is>, sem cast). O emoji saiu das strings
+// i18n — o rótulo textual continua sendo o nome acessível do badge.
+const roleBadge = computed(() => {
+  if (isAdmin.value) return { icon: IconCrown, label: t('room.roles.admin') }
+  if (isObserver.value) return { icon: IconEye, label: t('room.roles.observer') }
+  return { icon: IconUser, label: t('room.roles.player') }
+})
+
+const phaseBadge = computed(() => {
+  if (roomStore.isSetupPhase) return { icon: IconPencil, label: t('room.phases.setup') }
+  if (roomStore.isVotingPhase) return { icon: IconVote, label: t('room.phases.voting') }
+  return { icon: IconCheck, label: t('room.phases.completed') }
+})
 
 const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
 const deckLabel = computed(() => t(`decks.${deckType.value}`))
@@ -82,17 +103,38 @@ watch(
   },
 )
 
-// Apenas jogadores ativos (não observers) para contagem
-const activePlayerCount = computed(() => activePlayersOf(players.value).length)
+// Quem o admin tirou DESTA rodada (server: Round.excludedVoterIds). Ausente em
+// rodadas criadas antes da feature — `?? []` = ninguém fora.
+const nonVoterIds = computed(() => currentRound.value?.excludedVoterIds ?? [])
 
-const allActiveVoted = computed(() => {
+// Quem a rodada espera votar: nem observer nem excluído. É o denominador do
+// VoteReveal e a base do "todos votaram" — NÃO confundir com quem senta à mesa
+// (activePlayersOf), que inclui o excluído.
+const voterCount = computed(() => roundVotersOf(players.value, nonVoterIds.value).length)
+
+const allVotersVoted = computed(() => {
   const round = currentRound.value
   if (!round) return false
-  const active = activePlayersOf(players.value)
-  // Guard length: uma sala só de observers (zero ativos) NÃO conta como "todos
-  // votaram" — [].every() é true e marcaria a rodada como concluída sem voto.
-  return active.length > 0 && active.every((p) => p.id in round.votes)
+  const voters = roundVotersOf(players.value, nonVoterIds.value)
+  // Guard length: sala só de observers (ou todos excluídos) NÃO conta como
+  // "todos votaram" — [].every() é true e marcaria a rodada como concluída.
+  return voters.length > 0 && voters.every((p) => p.id in round.votes)
 })
+
+// O usuário local vota nesta rodada? Decide se o deck aparece pra ele.
+const isVotingThisRound = computed(
+  () => !isObserver.value && !nonVoterIds.value.includes(userStore.playerId),
+)
+
+// Ao ser tirado da rodada, o servidor já apagou o voto — limpa o otimista pra
+// carta não continuar acesa numa rodada que a pessoa não está mais votando.
+watch(isVotingThisRound, (isVoting) => {
+  if (!isVoting) optimisticVote.value = null
+})
+
+function handleToggleVoter(playerId: string, voting: boolean) {
+  setRoundVoter(roomId.value, playerId, voting)
+}
 
 // Abas da fase de votação: "Votação" (rodada atual) ↔ "Resumo" (rodadas já
 // reveladas, ao vivo). Só aparecem na fase de votação.
@@ -139,6 +181,10 @@ function rejoinActiveRoom() {
     id: userStore.playerId,
     name: userStore.playerName,
     role: userStore.playerRole,
+    // A tag PRECISA ir no re-join: o upsert do servidor sobrescreve a tag do
+    // player a cada join, então omiti-la aqui a apagaria logo após o create/join
+    // inicial (e a cada reconexão). Vem persistida do userStore.
+    tag: userStore.playerTag,
   }).catch((err) => {
     // A distinção-chave: SÓ um erro de ACK do servidor (sessão inválida / sala
     // inexistente) limpa o token e volta pra Home. Falha de conexão / cold start
@@ -147,10 +193,12 @@ function rejoinActiveRoom() {
     if (err instanceof JoinAckError) {
       userStore.setSessionToken(null)
       // A sala REALMENTE não existe mais (reset/cold-start): descarta o estado
-      // obsoleto além do token. Sem isso, o `currentRoom` preso faria a Home
-      // mostrar o aviso "sessão expirou" JUNTO com o banner/link "Voltar à Sala"
-      // (F5.4) — um retorno quebrado que só reentra no erro.
+      // obsoleto além do token — o `currentRoom` in-memory E o `activeRoomId`
+      // PERSISTIDO. O banner de "sala ativa" do layout lê o activeRoomId (pra
+      // sobreviver a reload); sem limpá-lo aqui, ele apontaria pra sala morta junto
+      // do aviso "sessão expirou" — um retorno quebrado que só reentra no erro (F5.4).
       roomStore.leaveRoom()
+      userStore.setActiveRoom(null)
       router.push({ name: 'home', query: { notice: 'session-expired' } })
     }
   })
@@ -221,20 +269,7 @@ function handleNewSession() {
 // concluída (SessionSummary) é deliberada e continua imediata.
 const showLeaveConfirm = ref(false)
 
-// Só há sessão a preservar quando alguma rodada já foi criada (setup vazio não).
-const hasRecordedRounds = computed(() => (roomStore.currentRoom?.rounds.length ?? 0) > 0)
-
 function handleLeave() {
-  if (roomStore.currentRoom && roomStore.currentRoom.rounds.length > 0) {
-    historyStore.saveSession({
-      id: `${roomId.value}-${Date.now()}`,
-      date: new Date().toISOString(),
-      roomId: roomId.value,
-      deckType: deckType.value,
-      rounds: roomStore.currentRoom.rounds,
-    })
-  }
-
   // Avisa o servidor ANTES do disconnect: remoção imediata lá (sem o grace de
   // 30s), admin transferido na hora e o token do servidor descartado — sem isso,
   // voltar pra sala logo após sair esbarrava em "Sessão inválida".
@@ -266,23 +301,13 @@ function confirmLeave() {
             </h1>
             <div class="room-meta">
               <span class="badge badge-role" :class="userStore.playerRole">
-                {{
-                  isAdmin
-                    ? t('room.roles.admin')
-                    : isObserver
-                      ? t('room.roles.observer')
-                      : t('room.roles.player')
-                }}
+                <component :is="roleBadge.icon" aria-hidden="true" />
+                {{ roleBadge.label }}
               </span>
               <span class="badge badge-deck">{{ deckLabel }}</span>
               <span class="badge badge-phase">
-                {{
-                  roomStore.isSetupPhase
-                    ? t('room.phases.setup')
-                    : roomStore.isVotingPhase
-                      ? t('room.phases.voting')
-                      : t('room.phases.completed')
-                }}
+                <component :is="phaseBadge.icon" aria-hidden="true" />
+                {{ phaseBadge.label }}
               </span>
             </div>
           </div>
@@ -293,7 +318,7 @@ function confirmLeave() {
               :aria-label="t('room.share.ariaLabel', { roomId })"
               @click="shareRoom"
             >
-              {{
+              <IconShare v-if="shareStatus === 'idle'" class="btn-icon" aria-hidden="true" />{{
                 shareStatus === 'copied'
                   ? t('room.share.copied')
                   : shareStatus === 'error'
@@ -363,13 +388,16 @@ function confirmLeave() {
         aria-labelledby="room-tab-voting"
         :is-admin="isAdmin"
         :is-observer="isObserver"
+        :is-voting-this-round="isVotingThisRound"
         :selected-vote="selectedVote"
-        :active-player-count="activePlayerCount"
-        :all-active-voted="allActiveVoted"
+        :non-voter-ids="nonVoterIds"
+        :voter-count="voterCount"
+        :all-voters-voted="allVotersVoted"
         @vote="handleVote"
         @reveal="handleReveal"
         @next-round="handleNextRound"
         @finish="handleFinishSession"
+        @toggle-voter="handleToggleVoter"
       />
       <RoomSummary
         v-show="roomTab === 'summary'"
@@ -395,9 +423,6 @@ function confirmLeave() {
     <BaseModal v-model="showLeaveConfirm" :title="t('room.leave.confirmTitle')">
       <p class="leave-confirm-text">
         {{ t('room.leave.confirmBody') }}
-        <template v-if="hasRecordedRounds">
-          {{ t('room.leave.confirmHistoryNote') }}
-        </template>
       </p>
       <template #footer>
         <BaseButton variant="ghost" @click="showLeaveConfirm = false">{{
@@ -499,7 +524,12 @@ function confirmLeave() {
   flex-wrap: wrap;
 }
 
+/* inline-flex + gap: o ícone do badge é irmão do rótulo e herda a cor de cada
+   variante (.badge-role/.admin/.observer/.badge-phase) via currentColor. */
 .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-xs);
   padding: 2px var(--space-2);
   border-radius: var(--radius-full);

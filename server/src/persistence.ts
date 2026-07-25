@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis'
 import { z } from 'zod'
-import type { Room } from './types'
+import { PLAYER_TAGS, type Room } from './types'
 import { logger } from './logger'
 
 // Rooms and their session tokens are the authoritative state in-memory (see
@@ -50,6 +50,12 @@ const roomSchema = z.object({
       id: z.string(),
       name: z.string(),
       role: z.enum(['admin', 'member', 'observer']),
+      // OPCIONAL como excludedVoterIds (snapshot pré-feature não tem o campo).
+      // Além disso `.catch(undefined)`: tags são um enum de PRODUTO, propenso a
+      // mudar; um valor que saiu da lista degrada para "sem tag" em vez de
+      // DERRUBAR a sala inteira (o que mataria toda sala viva no deploy que
+      // mudou a lista). role/deck não levam .catch por serem estruturais/estáveis.
+      tag: z.enum(PLAYER_TAGS).optional().catch(undefined),
     }),
   ),
   subjects: z.array(z.string()),
@@ -60,6 +66,10 @@ const roomSchema = z.object({
       subject: z.string(),
       status: z.enum(['voting', 'revealed']),
       votes: z.record(z.string(), z.union([z.string(), z.number()])),
+      // OPCIONAL de propósito: snapshots gravados antes desta feature não têm o
+      // campo, e um required aqui faria o safeParse falhar — o que em loadAll
+      // significa DESCARTAR a sala. Todas as salas vivas morreriam no deploy.
+      excludedVoterIds: z.array(z.string()).optional(),
     }),
   ),
   currentRoundIndex: z.number(),

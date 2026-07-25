@@ -5,7 +5,14 @@ import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import DefaultLayout from '../DefaultLayout.vue'
 import { useRoomStore } from '@/stores/room'
+import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
 import type { Room, RoomPhase } from '@/types'
+import IconSun from '~icons/lucide/sun'
+import IconMoon from '~icons/lucide/moon'
+import IconSunMoon from '~icons/lucide/sun-moon'
+import IconTarget from '~icons/lucide/target'
+import IconChartColumn from '~icons/lucide/chart-column'
 
 let wrapper: VueWrapper | undefined
 
@@ -30,8 +37,8 @@ function makeRoom(phase: RoomPhase): Room {
   }
 }
 
-function backToRoomLink(w: VueWrapper) {
-  return w.findAll('a').find((a) => a.classes().includes('nav-link-room'))
+function activeRoomBanner(w: VueWrapper) {
+  return w.findAll('a').find((a) => a.classes().includes('room-notice'))
 }
 
 describe('DefaultLayout.vue', () => {
@@ -59,12 +66,12 @@ describe('DefaultLayout.vue', () => {
   it('moves focus to <main> and announces the route title on navigation', async () => {
     const w = mountLayout()
 
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     await nextTick()
     await nextTick()
 
     expect(document.activeElement).toBe(w.get('main').element)
-    expect(w.find('[aria-live="polite"]').text()).toBe('Histórico')
+    expect(w.find('[aria-live="polite"]').text()).toBe('Não encontrado')
   })
 
   it('moves focus to <main> and announces "Sala {código}" when only the route param changes', async () => {
@@ -86,61 +93,102 @@ describe('DefaultLayout.vue', () => {
 
     const toggle = w.get('.locale-toggle')
     expect(toggle.text()).toBe('EN') // mostra o idioma ALVO
-    expect(w.text()).toContain('Histórico')
+    expect(w.text()).toContain('feito por') // rodapé em pt-BR
 
     await toggle.trigger('click')
     await nextTick()
 
     expect(toggle.text()).toBe('PT')
-    expect(w.text()).toContain('History')
-    expect(w.text()).not.toContain('Histórico')
+    expect(w.text()).toContain('made by')
+    expect(w.text()).not.toContain('feito por')
     expect(document.documentElement.lang).toBe('en')
 
     await toggle.trigger('click')
     await nextTick()
-    expect(w.text()).toContain('Histórico')
+    expect(w.text()).toContain('feito por')
     expect(document.documentElement.lang).toBe('pt-BR')
   })
 
-  // F5.1/F5.2/F5.4 — visibilidade e rótulo do "Voltar à Sala" do header. Aparece em
-  // rotas fora da sala (ex.: Histórico), mas NÃO na Home (lá o banner F5.4 já cobre o
-  // retorno — evita CTA duplicado) nem na própria sala.
-  it('does not show "Voltar à Sala" when there is no active room', async () => {
-    await router.push({ name: 'history' })
+  // Item #5 — banner ÚNICO de "sala ativa" no topo do <main>: aparece em QUALQUER
+  // rota com sala ativa (Home, 404), MENOS a própria sala; vira "Ver Resumo" quando
+  // concluída. Unifica os dois afordances antigos da F5 (botão do navbar + banner da Home).
+  it('does not show the active-room banner when there is no active room', async () => {
+    await router.push('/unknown/route')
     const w = mountLayout()
-    expect(backToRoomLink(w)).toBeUndefined()
+    expect(activeRoomBanner(w)).toBeUndefined()
   })
 
-  it('hides "Voltar à Sala" while on the room route itself (F5.1)', async () => {
+  it('hides the active-room banner while on the room route itself', async () => {
     useRoomStore().syncRoom(makeRoom('voting'))
     await router.push({ name: 'room', params: { id: 'abc123' } })
     const w = mountLayout()
-    expect(backToRoomLink(w)).toBeUndefined()
+    expect(activeRoomBanner(w)).toBeUndefined()
   })
 
-  it('hides "Voltar à Sala" on Home even with an active session (redundante com o banner F5.4)', () => {
+  // Antes (F5) o botão do header era escondido na Home; unificado, o banner PASSA a
+  // aparecer nela (era o banner só-da-Home que cobria isso, agora é o mesmo elemento).
+  it('SHOWS the active-room banner on Home when a session is active (item #5)', () => {
     useRoomStore().syncRoom(makeRoom('voting'))
     const w = mountLayout() // beforeEach já posicionou em '/'
-    expect(backToRoomLink(w)).toBeUndefined()
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.text()).toContain('Voltar à Sala')
+    expect(banner?.attributes('href')).toBe('/room/abc123')
   })
 
-  it('shows "Voltar à Sala" from another route (Histórico) while a session is in progress (F5.1/F5.2)', async () => {
+  it('shows the active-room banner from another route (404) while a session is in progress', async () => {
     useRoomStore().syncRoom(makeRoom('voting'))
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     const w = mountLayout()
-    const link = backToRoomLink(w)
-    expect(link).toBeDefined()
-    expect(link?.text()).toContain('Voltar à Sala')
-    expect(link?.attributes('href')).toBe('/room/abc123')
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.text()).toContain('Voltar à Sala')
+    expect(banner?.attributes('href')).toBe('/room/abc123')
+    expect(w.findComponent(IconTarget).exists()).toBe(true) // em andamento → alvo
   })
 
-  it('labels the link "Ver Resumo" from another route when the session is completed (F5.2)', async () => {
+  it('labels the banner "Ver Resumo" when the session is completed', async () => {
     useRoomStore().syncRoom(makeRoom('completed'))
-    await router.push({ name: 'history' })
+    await router.push('/unknown/route')
     const w = mountLayout()
-    const link = backToRoomLink(w)
-    expect(link).toBeDefined()
-    expect(link?.text()).toContain('Ver Resumo')
-    expect(link?.attributes('href')).toBe('/room/abc123')
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.text()).toContain('Ver Resumo')
+    expect(banner?.attributes('href')).toBe('/room/abc123')
+    expect(w.findComponent(IconChartColumn).exists()).toBe(true) // concluída → gráfico
+  })
+
+  // O sinal do banner é o activeRoomId PERSISTIDO, não o currentRoom in-memory: assim
+  // ele sobrevive a um reload/hard-nav (o currentRoom zera no boot, mas o activeRoomId
+  // fica no localStorage). Sem a sala carregada (só o id persistido), o rótulo degrada
+  // p/ "Voltar à Sala" — sem currentRoom não dá pra saber se está concluída.
+  it('shows the banner from the persisted activeRoomId even without a loaded room (survives reload)', async () => {
+    useUserStore().setActiveRoom('abc123') // só o id persistido; currentRoom fica null
+    await router.push('/unknown/route')
+    const w = mountLayout()
+    const banner = activeRoomBanner(w)
+    expect(banner).toBeDefined()
+    expect(banner?.attributes('href')).toBe('/room/abc123')
+    expect(banner?.text()).toContain('Voltar à Sala')
+  })
+
+  // O toggle de tema mostra o ícone da preferência atual (sun/moon/sun-moon),
+  // recolorindo via currentColor — antes eram emojis ☀️/🌙/🌗 de cor fixa. (Também
+  // é o smoke de que o unplugin-icons gera <svg> no vitest, base das próximas fatias.)
+  // Obs.: o logo 🃏 (marca/joker) fica como emoji de propósito — não é convertido.
+  it('renders the theme icon matching the current preference', async () => {
+    const w = mountLayout()
+    const theme = useThemeStore()
+
+    expect(w.findComponent(IconSunMoon).exists()).toBe(true) // default = 'system'
+
+    theme.setPreference('light')
+    await nextTick()
+    expect(w.findComponent(IconSun).exists()).toBe(true)
+    expect(w.findComponent(IconSunMoon).exists()).toBe(false)
+
+    theme.setPreference('dark')
+    await nextTick()
+    expect(w.findComponent(IconMoon).exists()).toBe(true)
   })
 })

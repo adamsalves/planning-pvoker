@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconPlus from '~icons/lucide/plus'
+import IconClipboardList from '~icons/lucide/clipboard-list'
+import IconPlay from '~icons/lucide/play'
+import IconPencil from '~icons/lucide/pencil'
+import IconHourglass from '~icons/lucide/hourglass'
+import IconX from '~icons/lucide/x'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
 
@@ -27,11 +33,13 @@ const errorKey = ref('')
 const canStart = computed(() => props.subjects.length >= 1 && props.playerCount >= 2)
 
 // Sempre explica por que "Iniciar" está desabilitado: a falta de subjects é o
-// pré-requisito (mostra primeiro), depois a falta de jogadores. Vazio = pode iniciar.
-const startHintKey = computed(() => {
-  if (props.subjects.length < 1) return 'room.setup.needSubjects'
-  if (props.playerCount < 2) return 'room.setup.waitingPlayers'
-  return ''
+// pré-requisito (mostra primeiro), depois a falta de jogadores. null = pode iniciar.
+// Ícone e chave saem juntos porque cada motivo tem o seu (antes eram os emojis 📝/⏳
+// embutidos nas strings); o ícone é o componente, renderizado por <component :is>.
+const startHint = computed(() => {
+  if (props.subjects.length < 1) return { icon: IconPencil, key: 'room.setup.needSubjects' }
+  if (props.playerCount < 2) return { icon: IconHourglass, key: 'room.setup.waitingPlayers' }
+  return null
 })
 
 function handleAdd() {
@@ -54,12 +62,16 @@ function handleAdd() {
         :placeholder="t('room.setup.addSubjectPlaceholder')"
         :error="errorKey ? t(errorKey) : ''"
       />
-      <BaseButton type="submit" size="md">{{ t('room.setup.addButton') }}</BaseButton>
+      <BaseButton type="submit" size="md"
+        ><IconPlus class="btn-icon" aria-hidden="true" />{{ t('room.setup.addButton') }}</BaseButton
+      >
     </form>
 
     <!-- Subject Backlog List -->
     <div v-if="subjects.length > 0" class="backlog">
-      <p class="backlog-title">{{ t('room.setup.backlogTitle', subjects.length) }}</p>
+      <p class="backlog-title">
+        <IconClipboardList aria-hidden="true" />{{ t('room.setup.backlogTitle', subjects.length) }}
+      </p>
       <ul class="backlog-list">
         <li v-for="(item, index) in subjects" :key="index" class="backlog-item">
           <span class="backlog-index">{{ index + 1 }}.</span>
@@ -70,7 +82,7 @@ function handleAdd() {
             :title="t('room.setup.removeTitle')"
             :aria-label="t('room.setup.removeSubject', { subject: item })"
           >
-            ✕
+            <IconX aria-hidden="true" />
           </button>
         </li>
       </ul>
@@ -84,10 +96,10 @@ function handleAdd() {
     <!-- Start Session Button -->
     <div class="start-section">
       <BaseButton variant="primary" size="lg" block :disabled="!canStart" @click="emit('start')">
-        {{ t('room.setup.startButton') }}
+        <IconPlay class="btn-icon" aria-hidden="true" />{{ t('room.setup.startButton') }}
       </BaseButton>
-      <p v-if="startHintKey" class="start-hint">
-        {{ t(startHintKey) }}
+      <p v-if="startHint" class="start-hint">
+        <component :is="startHint.icon" aria-hidden="true" />{{ t(startHint.key) }}
       </p>
     </div>
   </div>
@@ -117,6 +129,9 @@ function handleAdd() {
 }
 
 .backlog-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--c-text-mute);
@@ -159,11 +174,13 @@ function handleAdd() {
 }
 
 .remove-btn {
+  display: inline-flex;
+  align-items: center;
   background: none;
   border: none;
   cursor: pointer;
   color: var(--c-text-mute);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
@@ -189,7 +206,13 @@ function handleAdd() {
   gap: var(--space-2);
 }
 
+/* `justify-content` centraliza o bloco de texto ao lado do ícone; o `text-align`
+   segue necessário pra centralizar CADA LINHA quando o hint quebra (telas estreitas). */
 .start-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
   text-align: center;
   font-size: var(--text-xs);
   color: var(--c-text-mute);

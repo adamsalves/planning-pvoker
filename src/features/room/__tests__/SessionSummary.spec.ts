@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import IconCircleCheck from '~icons/lucide/circle-check'
+import IconRotateCw from '~icons/lucide/rotate-cw'
 import SessionSummary from '../SessionSummary.vue'
 import VoteReveal from '../VoteReveal.vue'
 import BaseButton from '@/components/BaseButton.vue'
@@ -56,5 +58,22 @@ describe('SessionSummary.vue', () => {
     const wrapper = mount(SessionSummary, { props: { rounds: [] } })
     expect(wrapper.findAllComponents(VoteReveal)).toHaveLength(0)
     expect(wrapper.text()).toContain('0 subjects votados')
+  })
+
+  it('cabeçalho e botão de nova sessão trazem os próprios ícones, decorativos', () => {
+    const wrapper = mount(SessionSummary, { props: { rounds } })
+
+    const check = wrapper.findComponent(IconCircleCheck)
+    expect(check.exists()).toBe(true)
+    expect(check.attributes('aria-hidden')).toBe('true')
+
+    const rotate = wrapper.findComponent(IconRotateCw)
+    expect(rotate.exists()).toBe(true)
+    expect(rotate.attributes('aria-hidden')).toBe('true')
+    // O ícone é do botão de nova sessão, não do "Sair da Sala" (ghost, sem ícone).
+    const novaSessao = wrapper
+      .findAllComponents(BaseButton)
+      .find((b) => b.text().includes('Nova Sessão'))
+    expect(novaSessao?.findComponent(IconRotateCw).exists()).toBe(true)
   })
 })

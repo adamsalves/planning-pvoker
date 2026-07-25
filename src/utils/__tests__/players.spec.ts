@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { isObserver, activePlayersOf, observersOf } from '../players'
+import {
+  isObserver,
+  activePlayersOf,
+  observersOf,
+  isVotingInRound,
+  roundVotersOf,
+} from '../players'
 import type { Player } from '@/types'
 
 const admin: Player = { id: '1', name: 'Ana', role: 'admin' }
@@ -25,5 +31,28 @@ describe('utils/players', () => {
   it('lida com lista vazia', () => {
     expect(activePlayersOf([])).toEqual([])
     expect(observersOf([])).toEqual([])
+  })
+
+  // Espelha eligibleVotersOf do server: quem a rodada espera votar.
+  describe('quem vota na rodada', () => {
+    it('isVotingInRound descarta observer E excluído da rodada', () => {
+      expect(isVotingInRound(member, [])).toBe(true)
+      expect(isVotingInRound(member, [member.id])).toBe(false)
+      // Observer nunca vota, esteja ou não na lista de exclusão.
+      expect(isVotingInRound(observer, [])).toBe(false)
+      expect(isVotingInRound(observer, [observer.id])).toBe(false)
+    })
+
+    it('roundVotersOf estreita activePlayersOf pela exclusão', () => {
+      expect(roundVotersOf(players, [])).toEqual([admin, member])
+      expect(roundVotersOf(players, [member.id])).toEqual([admin])
+      expect(roundVotersOf(players, [admin.id, member.id])).toEqual([])
+    })
+
+    it('ignora id excluído que não está mais na sala (jogador saiu)', () => {
+      // O server não limpa a exclusão no leaveRoom de propósito; o filtro roda
+      // sobre os jogadores presentes, então o id órfão é inofensivo.
+      expect(roundVotersOf(players, ['fantasma'])).toEqual([admin, member])
+    })
   })
 })

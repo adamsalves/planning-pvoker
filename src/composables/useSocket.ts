@@ -176,6 +176,12 @@ export function useSocket() {
     socket?.emit('reveal_votes', { roomId })
   }
 
+  // Admin liga/desliga um jogador da rodada corrente. Fire-and-forget como as
+  // demais ações de admin: o estado novo volta no room_state_updated.
+  function setRoundVoter(roomId: string, playerId: string, voting: boolean) {
+    socket?.emit('set_round_voter', { roomId, playerId, voting })
+  }
+
   function disconnect() {
     if (socket) {
       socket.disconnect()
@@ -195,6 +201,7 @@ export function useSocket() {
     resetSession,
     castVote,
     revealVotes,
+    setRoundVoter,
     disconnect,
   }
 }

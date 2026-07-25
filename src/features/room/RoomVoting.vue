@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconEye from '~icons/lucide/eye'
+import IconHourglass from '~icons/lucide/hourglass'
+import IconUserMinus from '~icons/lucide/user-minus'
 import { useRoomStore } from '@/stores/room'
 import BaseCard from '@/components/BaseCard.vue'
 import RoundHeader from './RoundHeader.vue'
@@ -15,9 +18,13 @@ import PlayerList from './PlayerList.vue'
 defineProps<{
   isAdmin: boolean
   isObserver: boolean
+  // O usuário local vota nesta rodada? (false = observer OU tirado pelo admin)
+  isVotingThisRound: boolean
   selectedVote: string | number | null
-  activePlayerCount: number
-  allActiveVoted: boolean
+  // Quem o admin tirou desta rodada — continuam sentados à mesa, sem deck.
+  nonVoterIds: string[]
+  voterCount: number
+  allVotersVoted: boolean
 }>()
 
 defineEmits<{
@@ -25,6 +32,7 @@ defineEmits<{
   reveal: []
   'next-round': []
   finish: []
+  'toggle-voter': [playerId: string, voting: boolean]
 }>()
 
 const { t } = useI18n()
@@ -55,11 +63,12 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
           :players="roomStore.players"
           :votes="currentRound.votes"
           :status="currentRound.status"
+          :non-voter-ids="nonVoterIds"
         />
       </BaseCard>
 
-      <!-- Cartas de votação (jogadores podem votar) -->
-      <BaseCard v-if="currentRound?.status === 'voting' && !isObserver" class="section-card">
+      <!-- Cartas de votação (só quem vota nesta rodada) -->
+      <BaseCard v-if="currentRound?.status === 'voting' && isVotingThisRound" class="section-card">
         <VotingArea
           :deck-type="deckType"
           :selected-value="selectedVote"
@@ -67,17 +76,33 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
         />
       </BaseCard>
 
-      <!-- Mensagem para o espectador -->
+      <!-- Mensagem para o espectador (papel da SALA) -->
       <BaseCard v-if="currentRound?.status === 'voting' && isObserver" class="section-card">
         <div class="observer-message">
-          <p>{{ t('room.voting.observerTitle') }}</p>
+          <p><IconEye class="btn-icon" aria-hidden="true" />{{ t('room.voting.observerTitle') }}</p>
           <p class="observer-sub">{{ t('room.voting.observerWaiting') }}</p>
+        </div>
+      </BaseCard>
+
+      <!-- Tirado DESTA rodada pelo admin: distinto do espectador, que é papel da
+           sala inteira. Ícone user-minus (eye é reservado ao papel de observer). -->
+      <BaseCard
+        v-if="currentRound?.status === 'voting' && !isObserver && !isVotingThisRound"
+        class="section-card"
+      >
+        <div class="observer-message">
+          <p>
+            <IconUserMinus class="btn-icon" aria-hidden="true" />{{
+              t('room.voters.notVotingTitle')
+            }}
+          </p>
+          <p class="observer-sub">{{ t('room.voters.notVotingSub') }}</p>
         </div>
       </BaseCard>
 
       <!-- Resultado (após revelar) -->
       <BaseCard v-if="currentRound?.status === 'revealed'" class="section-card">
-        <VoteReveal :votes="currentRound.votes" :player-count="activePlayerCount" />
+        <VoteReveal :votes="currentRound.votes" :player-count="voterCount" />
       </BaseCard>
 
       <!-- Controles do admin -->
@@ -85,7 +110,7 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
         v-if="isAdmin && currentRound"
         :status="currentRound.status"
         :any-voted="anyVoted"
-        :all-voted="allActiveVoted"
+        :all-voted="allVotersVoted"
         :is-last-subject="roomStore.isLastSubject"
         @reveal="$emit('reveal')"
         @next-round="$emit('next-round')"
@@ -95,7 +120,7 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
       <!-- Espera: não é admin e ainda não há rodada -->
       <BaseCard v-if="!currentRound && !isAdmin" class="section-card">
         <div class="waiting-message">
-          <p class="waiting-icon">⏳</p>
+          <IconHourglass class="waiting-icon" aria-hidden="true" />
           <p>{{ t('room.voting.waitingForStart') }}</p>
         </div>
       </BaseCard>
@@ -107,6 +132,9 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
           :players="roomStore.players"
           :votes="currentRound?.votes ?? {}"
           :status="currentRound?.status ?? 'waiting'"
+          :non-voter-ids="nonVoterIds"
+          :voters-editable="isAdmin && currentRound?.status === 'voting'"
+          @toggle-voter="(id, voting) => $emit('toggle-voter', id, voting)"
         />
       </BaseCard>
     </div>
@@ -149,6 +177,8 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
   margin-top: var(--space-1);
 }
 
+/* Era um <p> com o emoji; agora é o SVG, que a `.app-icon` deixa inline-block em
+   1em — o font-size é que dá o tamanho e o text-align do pai é que centraliza. */
 .waiting-icon {
   font-size: 2rem;
   margin-bottom: var(--space-2);

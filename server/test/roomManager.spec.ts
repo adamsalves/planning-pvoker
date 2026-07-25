@@ -45,6 +45,17 @@ describe('joinRoom', () => {
     })
   })
 
+  it('carries a new player tag and overwrites it on re-join (like name/role)', () => {
+    rm.createRoom('r1', admin, config)
+    const joined = rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member', tag: 'dev' })
+    expect(joined?.players.find((p) => p.id === 'm1')?.tag).toBe('dev')
+
+    // The client re-sends its current tag on every join; here it dropped the tag,
+    // so the upsert clears it — same overwrite path as name/role.
+    const rejoined = rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member' })
+    expect(rejoined?.players.find((p) => p.id === 'm1')?.tag).toBeUndefined()
+  })
+
   it('returns null for a missing room', () => {
     expect(rm.joinRoom('nope', member)).toBeNull()
   })
@@ -64,6 +75,15 @@ describe('leaveRoom', () => {
     const room = rm.leaveRoom('r1', 'a1')
     expect(room?.adminId).toBe('m1')
     expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('admin')
+  })
+
+  it('keeps a promoted player tag when the admin leaves', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member', tag: 'qa' })
+    const room = rm.leaveRoom('r1', 'a1') // admin leaves → m1 promoted in-place
+    const promoted = room?.players.find((p) => p.id === 'm1')
+    expect(promoted?.role).toBe('admin')
+    expect(promoted?.tag).toBe('qa') // in-place role mutation must not drop the tag
   })
 
   it('deletes the room when the last player leaves', () => {
@@ -169,6 +189,215 @@ describe('castVote', () => {
     arm.castVote('r2', 'a1', 3)
     const room = arm.castVote('r2', 'm1', 5)
     expect(room?.rounds[0].status).toBe('revealed')
+  })
+})
+
+describe('autoReveal quorum is presence-aware', () => {
+  const autoRevealConfig: RoomConfig = { deckType: 'fibonacci', autoReveal: true }
+  // A third eligible voter that stands in for a rehydration ghost: eligible to
+  // vote, but never present (no socket, no grace timer).
+  const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+
+  // Seeds a voting room [admin, member, ghost] with autoReveal on, and an oracle
+  // where only admin + member are present.
+  function seededRoom() {
+    const arm = new RoomManager()
+    arm.setPresence({ isPresent: (_roomId, playerId) => playerId === 'a1' || playerId === 'm1' })
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    return arm
+  }
+
+  it('reveals once the present voters have voted, excluding the absent ghost', () => {
+    const arm = seededRoom()
+    arm.castVote('r1', 'a1', 3)
+    const room = arm.castVote('r1', 'm1', 5)
+    // Ghost never voted, but it is absent, so it is out of the quorum.
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  it('does not reveal while a present voter has not voted yet', () => {
+    const arm = seededRoom()
+    const room = arm.castVote('r1', 'a1', 3) // member (present) still pending
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  it('the default oracle counts every eligible voter (a pending one blocks reveal)', () => {
+    // No setPresence(): default oracle reports everyone present, so the ghost is
+    // still required and the round stays open — the pre-fix behavior, preserved.
+    const arm = new RoomManager()
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    arm.castVote('r1', 'a1', 3)
+    const room = arm.castVote('r1', 'm1', 5) // g1 still hasn't voted
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  it('reveals when the last present voter leaves and the rest have voted', () => {
+    // Three present voters; two vote; the third leaves before voting. Once gone,
+    // the remaining present voters are the whole quorum and all have voted.
+    const arm = new RoomManager()
+    arm.setPresence({ isPresent: () => true })
+    arm.createRoom('r1', admin, autoRevealConfig)
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', ghost)
+    arm.addSubjects('r1', ['A'])
+    arm.startSession('r1')
+    arm.castVote('r1', 'a1', 3)
+    arm.castVote('r1', 'm1', 5)
+    const room = arm.leaveRoom('r1', 'g1')
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+})
+
+describe('setRoundVoter (admin chooses who votes in the round)', () => {
+  const other: Player = { id: 'm2', name: 'Other', role: 'member' }
+
+  // Voting room [admin, member, other, observer] on subject A, autoReveal off.
+  function seeded(autoReveal = false) {
+    const arm = new RoomManager()
+    arm.createRoom('r1', admin, { deckType: 'fibonacci', autoReveal })
+    arm.joinRoom('r1', member)
+    arm.joinRoom('r1', other)
+    arm.joinRoom('r1', observer)
+    arm.addSubjects('r1', ['A', 'B'])
+    arm.startSession('r1')
+    return arm
+  }
+
+  it('starts a session with nobody excluded', () => {
+    expect(seeded().getRoom('r1')?.rounds[0].excludedVoterIds).toEqual([])
+  })
+
+  it('excludes and re-includes a player', () => {
+    const arm = seeded()
+    expect(arm.setRoundVoter('r1', 'm1', false)?.rounds[0].excludedVoterIds).toEqual(['m1'])
+    expect(arm.setRoundVoter('r1', 'm1', true)?.rounds[0].excludedVoterIds).toEqual([])
+  })
+
+  it('is idempotent — excluding twice does not duplicate the id', () => {
+    const arm = seeded()
+    arm.setRoundVoter('r1', 'm1', false)
+    expect(arm.setRoundVoter('r1', 'm1', false)?.rounds[0].excludedVoterIds).toEqual(['m1'])
+  })
+
+  it('drops a vote already cast by the player being excluded', () => {
+    const arm = seeded()
+    arm.castVote('r1', 'm1', 5)
+    const room = arm.setRoundVoter('r1', 'm1', false)
+    // Keeping it would skew the reveal stats with a vote nobody is waiting on.
+    expect(room?.rounds[0].votes['m1']).toBeUndefined()
+  })
+
+  it('lets the admin take themselves out (facilitator who does not vote)', () => {
+    expect(seeded().setRoundVoter('r1', 'a1', false)?.rounds[0].excludedVoterIds).toEqual(['a1'])
+  })
+
+  it('rejects toggling an observer, an unknown player, or a revealed round', () => {
+    const arm = seeded()
+    expect(arm.setRoundVoter('r1', 'o1', false)).toBeNull()
+    expect(arm.setRoundVoter('r1', 'ghost', false)).toBeNull()
+    arm.revealVotes('r1')
+    expect(arm.setRoundVoter('r1', 'm1', false)).toBeNull()
+  })
+
+  it('rejects when the room has no active round', () => {
+    const arm = new RoomManager()
+    arm.createRoom('r1', admin, config)
+    arm.joinRoom('r1', member)
+    expect(arm.setRoundVoter('r1', 'm1', false)).toBeNull()
+    expect(arm.setRoundVoter('nope', 'm1', false)).toBeNull()
+  })
+
+  it('refuses a vote from an excluded player, and accepts it again once re-included', () => {
+    const arm = seeded()
+    arm.setRoundVoter('r1', 'm1', false)
+    expect(arm.castVote('r1', 'm1', 5)).toBeNull()
+    arm.setRoundVoter('r1', 'm1', true)
+    expect(arm.castVote('r1', 'm1', 5)?.rounds[0].votes['m1']).toBe(5)
+  })
+
+  it('carries the selection over to the next round, as an independent copy', () => {
+    const arm = seeded()
+    arm.setRoundVoter('r1', 'm1', false)
+    const room = arm.nextRound('r1')
+    expect(room?.rounds[1].excludedVoterIds).toEqual(['m1'])
+
+    // Distinct arrays, not one shared reference — the assertion that actually
+    // pins the copy in createRound (the one below passes either way, since
+    // setRoundVoter reassigns instead of mutating).
+    expect(room?.rounds[0].excludedVoterIds).not.toBe(room?.rounds[1].excludedVoterIds)
+
+    // Toggling in the new round must not rewrite the previous one's history.
+    arm.setRoundVoter('r1', 'm2', false)
+    expect(room?.rounds[0].excludedVoterIds).toEqual(['m1'])
+    expect(room?.rounds[1].excludedVoterIds).toEqual(['m1', 'm2'])
+  })
+
+  it('auto-reveals when excluding the last voter the round was waiting on', () => {
+    const arm = seeded(true)
+    arm.castVote('r1', 'a1', 3)
+    arm.castVote('r1', 'm1', 5)
+    // m2 is the only one left pending; taking them out completes the quorum.
+    const room = arm.setRoundVoter('r1', 'm2', false)
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  // Intersection with the presence-aware quorum (PR #51): the two filters have
+  // to compose, so the round waits on eligible ∩ present.
+  describe('composed with presence', () => {
+    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+
+    // [admin, member, ghost] voting on A, autoReveal on, ghost never present.
+    function seededWithGhost() {
+      const arm = new RoomManager()
+      arm.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+      arm.createRoom('r1', admin, { deckType: 'fibonacci', autoReveal: true })
+      arm.joinRoom('r1', member)
+      arm.joinRoom('r1', ghost)
+      arm.addSubjects('r1', ['A'])
+      arm.startSession('r1')
+      return arm
+    }
+
+    it('reveals once the only present, non-excluded voter has voted', () => {
+      const arm = seededWithGhost()
+      arm.setRoundVoter('r1', 'm1', false) // excluded; g1 is absent
+      const room = arm.castVote('r1', 'a1', 3)
+      expect(room?.rounds[0].status).toBe('revealed')
+    })
+
+    it('does not reveal while an excluded player is the only one who voted', () => {
+      const arm = seededWithGhost()
+      arm.castVote('r1', 'm1', 5)
+      arm.setRoundVoter('r1', 'm1', false)
+      // m1's vote was dropped with the exclusion, and a1 (present, eligible)
+      // still hasn't voted — the round must stay open.
+      expect(arm.getRoom('r1')?.rounds[0].status).toBe('voting')
+    })
+
+    it('does not reveal when every present voter is excluded', () => {
+      const arm = seededWithGhost()
+      arm.setRoundVoter('r1', 'a1', false)
+      const room = arm.setRoundVoter('r1', 'm1', false)
+      // Only g1 is left eligible, and it is absent — quorum is empty, guard holds.
+      expect(room?.rounds[0].status).toBe('voting')
+    })
+  })
+
+  it('does not reveal a voteless round when every voter is excluded', () => {
+    const arm = seeded(true)
+    arm.setRoundVoter('r1', 'a1', false)
+    arm.setRoundVoter('r1', 'm1', false)
+    const room = arm.setRoundVoter('r1', 'm2', false)
+    // The `required.length > 0` guard: an empty quorum must not reveal nothing.
+    expect(room?.rounds[0].status).toBe('voting')
   })
 })
 

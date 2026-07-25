@@ -156,3 +156,25 @@ button {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* Ícones (unplugin-icons): classe aplicada a todo SVG via defaultClass no
+   vite.config. Tamanho e cor vêm por herança — 1em acompanha o font-size do
+   contexto e currentColor recolore com o tema (recolorir é o motivo da troca
+   dos emojis). vertical-align alinha opticamente com o texto em fluxo inline;
+   flex-shrink:0 impede o ícone de encolher dentro de containers flex. */
+.app-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+}
+
+/* Ícone que precede um rótulo inline. Nasceu do BaseButton — o botão embrulha o
+   slot num <span> inline, então o `gap` dele separa spinner e conteúdo, não o
+   ícone do texto, e a margem tem de ser do próprio ícone. Vale para qualquer
+   texto irmão (ex.: os <p> de hint/mensagem), não só dentro de botão. Global
+   porque a regra era duplicada em cada componente. */
+.btn-icon {
+  margin-right: var(--space-1);
+}

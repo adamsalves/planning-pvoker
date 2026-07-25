@@ -1,17 +1,26 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import JoinRoomForm from '../JoinRoomForm.vue'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
+import IconLogIn from '~icons/lucide/log-in'
 
-// A lógica de joinRoom (navegação/token) é testada em useRoom.spec; aqui o form
-// só precisa do stub para montar sem tocar em socket/router.
+// Mock estável (hoisted) para asserir os args do submit; a lógica de joinRoom
+// (navegação/token) segue testada em useRoom.spec.
+const { createRoomMock, joinRoomMock } = vi.hoisted(() => ({
+  createRoomMock: vi.fn(),
+  joinRoomMock: vi.fn(),
+}))
 vi.mock('@/composables/useRoom', () => ({
-  useRoom: () => ({
-    createRoom: vi.fn(),
-    joinRoom: vi.fn(),
-  }),
+  useRoom: () => ({ createRoom: createRoomMock, joinRoom: joinRoomMock }),
 }))
 
 describe('JoinRoomForm.vue', () => {
+  beforeEach(() => {
+    createRoomMock.mockClear()
+    joinRoomMock.mockClear()
+  })
+
   it('prefills the room code from the initialRoomCode prop', () => {
     const wrapper = mount(JoinRoomForm, { props: { initialRoomCode: 'abc123' } })
     const input = wrapper.find<HTMLInputElement>('input[placeholder="Ex: a1b2c3d4"]')
@@ -48,5 +57,60 @@ describe('JoinRoomForm.vue', () => {
   it('renders its own submit button', () => {
     const wrapper = mount(JoinRoomForm)
     expect(wrapper.text()).toContain('Entrar na Sala')
+  })
+
+  // Os dois papéis usam ícone (não emoji): aqui o 🃏 era rótulo de papel, não a marca,
+  // então vira `user` junto com o `eye` — o seletor inteiro recolore via currentColor.
+  it('labels both roles with theme-aware icons instead of emojis', () => {
+    const wrapper = mount(JoinRoomForm)
+    const options = wrapper.findAll('.role-option')
+
+    expect(wrapper.findComponent(IconUser).exists()).toBe(true)
+    expect(wrapper.findComponent(IconEye).exists()).toBe(true)
+    expect(options[0].find('svg.role-icon').exists()).toBe(true)
+    expect(options[1].find('svg.role-icon').exists()).toBe(true)
+    expect(wrapper.text()).not.toMatch(/🃏|👁/)
+  })
+
+  // O 🔗 saiu da string i18n e virou ícone irmão: o leitor de tela lê só o rótulo.
+  it('decorates the submit button with an icon kept out of the label', () => {
+    const wrapper = mount(JoinRoomForm)
+    const icon = wrapper.findComponent(IconLogIn)
+
+    expect(icon.exists()).toBe(true)
+    expect(icon.attributes('aria-hidden')).toBe('true')
+    expect(wrapper.text()).not.toContain('🔗')
+  })
+
+  // Decorativos: o significado do papel vem do texto do rótulo ao lado.
+  it('hides the role icons from assistive tech', () => {
+    const wrapper = mount(JoinRoomForm)
+
+    for (const icon of wrapper.findAll('svg.role-icon')) {
+      expect(icon.attributes('aria-hidden')).toBe('true')
+    }
+  })
+
+  it('renders an optional area selector defaulting to "no area"', () => {
+    const wrapper = mount(JoinRoomForm)
+    const select = wrapper.find('select.tag-select')
+
+    expect(select.exists()).toBe(true)
+    expect(select.findAll('option')).toHaveLength(6) // "Sem área" + 5 do enum
+    expect(select.findAll('option')[0].text()).toBe('Sem área')
+    expect(wrapper.text()).toContain('Sua área (opcional)')
+  })
+
+  it('passes the picked area tag to joinRoom on submit', async () => {
+    const wrapper = mount(JoinRoomForm)
+    await wrapper.find('input[placeholder="Ex: Maria"]').setValue('Maria')
+    await wrapper.find('input[placeholder="Ex: a1b2c3d4"]').setValue('room-xyz')
+    await wrapper.find('select.tag-select').setValue('qa')
+    await wrapper.find('form').trigger('submit')
+
+    // role default = 'member'; tag = 4º arg. vi.waitFor aguarda a validação async.
+    await vi.waitFor(() =>
+      expect(joinRoomMock).toHaveBeenCalledWith('Maria', 'room-xyz', 'member', 'qa'),
+    )
   })
 })

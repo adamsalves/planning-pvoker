@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconSpade from '~icons/lucide/spade'
 import { useConnectionStore } from '@/stores/connection'
 
 // Overlay full-screen temático que mascara o cold start (~1 min) e as reconexões
@@ -96,7 +97,7 @@ onUnmounted(() => {
       <div class="overlay-content">
         <div class="pp-card" aria-hidden="true">
           <div class="pp-card__inner">
-            <span class="pp-card__suit">♠</span>
+            <IconSpade class="pp-card__suit" />
           </div>
         </div>
         <p class="overlay-message" aria-hidden="true">{{ message }}</p>
@@ -151,10 +152,20 @@ onUnmounted(() => {
   animation: pp-flip 2s linear infinite;
 }
 
+/* Cor fixa (não token) de propósito — é sobre a carta escura do overlay, que não
+   muda com o tema. */
 .pp-card__suit {
   font-size: var(--text-3xl);
   color: #fff;
   line-height: 1;
+}
+
+/* Preenche o naipe: o Lucide é stroke-only e o ♠ que ele substitui era um glifo
+   sólido. Tem de mirar o <path> — o `fill="none"` que o Lucide emite é um
+   presentation attribute DELE, e atributo do próprio elemento vence herança do
+   <svg> pai (então `fill` no .pp-card__suit seria no-op). */
+.pp-card__suit :deep(path) {
+  fill: currentColor;
 }
 
 .overlay-message {

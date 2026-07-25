@@ -5,6 +5,7 @@ import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client'
 import { RoomManager } from '../src/roomManager'
 import { setupSocketEvents } from '../src/events'
 import type { Player, Room, RoomConfig } from '../src/types'
+import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
 // Short grace window so reconnection tests don't wait the real 30s. Kept
 // comfortably above local round-trip latency (plus a margin) so the
@@ -131,6 +132,42 @@ async function startVotingRoom() {
   return { adminClient, memberClient, adminToken, memberToken }
 }
 
+// Read-only persistence double: hands the seeded snapshot to hydrate() and
+// swallows every write. Lets a test stand up a RoomManager that boots with a
+// room already in memory — exactly the post-restart rehydration shape.
+class SeedPersistence implements RoomPersistence {
+  constructor(private readonly snapshot: PersistenceSnapshot) {}
+  loadAll(): Promise<PersistenceSnapshot> {
+    return Promise.resolve(this.snapshot)
+  }
+  saveRoom(): Promise<void> {
+    return Promise.resolve()
+  }
+  deleteRoom(): Promise<void> {
+    return Promise.resolve()
+  }
+  saveToken(): Promise<void> {
+    return Promise.resolve()
+  }
+  deleteToken(): Promise<void> {
+    return Promise.resolve()
+  }
+}
+
+// Replaces the default server (from beforeEach) with one wired to a specific
+// manager, reusing the module-level handles so afterEach still tears it down.
+// Used by the rehydration tests, which need a manager seeded via hydrate().
+async function restartWith(manager: RoomManager) {
+  dispose()
+  await new Promise<void>((resolve) => io.close(() => resolve()))
+  httpServer = createServer()
+  io = new Server(httpServer)
+  dispose = setupSocketEvents(io, manager)
+  await new Promise<void>((resolve) => httpServer.listen(0, resolve))
+  const address = httpServer.address()
+  port = typeof address === 'object' && address ? address.port : 0
+}
+
 describe('join_room', () => {
   it('creates a room with the creator as admin', async () => {
     const client = await connect()
@@ -156,6 +193,26 @@ describe('join_room', () => {
     })
     expect(ack.room?.adminId).toBe('a1')
     expect(ack.room?.players.find((p) => p.id === 'm1')?.role).toBe('member')
+  })
+
+  it('accepts a join carrying a player tag and stores it on the room player', async () => {
+    const client = await connect()
+    const ack = await join(client, { roomId: 'r1', player: { ...admin, tag: 'design' }, config })
+    expect(ack.success).toBe(true)
+    // Guards the whole inbound path: playerSchema KEEPS the tag and the handler
+    // spreads it through to the room (a field-by-field rebuild would drop it).
+    expect(ack.room?.players.find((p) => p.id === 'a1')?.tag).toBe('design')
+  })
+
+  it('drops an unknown player tag but still lets the join succeed', async () => {
+    const client = await connect()
+    const ack = await join(client, { roomId: 'r1', player: { ...admin, tag: 'devops' }, config })
+    // A tag é cosmética e mora no localStorage do cliente; um valor fora da lista
+    // atual (deploy-skew) NÃO tranca o join — degrada p/ "sem tag", espelhando o
+    // .catch da persistência. Falha se o ingress voltar a um .optional() puro
+    // (join rejeitado) ou a z.string() (tag 'devops' aceita literalmente).
+    expect(ack.success).toBe(true)
+    expect(ack.room?.players.find((p) => p.id === 'a1')?.tag).toBeUndefined()
   })
 })
 
@@ -201,6 +258,7 @@ describe('authorization (requireAdmin)', () => {
   const votingActions: Array<{ event: string; payload: Record<string, unknown> }> = [
     { event: 'reveal_votes', payload: { roomId: 'r1' } },
     { event: 'next_round', payload: { roomId: 'r1' } },
+    { event: 'set_round_voter', payload: { roomId: 'r1', playerId: 'm1', voting: false } },
   ]
   for (const { event, payload } of votingActions) {
     it(`ignores ${event} from a non-admin (voting phase)`, async () => {
@@ -213,6 +271,62 @@ describe('authorization (requireAdmin)', () => {
       expect(room.rounds[room.currentRoundIndex].status).toBe('voting')
     })
   }
+})
+
+describe('set_round_voter', () => {
+  // waitForRoomWhere runs the predicate on EVERY broadcast, including the ones
+  // from before the session started (no rounds yet) — hence the length guard.
+  const excludedIds = (room: Room): string[] =>
+    room.rounds.length > 0 ? (room.rounds[0].excludedVoterIds ?? []) : []
+
+  it('broadcasts the excluded voter to the whole room', async () => {
+    const { adminClient, memberClient } = await startVotingRoom()
+    // Asserted on the MEMBER's socket: the excluded player must learn about it
+    // too — that is what hides the deck on their side.
+    const excluded = waitForRoomWhere(memberClient, (room) => excludedIds(room).includes('m1'))
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1', voting: false })
+    await excluded
+  })
+
+  it('refuses the excluded player’s vote, and takes it again once re-included', async () => {
+    const { adminClient, memberClient } = await startVotingRoom()
+    const excluded = waitForRoomWhere(adminClient, (room) => excludedIds(room).includes('m1'))
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1', voting: false })
+    await excluded
+
+    const refused = await castVote(memberClient, { roomId: 'r1', value: 5 })
+    expect(refused.error).toBe('vote_not_registered')
+
+    // Safe as a "wait for change" predicate: the exclusion above already landed,
+    // so the next broadcast is the re-inclusion.
+    const included = waitForRoomWhere(adminClient, (room) => !excludedIds(room).includes('m1'))
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1', voting: true })
+    await included
+
+    const accepted = await castVote(memberClient, { roomId: 'r1', value: 5 })
+    expect(accepted.ok).toBe(true)
+  })
+
+  // A tabela de `votingActions` acima cobre set_round_voter, mas suas asserções
+  // (phase/status) passariam mesmo se a ação de um não-admin tivesse rodado —
+  // excluir um votante não mexe em nenhuma das duas. Este caso olha o efeito real.
+  it('ignores set_round_voter from a non-admin', async () => {
+    const { memberClient, memberToken } = await startVotingRoom()
+    memberClient.emit('set_round_voter', { roomId: 'r1', playerId: 'a1', voting: false })
+    const room = roomOf(
+      await join(memberClient, { roomId: 'r1', player: member, token: memberToken }),
+    )
+    expect(room.rounds[0].excludedVoterIds).toEqual([])
+  })
+
+  it('ignores a malformed payload', async () => {
+    const { adminClient, adminToken } = await startVotingRoom()
+    adminClient.emit('set_round_voter', { roomId: 'r1', playerId: 'm1' }) // no `voting`
+    // State read back via a re-join on the SAME socket: FIFO guarantees it is
+    // processed after the ignored action, so no arbitrary delay is needed.
+    const room = roomOf(await join(adminClient, { roomId: 'r1', player: admin, token: adminToken }))
+    expect(room.rounds[0].excludedVoterIds).toEqual([])
+  })
 })
 
 describe('cast_vote', () => {
@@ -671,5 +785,58 @@ describe('session token (anti-escalation)', () => {
     const room = await broadcast
     expect(room).not.toHaveProperty('token')
     for (const player of room.players) expect(player).not.toHaveProperty('token')
+  })
+})
+
+describe('rehydration ghost does not block autoReveal', () => {
+  // A player rehydrated from persistence that never reconnects in this process:
+  // eligible to vote, but with no live socket and no grace timer, so it must be
+  // excluded from the autoReveal quorum.
+  const ghost: Player = { id: 'g1', name: 'Casper', role: 'member' }
+  const autoRevealConfig: RoomConfig = { deckType: 'fibonacci', autoReveal: true }
+
+  // Builds a voting room [admin, member, ghost] (autoReveal on) with the given
+  // votes already recorded, plus admin+member tokens — the state a server would
+  // rehydrate after a restart.
+  function seedManager(votes: Record<string, string | number>): RoomManager {
+    const room: Room = {
+      id: 'r1',
+      adminId: 'a1',
+      config: autoRevealConfig,
+      players: [admin, member, ghost],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'rnd1', subject: 'A', status: 'voting', votes }],
+      currentRoundIndex: 0,
+    }
+    const tokens = new Map<string, string>([
+      ['r1::a1', 'tok-a'],
+      ['r1::m1', 'tok-m'],
+    ])
+    return new RoomManager(new SeedPersistence({ rooms: [room], tokens }))
+  }
+
+  it('reveals once the present players vote, ignoring the never-connecting ghost', async () => {
+    const manager = seedManager({})
+    await manager.hydrate()
+    await restartWith(manager)
+
+    // Only admin and member reconnect (with their tokens); the ghost never does.
+    const adminClient = await connect()
+    await join(adminClient, { roomId: 'r1', player: admin, token: 'tok-a' })
+    const memberClient = await connect()
+    await join(memberClient, { roomId: 'r1', player: member, token: 'tok-m' })
+
+    const revealed = waitForRoomWhere(adminClient, (room) => room.rounds[0].status === 'revealed')
+    adminClient.emit('cast_vote', { roomId: 'r1', value: 3 })
+    memberClient.emit('cast_vote', { roomId: 'r1', value: 5 })
+    const room = await revealed
+
+    expect(room.rounds[0].status).toBe('revealed')
+    // The ghost is still listed (hiding it from the UI is out of scope) and never
+    // voted — yet the round revealed because it is not present, so it is excluded
+    // from the quorum. Before the fix, the ghost would keep the round stuck.
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'g1', 'm1'])
+    expect(room.rounds[0].votes['g1']).toBeUndefined()
   })
 })

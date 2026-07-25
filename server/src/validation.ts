@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DeckType } from './types'
+import { DeckType, PLAYER_TAGS } from './types'
 
 // Limites defensivos: as salas vivem in-memory, então payloads sem limite
 // permitiriam um cliente malicioso estourar a memória do processo.
@@ -29,6 +29,13 @@ const playerSchema = z.object({
   id: z.string().trim().min(1).max(MAX_ID),
   name: z.string().trim().min(1).max(MAX_NAME),
   role: z.enum(['admin', 'member', 'observer']),
+  // Auto-declarada e opcional. `.catch(undefined)` ESPELHA a persistência: a tag
+  // é um enum de PRODUTO (propenso a mudar) e mora no user store persistido do
+  // cliente, reenviado a cada join. Um valor fora da lista atual (cliente
+  // desatualizado / deploy-skew Netlify×Render) DEGRADA p/ "sem tag" em vez de
+  // trancar o join por um rótulo cosmético e sem papel em autorização. id/name/
+  // role seguem estritos — só a tag ganha essa folga.
+  tag: z.enum(PLAYER_TAGS).optional().catch(undefined),
 })
 
 const roomConfigSchema = z.object({
@@ -51,15 +58,21 @@ export const roomActionSchema = z.object({ roomId })
 
 export const addSubjectsSchema = z.object({
   roomId,
-  subjects: z
-    .array(z.string().trim().min(1).max(MAX_SUBJECT))
-    .min(1)
-    .max(MAX_SUBJECTS_PER_CALL),
+  subjects: z.array(z.string().trim().min(1).max(MAX_SUBJECT)).min(1).max(MAX_SUBJECTS_PER_CALL),
 })
 
 export const removeSubjectSchema = z.object({
   roomId,
   index: z.number().int().nonnegative(),
+})
+
+// set_round_voter — o admin liga/desliga UM jogador da rodada corrente. Um
+// toggle por evento (em vez da lista inteira) mantém a ação idempotente e
+// dispensa cap de array.
+export const setRoundVoterSchema = z.object({
+  roomId,
+  playerId: z.string().trim().min(1).max(MAX_ID),
+  voting: z.boolean(),
 })
 
 export const castVoteSchema = z.object({

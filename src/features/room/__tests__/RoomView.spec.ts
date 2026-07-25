@@ -1,8 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import IconCrown from '~icons/lucide/crown'
+import IconUser from '~icons/lucide/user'
+import IconEye from '~icons/lucide/eye'
+import IconPencil from '~icons/lucide/pencil'
+import IconVote from '~icons/lucide/vote'
+import IconCheck from '~icons/lucide/check'
+import IconShare from '~icons/lucide/share-2'
 import RoomView from '../RoomView.vue'
+import RoomVoting from '../RoomVoting.vue'
 import VotingArea from '../VotingArea.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseButton from '@/components/BaseButton.vue'
@@ -21,6 +29,7 @@ const mockSocketJoinRoom = vi.fn().mockResolvedValue(undefined)
 const mockCastVote = vi.fn().mockResolvedValue(undefined)
 const mockDisconnect = vi.fn()
 const mockLeaveRoom = vi.fn()
+const mockSetRoundVoter = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -40,6 +49,7 @@ vi.mock('@/composables/useSocket', () => ({
     resetSession: vi.fn(),
     castVote: mockCastVote,
     revealVotes: mockRevealVotes,
+    setRoundVoter: mockSetRoundVoter,
     disconnect: mockDisconnect,
     joinRoom: mockSocketJoinRoom,
     leaveRoom: mockLeaveRoom,
@@ -160,9 +170,11 @@ describe('RoomView.vue rejoin', () => {
       query: { notice: 'session-expired' },
     })
     expect(userStore.sessionToken).toBeNull()
-    // currentRoom precisa ser limpo: senão a Home mostraria o banner "Voltar à Sala"
-    // (F5.4) junto do aviso "sessão expirou" — um retorno quebrado.
+    // currentRoom E activeRoomId precisam ser limpos: o banner de "sala ativa" lê o
+    // activeRoomId (persistido), então sem limpá-lo a Home mostraria o retorno "Voltar
+    // à Sala" apontando pra sala morta, junto do aviso "sessão expirou" (F5.4).
     expect(useRoomStore().currentRoom).toBeNull()
+    expect(userStore.activeRoomId).toBeNull()
   })
 
   it('stays put on a connection failure (cold start): no navigation, keeps the token', async () => {
@@ -190,6 +202,43 @@ describe('RoomView.vue rejoin', () => {
     await flushPromises()
 
     expect(mockSocketJoinRoom).toHaveBeenCalledTimes(1)
+  })
+
+  // Regressão (pego no smoke): o upsert do servidor sobrescreve a tag a cada join,
+  // então o re-join (mount + reconexão) TEM de reenviá-la, senão ela some logo após
+  // o create/join inicial. Vem persistida do userStore.
+  it('re-sends the persisted area tag on rejoin so the server upsert keeps it', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin', 'dev')
+    useRoomStore().syncRoom(createRoom())
+
+    mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    expect(mockSocketJoinRoom).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ id: 'player-1', name: 'Ana', role: 'admin', tag: 'dev' }),
+    )
+  })
+
+  // A tag também tem de sobreviver a uma reconexão transparente (novo socket id):
+  // o rejoin roda de novo e, sem reenviar a tag, o upsert do servidor a apagaria.
+  it('re-sends the area tag on a transparent reconnect too', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', 'player-1', 'admin', 'dev')
+    useRoomStore().syncRoom(createRoom())
+
+    mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+    mockSocketJoinRoom.mockClear() // ignora o join do mount
+
+    useConnectionStore().setReconnected()
+    await flushPromises()
+
+    expect(mockSocketJoinRoom).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ id: 'player-1', tag: 'dev' }),
+    )
   })
 })
 
@@ -545,5 +594,220 @@ describe('RoomView.vue direct hit without identity (F5.3)', () => {
     // Antes ia pra '/' cru (perdia o id); agora manda pra Home com ?room=<id>, que o
     // HomeView usa pra abrir na aba "Entrar" já preenchida.
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home', query: { room: 'abc123' } })
+  })
+})
+
+describe('RoomView.vue role and phase badges (ícones theme-aware)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // O teste do compartilhar troca navigator.share/clipboard: restaura depois pra não
+  // deixar o estado vazar pra quem rodar em seguida (a ordem dos arquivos varia).
+  afterEach(() => {
+    for (const prop of ['share', 'clipboard']) {
+      Object.defineProperty(navigator, prop, { configurable: true, value: undefined })
+    }
+  })
+
+  // Papel e fase deixaram de trazer emoji na string i18n: o ícone é irmão do rótulo
+  // e sai do mesmo computed (roleBadge/phaseBadge). O rótulo textual permanece — é
+  // ele que dá o nome acessível do badge.
+  function mountAs(
+    options: {
+      role?: 'admin' | 'member' | 'observer'
+      phase?: Room['phase']
+    } = {},
+  ) {
+    setActivePinia(createPinia())
+
+    const userStore = useUserStore()
+    userStore.setPlayer('Ana', 'player-1', options.role ?? 'admin')
+
+    const room = createRoom()
+    // adminId só bate com o player quando o papel é admin — isAdmin vem do servidor.
+    if (options.role && options.role !== 'admin') room.adminId = 'someone-else'
+    if (options.phase) room.phase = options.phase
+
+    useRoomStore().syncRoom(room)
+
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  it.each([
+    ['admin' as const, IconCrown, 'Admin'],
+    ['observer' as const, IconEye, 'Espectador'],
+    ['member' as const, IconUser, 'Jogador'],
+  ])('mostra o ícone e o rótulo do papel %s', (role, Icon, label) => {
+    const badge = mountAs({ role }).find('.badge-role')
+
+    expect(badge.findComponent(Icon).exists()).toBe(true)
+    expect(badge.text()).toBe(label)
+  })
+
+  it.each([
+    ['setup' as const, IconPencil, 'Preparação'],
+    ['voting' as const, IconVote, 'Votação'],
+    ['completed' as const, IconCheck, 'Concluída'],
+  ])('mostra o ícone e o rótulo da fase %s', (phase, Icon, label) => {
+    const badge = mountAs({ phase }).find('.badge-phase')
+
+    expect(badge.findComponent(Icon).exists()).toBe(true)
+    expect(badge.text()).toBe(label)
+  })
+
+  it('esconde os ícones dos badges da tecnologia assistiva', () => {
+    const wrapper = mountAs()
+
+    for (const selector of ['.badge-role', '.badge-phase']) {
+      expect(wrapper.find(`${selector} svg`).attributes('aria-hidden')).toBe('true')
+    }
+  })
+
+  it('mostra o ícone de compartilhar só no estado ocioso do botão', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined })
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+
+    const wrapper = mountAs()
+    expect(wrapper.findComponent(IconShare).exists()).toBe(true)
+
+    // Copiado: o rótulo vira o feedback ("Link copiado!") e o ícone sai de cena, pra
+    // não sugerir que o botão ainda oferece a ação.
+    await getShareButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findComponent(IconShare).exists()).toBe(false)
+  })
+})
+
+describe('RoomView.vue quem vota na rodada', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  // Ana (admin, local), Bob e Cida — todos jogadores. `excluded` sai da rodada.
+  function votingRoom(excluded: string[], votes: Record<string, string | number> = {}): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [
+        { id: 'player-1', name: 'Ana', role: 'admin' },
+        { id: 'player-2', name: 'Bob', role: 'member' },
+        { id: 'player-3', name: 'Cida', role: 'observer' },
+      ],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes, excludedVoterIds: excluded }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  function mountVoting(room: Room, playerId = 'player-1') {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Ana', playerId, playerId === 'player-1' ? 'admin' : 'member')
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  it('desconta os excluídos do voterCount (denominador do reveal)', async () => {
+    // 3 jogadores, sendo 1 observer → 2 votantes; excluir o Bob deixa 1.
+    const wrapper = mountVoting(votingRoom(['player-2']))
+    await flushPromises()
+
+    const voting = wrapper.findComponent(RoomVoting)
+    expect(voting.props('voterCount')).toBe(1)
+    expect(voting.props('nonVoterIds')).toEqual(['player-2'])
+  })
+
+  it('allVotersVoted ignora o voto que falta de quem foi excluído', async () => {
+    // Só a Ana votou. Com o Bob dentro seria false; com ele fora, a rodada
+    // está completa do ponto de vista de quem ela ainda espera.
+    const semExclusao = mountVoting(votingRoom([], { 'player-1': 5 }))
+    await flushPromises()
+    expect(semExclusao.findComponent(RoomVoting).props('allVotersVoted')).toBe(false)
+
+    const comExclusao = mountVoting(votingRoom(['player-2'], { 'player-1': 5 }))
+    await flushPromises()
+    expect(comExclusao.findComponent(RoomVoting).props('allVotersVoted')).toBe(true)
+  })
+
+  it('marca isVotingThisRound=false para o próprio usuário excluído', async () => {
+    const dentro = mountVoting(votingRoom([]), 'player-2')
+    await flushPromises()
+    expect(dentro.findComponent(RoomVoting).props('isVotingThisRound')).toBe(true)
+
+    const fora = mountVoting(votingRoom(['player-2']), 'player-2')
+    await flushPromises()
+    expect(fora.findComponent(RoomVoting).props('isVotingThisRound')).toBe(false)
+  })
+
+  it('encaminha o toggle-voter para o socket com o roomId da rota', async () => {
+    const wrapper = mountVoting(votingRoom([]))
+    await flushPromises()
+
+    wrapper.findComponent(RoomVoting).vm.$emit('toggle-voter', 'player-2', false)
+    await flushPromises()
+
+    expect(mockSetRoundVoter).toHaveBeenCalledWith('abc123', 'player-2', false)
+  })
+
+  it('rodada sem o campo (pré-feature) não exclui ninguém', async () => {
+    const room = votingRoom([])
+    delete room.rounds[0]!.excludedVoterIds
+    const wrapper = mountVoting(room)
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('nonVoterIds')).toEqual([])
+    expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(2)
+  })
+})
+
+describe('RoomView.vue voto otimista × exclusão', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+    mockCastVote.mockResolvedValue(undefined)
+  })
+
+  function room(excluded: string[], votes: Record<string, string | number> = {}): Room {
+    return {
+      id: 'abc123',
+      adminId: 'player-1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [
+        { id: 'player-1', name: 'Ana', role: 'admin' },
+        { id: 'player-2', name: 'Bob', role: 'member' },
+      ],
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes, excludedVoterIds: excluded }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  // O servidor apaga o voto de quem é excluído. Sem limpar o otimista, a carta
+  // continuaria acesa numa rodada que a pessoa não está mais votando — e ela
+  // acharia que votou.
+  it('limpa o voto otimista quando o jogador é tirado da rodada', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    const roomStore = useRoomStore()
+    roomStore.syncRoom(room([]))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    wrapper.findComponent(RoomVoting).vm.$emit('vote', 8)
+    await flushPromises()
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBe(8)
+
+    // Admin tira o Bob: o servidor devolve a rodada sem o voto dele.
+    roomStore.syncRoom(room(['player-2']))
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('isVotingThisRound')).toBe(false)
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBeNull()
   })
 })

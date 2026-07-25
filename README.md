@@ -10,7 +10,6 @@ Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com
 - **Papéis Dedicados:** Jogue como _Scrum Master (Admin)_, _Membro_ ativo ou _Espectador_ passivo.
 - **Auto-Reveal:** Opção de revelar os votos automaticamente quando todos os jogadores votarem.
 - **Estatísticas ao Vivo:** Média, mínimo, máximo e distribuição de votos exibidos após revelação, com confetti quando há consenso 🎉
-- **Gráficos e Histórico:** Persistência local (localStorage via Pinia Persisted) de sessões com gráficos de rodadas (Chart.js + `vue-chartjs`).
 - **Acessibilidade (A11y):** Navegação completa por teclado, atributos _WAI-ARIA_ dinâmicos (`aria-busy`, `aria-describedby`, `aria-pressed`, `aria-invalid`).
 - **Performance:** _Lazy Loading_ de todas as rotas, `v-memo` para listas de alta frequência e `shallowRef` para estados complexos.
 
@@ -28,13 +27,13 @@ Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com
     ├── components/          → Componentes atômicos (BaseButton, BaseCard, BaseInput, BaseModal)
     ├── composables/         → Lógica reutilizável (useRoom, useSocket)
     ├── features/
-    │   ├── room/            → Sala de votação (8 componentes)
-    │   └── history/         → Histórico de sessões com gráficos
+    │   ├── home/            → Tela inicial (criar/entrar na sala)
+    │   ├── room/            → Sala de votação
+    │   └── not-found/       → Página 404
     ├── layouts/             → Layout principal (Navbar + RouterView animado)
     ├── router/              → Configuração de rotas (100% lazy-loaded)
-    ├── stores/              → Stores Pinia (room, user, history)
-    ├── types/               → Interfaces TypeScript do domínio
-    └── views/               → Página inicial (HomeView)
+    ├── stores/              → Stores Pinia (room, user, connection, theme, locale)
+    └── types/               → Interfaces TypeScript do domínio
 ```
 
 ## 🚀 Rodando o Projeto Localmente
@@ -84,6 +83,8 @@ npx playwright install chromium   # Primeira vez
 npm run test:e2e
 ```
 
+> ⚠️ O e2e também roda no `npm run validate`, que é o hook de **pre-push** (Husky). Ou seja, o `npx playwright install chromium` acima é pré-requisito para dar `git push` — sem os browsers, o pre-push falha. O CI **não** roda o e2e (executa type-check/lint/unit/build separadamente), então isso não afeta o pipeline.
+
 ---
 
 ## 🛠️ Stack
@@ -96,7 +97,6 @@ npm run test:e2e
 | **Roteamento** | Vue Router 5               | SPA com lazy loading                      |
 | **Real-time**  | Socket.IO                  | Comunicação bidirecional cliente-servidor |
 | **Validação**  | VeeValidate + Zod          | Formulários type-safe                     |
-| **Gráficos**   | Chart.js + vue-chartjs     | Visualização de histórico                 |
 | **Servidor**   | Express 5 + Socket.IO      | Backend em memória (Node.js)              |
 | **Testes**     | Vitest + Playwright        | Unitários + E2E                           |
 | **Linting**    | ESLint + oxlint + Prettier | Qualidade e formatação                    |

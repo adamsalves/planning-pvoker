@@ -2,6 +2,14 @@ import { Room, Player, RoomConfig, Round } from './types'
 import { NullPersistence, type RoomPersistence } from './persistence'
 import { logger } from './logger'
 
+// Narrow port the RoomManager consults to decide whether a player still counts
+// toward a quorum. Presence (live socket OR within the reconnect grace) lives in
+// the events.ts closure and is injected via setPresence(); RoomManager itself
+// never touches sockets. Kept minimal on purpose — presence, not authorization.
+export interface PresenceOracle {
+  isPresent(roomId: string, playerId: string): boolean
+}
+
 // Defensive cap on a room's cumulative backlog. The per-call Zod limit
 // (MAX_SUBJECTS_PER_CALL in validation.ts) only bounds a single add_subjects
 // payload; without a total cap an admin could still grow the in-memory list
@@ -17,6 +25,19 @@ export class RoomManager {
   // player.id === adminId and escalate to admin. The token is the proof that a
   // socket really owns that identity. Stable across rejoins (reused, not
   // regenerated) so a refresh or a second tab isn't locked out.
+  //
+  // Cleanup invariant (backlog 6.8): this Map has NO whole-room purge, and it
+  // doesn't need one TODAY. Tokens are dropped per-player in clearToken (called
+  // from leaveRoom), and the ONLY in-memory room-destroy site — this.rooms.delete
+  // in leaveRoom — is reached solely once the room is already empty, i.e. after
+  // every player's token was cleared one by one. So a destroyed room leaves no
+  // orphan token behind. If you EVER add a path that removes a room (or clears its
+  // players) WITHOUT going through per-player leaveRoom — a "kick all", an admin
+  // "close room", an in-memory idle reaper — add a clearRoomTokens(roomId) that
+  // deletes every `${roomId}::*` key and call it at that destroy site, or these
+  // tokens orphan for the life of the process. The persistence mirror already
+  // covers its own side: persistence.deleteRoom drops the whole `tokens:${roomId}`
+  // hash wholesale (see persistence.ts).
   private tokens: Map<string, string> = new Map()
 
   // Write-through coalescing state: at most one save per room is in flight; a
@@ -26,9 +47,21 @@ export class RoomManager {
   private savingRooms = new Set<string>()
   private dirtyRooms = new Set<string>()
 
+  // Presence oracle for the autoReveal quorum. Defaults to "everyone is present"
+  // so `new RoomManager()` (and the NullPersistence path) behaves exactly as
+  // before — the quorum is computed over every eligible voter, as it was inline.
+  // events.ts wires the real presence via setPresence() after construction.
+  private presence: PresenceOracle = { isPresent: () => true }
+
   // Persistence is best-effort and defaults to a no-op, so `new RoomManager()`
   // (used across the tests) behaves exactly as before — pure in-memory.
   constructor(private readonly persistence: RoomPersistence = new NullPersistence()) {}
+
+  // Injects the presence source. Called once from setupSocketEvents (which owns
+  // the socket/grace-timer state), after the RoomManager already exists.
+  public setPresence(oracle: PresenceOracle): void {
+    this.presence = oracle
+  }
 
   private tokenKey(roomId: string, playerId: string): string {
     return `${roomId}::${playerId}`
@@ -45,12 +78,15 @@ export class RoomManager {
   //
   // Known trade-off: presence/grace timers (events.ts) are ephemeral and lost on
   // restart, so a rehydrated room comes back with every player it had — including
-  // ones who won't reconnect. Such a "ghost" lingers until the room's TTL expires
-  // (no disconnect fires for a socket that never existed in this process), and
-  // while present it still counts toward the autoReveal quorum. Accepted for now:
-  // a grace-based reaper can't simply run here because the free-tier cold start
-  // (~60s) exceeds the reconnect grace (~30s) and would evict the room before the
-  // team finishes reconnecting. A presence-aware autoReveal fix is a follow-up.
+  // ones who won't reconnect. Such a "ghost" still APPEARS in the player list
+  // until the room's TTL expires (no disconnect fires for a socket that never
+  // existed in this process). It no longer blocks progress, though: the autoReveal
+  // quorum is presence-aware (see maybeAutoReveal + the PresenceOracle), so a ghost
+  // is excluded from the quorum and can neither stall the reveal nor pin the room.
+  // A grace-based boot reaper is still avoided on purpose — the free-tier cold
+  // start (~60s) exceeds the reconnect grace (~30s) and would evict the room
+  // before the team finishes reconnecting. Hiding the ghost from the UI is a
+  // separate follow-up (it needs presence broadcast to clients).
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
     for (const room of rooms) this.rooms.set(room.id, room)
@@ -160,6 +196,10 @@ export class RoomManager {
     } else {
       existingPlayer.name = player.name
       existingPlayer.role = player.role
+      // Reenviada pelo cliente a cada join (vem do user store persistido), então
+      // sobrescreve como name/role — inclusive limpando (undefined) se a pessoa
+      // tirou a tag. A tag NÃO é atribuída por outro caminho no server.
+      existingPlayer.tag = player.tag
     }
 
     this.scheduleSave(roomId)
@@ -178,7 +218,10 @@ export class RoomManager {
     // leaveRoom is NOT called, so a refreshing player keeps their token.
     this.clearToken(roomId, playerId)
 
-    // If room becomes empty, destroy it
+    // If room becomes empty, destroy it. The last player's token was just cleared
+    // above (clearToken) and every earlier player cleared theirs on their own
+    // leave, so tearing the room down here orphans no token. Read the cleanup
+    // invariant on the `tokens` field before adding ANY other room-destroy path.
     if (room.players.length === 0) {
       this.rooms.delete(roomId)
       // Schedule AFTER the delete: flushSave reads the current map state, so it now
@@ -194,6 +237,19 @@ export class RoomManager {
       room.adminId = next.id
       next.role = 'admin'
     }
+
+    // The departing player is deliberately NOT pruned from the round's
+    // excludedVoterIds. Harmless to the quorum (eligibleVotersOf filters over
+    // room.players, so someone who is gone never counts), and it keeps the
+    // admin's choice sticky for the case that actually matters: a player who
+    // drops and comes back with the same id stays out of the round, instead of
+    // silently re-entering it. Trade-off: after an explicit "leave" and a
+    // re-join, that player is still excluded — the UI (slice 2) has to say so.
+    //
+    // A present voter just left (their grace expired). If the voters who remain
+    // present have all voted, the round can now auto-reveal — the departing
+    // player was the last one holding it open. No-op when autoReveal is off.
+    this.maybeAutoReveal(room)
 
     // Schedule AFTER admin transfer so the snapshot carries the final adminId.
     this.scheduleSave(roomId)
@@ -224,18 +280,27 @@ export class RoomManager {
 
   // --- Session Flow ---
 
+  // Single factory for both round creation sites. `excludedVoterIds` is copied,
+  // never aliased. setRoundVoter always REASSIGNS the array (never mutates in
+  // place), so sharing one wouldn't corrupt anything today — the copy is what
+  // keeps a future in-place edit from rewriting a past round's history.
+  private createRound(subject: string, excludedVoterIds: string[]): Round {
+    return {
+      id: crypto.randomUUID(),
+      subject,
+      status: 'voting',
+      votes: {},
+      excludedVoterIds: [...excludedVoterIds],
+    }
+  }
+
   public startSession(roomId: string): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.phase !== 'setup') return null
     if (room.subjects.length === 0) return null
 
-    // Create round for the first subject
-    const firstRound: Round = {
-      id: crypto.randomUUID(),
-      subject: room.subjects[0],
-      status: 'voting',
-      votes: {},
-    }
+    // Create round for the first subject — a fresh session starts with everyone in.
+    const firstRound = this.createRound(room.subjects[0], [])
 
     room.phase = 'voting'
     room.rounds = [firstRound]
@@ -258,13 +323,13 @@ export class RoomManager {
       return room
     }
 
-    // Create round for the next subject
-    const newRound: Round = {
-      id: crypto.randomUUID(),
-      subject: room.subjects[nextSubjectIndex],
-      status: 'voting',
-      votes: {},
-    }
+    // Create round for the next subject, INHERITING who the admin left out: the
+    // selection is meant to carry across rounds, so they don't re-pick every time.
+    const previousExcluded =
+      room.currentRoundIndex >= 0
+        ? (room.rounds[room.currentRoundIndex].excludedVoterIds ?? [])
+        : []
+    const newRound = this.createRound(room.subjects[nextSubjectIndex], previousExcluded)
 
     room.rounds.push(newRound)
     room.currentRoundIndex = nextSubjectIndex
@@ -279,29 +344,83 @@ export class RoomManager {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null
 
-    // Only players present in the room who are not observers may vote
-    const player = room.players.find((p) => p.id === playerId)
-    if (!player || player.role === 'observer') return null
-
     const round = room.rounds[room.currentRoundIndex]
     if (round.status !== 'voting') return null
 
+    // Admission goes through the SAME seam as the quorum: a vote is accepted iff
+    // its author is one of the voters the round is waiting on. Also covers a
+    // playerId that isn't in the room at all (the filter runs over room.players).
+    if (!this.eligibleVotersOf(room, round).some((p) => p.id === playerId)) return null
+
     round.votes[playerId] = value
 
-    // Check autoReveal if everyone has voted
-    if (room.config.autoReveal) {
-      const activePlayers = room.players.filter((p) => p.role !== 'observer')
-      // Guard length: [].every() is true, which would reveal a round in an
-      // observers-only room (zero active players) without a single vote.
-      const allVoted =
-        activePlayers.length > 0 && activePlayers.every((p) => round.votes[p.id] !== undefined)
-      if (allVoted) {
-        round.status = 'revealed'
-      }
-    }
+    this.maybeAutoReveal(room)
 
     this.scheduleSave(roomId)
     return room
+  }
+
+  // Turns a player on/off as a voter in the CURRENT round (admin-only, enforced
+  // at the socket layer). Deliberately per-player rather than a whole-list
+  // replace: it matches the per-row toggle in the UI and stays idempotent.
+  public setRoundVoter(roomId: string, playerId: string, voting: boolean): Room | null {
+    const room = this.rooms.get(roomId)
+    if (!room || room.currentRoundIndex === -1) return null
+
+    const round = room.rounds[room.currentRoundIndex]
+    // Once revealed, who the round expected is settled history — don't rewrite it.
+    if (round.status !== 'voting') return null
+
+    // Observers are already out; flipping a role is a separate concern.
+    const player = room.players.find((p) => p.id === playerId)
+    if (!player || player.role === 'observer') return null
+
+    const excluded = round.excludedVoterIds ?? []
+    if (voting) {
+      round.excludedVoterIds = excluded.filter((id) => id !== playerId)
+    } else if (!excluded.includes(playerId)) {
+      round.excludedVoterIds = [...excluded, playerId]
+      // Drop any vote they had already cast — leaving it behind would skew the
+      // reveal stats with a vote from someone the round no longer counts.
+      delete round.votes[playerId]
+    }
+
+    // Taking the last pending voter out can complete the quorum.
+    this.maybeAutoReveal(room)
+
+    this.scheduleSave(roomId)
+    return room
+  }
+
+  // --- AutoReveal quorum (presence-aware) ---
+
+  // The set of players the given round is waiting on: everyone who is neither an
+  // observer (room-wide) nor excluded by the admin from THIS round. Single seam
+  // shared by the quorum and by castVote's admission check.
+  private eligibleVotersOf(room: Room, round: Round): Player[] {
+    const excluded = round.excludedVoterIds ?? []
+    return room.players.filter((p) => p.role !== 'observer' && !excluded.includes(p.id))
+  }
+
+  // Reveals the current round when every PRESENT eligible voter has voted. Only
+  // present players count (live socket OR within the reconnect grace, per the
+  // injected PresenceOracle), so a rehydration ghost — eligible but with no
+  // socket and no grace timer — can't stall the reveal or pin the room. No-op
+  // unless autoReveal is on and a round is actively being voted on.
+  private maybeAutoReveal(room: Room): void {
+    if (!room.config.autoReveal || room.currentRoundIndex === -1) return
+    const round = room.rounds[room.currentRoundIndex]
+    if (round.status !== 'voting') return
+
+    const required = this.eligibleVotersOf(room, round).filter((p) =>
+      this.presence.isPresent(room.id, p.id),
+    )
+    // Guard length: [].every() is true, which would reveal a round with no
+    // present eligible voters (observers-only, or an admin who excluded
+    // everyone) without a single vote.
+    if (required.length > 0 && required.every((p) => round.votes[p.id] !== undefined)) {
+      round.status = 'revealed'
+    }
   }
 
   public revealVotes(roomId: string): Room | null {

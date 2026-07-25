@@ -2,6 +2,9 @@ import { createI18n } from 'vue-i18n'
 import { ptBR } from './locales/pt-BR'
 import { en } from './locales/en'
 
+// Valor referenciado só neste arquivo (deriva `AppLocale`); @public evita que o
+// knip reporte o export como desnecessário (antes coberto por ignoreExportsUsedInFile).
+/** @public */
 export const APP_LOCALES = ['pt-BR', 'en'] as const
 export type AppLocale = (typeof APP_LOCALES)[number]
 
