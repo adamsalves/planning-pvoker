@@ -98,10 +98,13 @@ const roomShapeSchema = z.object({
 // remaining player — so, again, only a rehydrated snapshot gets here. This also
 // covers `players: []`: a room only empties through leaveRoom, which destroys it.
 //
-// Other cross-field mismatches were considered and left alone deliberately: a
-// `phase` out of step with `rounds`, votes keyed by non-players, or orphan
-// excludedVoterIds all degrade cosmetically at worst. Discarding a room is a real
-// cost, so it's reserved for what actually breaks it.
+// Other cross-field mismatches were considered and left alone deliberately, but
+// they are NOT all harmless: votes keyed by non-players and orphan excludedVoterIds
+// really are cosmetic, while a `phase: 'setup'` carrying non-empty `rounds` passes
+// both refines and then loses that history the moment startSession overwrites
+// `room.rounds`. Silent data loss, not a crash — and still not worth a third guard,
+// because discarding the room destroys the same history plus the rest of the
+// session. Rejecting is reserved for damage the room can't absorb.
 const roomSchema = roomShapeSchema
   .refine(
     (room) =>
@@ -192,9 +195,24 @@ export class RedisPersistence implements RoomPersistence {
     const staleIds: string[] = []
 
     for (const id of ids) {
-      const parsedRoom = roomSchema.safeParse(await this.redis.get(roomKey(id)))
+      const raw = await this.redis.get(roomKey(id))
+      const parsedRoom = roomSchema.safeParse(raw)
       if (!parsedRoom.success) {
         // Missing (expired via TTL) or malformed (schema drift/corruption) — forget it.
+        //
+        // Say WHY when there was actually something there to reject. Dropping a room
+        // is the one operation here that destroys user-visible state, and hydrate()
+        // only ever logs the SURVIVORS ("Rehydrated N room(s)") — so without this an
+        // operator sees a room vanish with no way to tell what was wrong with it. The
+        // refine messages above exist precisely to be read here.
+        //
+        // A null/undefined value is the ROUTINE case (the room's TTL lapsed while its
+        // index entry lingered) and stays silent: it isn't corruption, and warning on
+        // every expired room would bury the reports that matter.
+        if (raw !== null && raw !== undefined) {
+          const reasons = parsedRoom.error.issues.map((issue) => issue.message).join('; ')
+          logger.warn(`🗄️  Discarding malformed snapshot for room ${id}: ${reasons}`)
+        }
         staleIds.push(id)
         continue
       }
