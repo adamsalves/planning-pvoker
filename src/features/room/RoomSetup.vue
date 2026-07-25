@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPencil from '~icons/lucide/pencil'
 import { useRoomStore } from '@/stores/room'
+import { activePlayersOf } from '@/utils/players'
 import BaseCard from '@/components/BaseCard.vue'
 import SubjectForm from './SubjectForm.vue'
 import PlayerList from './PlayerList.vue'
@@ -19,6 +21,10 @@ defineEmits<{
 
 const { t } = useI18n()
 const roomStore = useRoomStore()
+
+// Quem senta à mesa — espectador não conta pro gate de iniciar a sessão. Sala com
+// 1 jogador + 1 espectador é uma sessão de 1 votante, não de 2.
+const activePlayerCount = computed(() => activePlayersOf(roomStore.players).length)
 </script>
 
 <template>
@@ -28,7 +34,7 @@ const roomStore = useRoomStore()
         <template v-if="isAdmin">
           <SubjectForm
             :subjects="roomStore.subjects"
-            :player-count="roomStore.players.length"
+            :active-player-count="activePlayerCount"
             @add="$emit('add', $event)"
             @remove="$emit('remove', $event)"
             @start="$emit('start')"

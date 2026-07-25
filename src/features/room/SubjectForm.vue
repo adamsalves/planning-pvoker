@@ -12,7 +12,10 @@ import BaseInput from '@/components/BaseInput.vue'
 
 interface Props {
   subjects: string[]
-  playerCount: number
+  // Jogadores que sentam à mesa (sem espectadores) — quem chama já filtra com
+  // activePlayersOf. O nome é explícito de propósito: um espectador na sala não
+  // habilita a sessão.
+  activePlayerCount: number
 }
 
 const props = defineProps<Props>()
@@ -30,7 +33,7 @@ const subject = ref('')
 // idioma ao vivo (mesmo padrão dos forms da home).
 const errorKey = ref('')
 
-const canStart = computed(() => props.subjects.length >= 1 && props.playerCount >= 2)
+const canStart = computed(() => props.subjects.length >= 1 && props.activePlayerCount >= 2)
 
 // Sempre explica por que "Iniciar" está desabilitado: a falta de subjects é o
 // pré-requisito (mostra primeiro), depois a falta de jogadores. null = pode iniciar.
@@ -38,7 +41,7 @@ const canStart = computed(() => props.subjects.length >= 1 && props.playerCount 
 // embutidos nas strings); o ícone é o componente, renderizado por <component :is>.
 const startHint = computed(() => {
   if (props.subjects.length < 1) return { icon: IconPencil, key: 'room.setup.needSubjects' }
-  if (props.playerCount < 2) return { icon: IconHourglass, key: 'room.setup.waitingPlayers' }
+  if (props.activePlayerCount < 2) return { icon: IconHourglass, key: 'room.setup.waitingPlayers' }
   return null
 })
 
