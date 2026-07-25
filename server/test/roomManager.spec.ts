@@ -147,6 +147,38 @@ describe('leaveRoom', () => {
     expect(room?.rounds[0].status).toBe('revealed')
   })
 
+  it('hands admin to a present player instead of a rehydration ghost', () => {
+    rm.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'g1', name: 'Ghost', role: 'member' }) // sits before m1
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    // g1 is eligible but has no socket and no grace timer — it would inherit a room
+    // it can never drive.
+    expect(room?.adminId).toBe('m1')
+  })
+
+  it('prefers a present observer over an absent voter', () => {
+    rm.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'g1', name: 'Ghost', role: 'member' })
+    rm.joinRoom('r1', observer)
+    const room = rm.leaveRoom('r1', 'a1')
+    // Someone who can actually drive the room beats a voter who is never coming
+    // back — same fallback trade-off as the observers-only case.
+    expect(room?.adminId).toBe('o1')
+  })
+
+  it('falls back to the whole list when nobody is present (dormant room)', () => {
+    rm.setPresence({ isPresent: () => false })
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer)
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    // No present pool to pick from, so the observer preference still applies.
+    expect(room?.adminId).toBe('m1')
+  })
+
   it('deletes the room when the last player leaves', () => {
     rm.createRoom('r1', admin, config)
     expect(rm.leaveRoom('r1', 'a1')).toBeNull()
