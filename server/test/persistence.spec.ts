@@ -255,6 +255,38 @@ describe('RedisPersistence', () => {
     expect(snap.rooms).toEqual([])
     expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('BAD')
   })
+
+  // Each field below is valid on its own — only the RELATIONSHIP is broken, which
+  // is exactly what a per-field schema misses. Rehydrating one of these would arm
+  // a TypeError inside castVote/setRoundVoter/revealVotes (see the refine on
+  // roomSchema), so the room must be dropped like any other malformed snapshot.
+  it.each([
+    ['index past the end of rounds', { phase: 'voting', rounds: [], currentRoundIndex: 1 }],
+    ['index 0 with no rounds at all', { phase: 'voting', rounds: [], currentRoundIndex: 0 }],
+    ['negative index other than -1', { phase: 'setup', rounds: [], currentRoundIndex: -2 }],
+    ['fractional index', { phase: 'setup', rounds: [], currentRoundIndex: 1.5 }],
+  ])('loadAll drops a snapshot whose currentRoundIndex is inconsistent: %s', async (_, broken) => {
+    await redis.sadd('rooms:index', 'BROKEN')
+    redis.strings.set('room:BROKEN', { ...sampleRoom(), id: 'BROKEN', ...broken })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms).toEqual([])
+    expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('BROKEN')
+  })
+
+  it('loadAll keeps a consistent -1 index (a room still in setup)', async () => {
+    await redis.sadd('rooms:index', 'SETUP')
+    redis.strings.set('room:SETUP', {
+      ...sampleRoom(),
+      id: 'SETUP',
+      phase: 'setup',
+      rounds: [],
+      currentRoundIndex: -1,
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['SETUP'])
+  })
 })
 
 describe('NullPersistence', () => {

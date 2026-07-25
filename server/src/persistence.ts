@@ -38,7 +38,7 @@ export interface RedisClient {
 // Structural guard for a room snapshot read back from Redis. Mirrors the Room
 // type; a snapshot that's missing (expired) or malformed (schema drift, partial
 // write, corruption) fails safeParse and is skipped rather than crashing the boot.
-const roomSchema = z.object({
+const roomShapeSchema = z.object({
   id: z.string(),
   adminId: z.string(),
   config: z.object({
@@ -72,8 +72,27 @@ const roomSchema = z.object({
       excludedVoterIds: z.array(z.string()).optional(),
     }),
   ),
-  currentRoundIndex: z.number(),
+  currentRoundIndex: z.number().int(),
 })
+
+// The shape above plus the one invariant that spans two fields. Kept as a separate
+// step so the field list stays a plain object literal.
+//
+// Cross-field guard: zod validates each field in isolation, so without this a
+// snapshot could come back claiming currentRoundIndex 1 with rounds: []. Every
+// in-process path keeps the two in sync (startSession/nextRound/resetSession),
+// which makes a REHYDRATED snapshot the only way to get an out-of-range index —
+// and castVote/setRoundVoter/revealVotes index `rounds[currentRoundIndex]`
+// unguarded, so it would throw a TypeError inside a socket handler and take the
+// whole process down with it. Rejecting here means such a snapshot is DISCARDED
+// like any other malformed one (loadAll drops it and self-heals the index): the
+// affected room is lost, every other room boots fine.
+const roomSchema = roomShapeSchema.refine(
+  (room) =>
+    room.currentRoundIndex === -1 ||
+    (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
+  { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
+)
 
 // A room's token hash read back from Redis: { playerId -> token }. Values are
 // validated PER FIELD in loadAll (a single corrupt field must not drop the whole

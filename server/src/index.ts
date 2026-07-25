@@ -5,6 +5,7 @@ import cors, { CorsOptions } from 'cors'
 import { RoomManager } from './roomManager'
 import { createPersistence } from './persistence'
 import { setupSocketEvents } from './events'
+import { installCrashGuards } from './crashGuards'
 import { logger } from './logger'
 import type { SocketData } from './types'
 
@@ -81,6 +82,10 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3001
 
 async function start() {
+  // Armed before anything else so a throw in a socket handler can't take every
+  // room down with it (see crashGuards for why this one keeps serving).
+  installCrashGuards(process)
+
   // Rehydrate persisted rooms/tokens BEFORE accepting connections, so a client
   // reconnecting right after a redeploy finds its room. A failure here must NOT
   // abort the boot — degrade to empty in-memory state and keep serving.
