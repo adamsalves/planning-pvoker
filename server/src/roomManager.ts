@@ -251,11 +251,19 @@ export class RoomManager {
     //
     // Presence is the FIRST filter, for the same reason observers are the second:
     // handing the room to someone who can't drive it defeats the transfer. An
-    // absent player here is a rehydration ghost (present covers a live socket OR
-    // the reconnect grace, so a refreshing player still counts) — it would inherit
-    // the room and never come back to run it. When nobody is present at all the
-    // whole list is the pool: the room is dormant, and whoever reconnects first is
-    // kept as admin by events.ts anyway.
+    // absent player here is STRUCTURALLY a rehydration ghost — present covers a live
+    // socket OR the reconnect grace, and no other path leaves an absent player in
+    // room.players — so it would inherit the room and never come back to run it.
+    //
+    // Temporally it's fuzzier: in the seconds after a cold start, a teammate who is
+    // about to reconnect reads exactly like a ghost. That is what makes the observer
+    // promotion above MORE likely than its "only when everyone left is an observer"
+    // wording suggests — it now fires whenever everyone PRESENT is an observer — and
+    // that promotion is permanent. Judged the better trade anyway: an admin who can
+    // act now beats holding the room for someone who may not be coming back.
+    //
+    // When nobody is present at all the whole list is the pool: the room is dormant,
+    // and whoever reconnects first is kept as admin by events.ts anyway.
     if (wasAdmin) {
       const present = room.players.filter((p) => this.presence.isPresent(room.id, p.id))
       const pool = present.length > 0 ? present : room.players

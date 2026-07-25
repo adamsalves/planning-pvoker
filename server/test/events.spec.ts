@@ -840,3 +840,93 @@ describe('rehydration ghost does not block autoReveal', () => {
     expect(room.rounds[0].votes['g1']).toBeUndefined()
   })
 })
+
+// The unit tests for this live in roomManager.spec, but they inject a fake oracle.
+// These exercise the REAL one from events.ts — the seam where the key format or the
+// timing of markAbsent could diverge from what leaveRoom assumes.
+describe('admin handover skips a player who is not present', () => {
+  const ghost: Player = { id: 'g1', name: 'Casper', role: 'member' }
+
+  // Room rehydrated as [admin, ghost, member]: the ghost sits BEFORE the member, so
+  // any handover that ignores presence picks it.
+  function seedManager(): RoomManager {
+    const room: Room = {
+      id: 'r1',
+      adminId: 'a1',
+      config,
+      players: [admin, ghost, member],
+      subjects: [],
+      phase: 'setup',
+      rounds: [],
+      currentRoundIndex: -1,
+    }
+    const tokens = new Map<string, string>([
+      ['r1::a1', 'tok-a'],
+      ['r1::m1', 'tok-m'],
+    ])
+    return new RoomManager(new SeedPersistence({ rooms: [room], tokens }))
+  }
+
+  async function reconnectBoth() {
+    const adminClient = await connect()
+    await join(adminClient, { roomId: 'r1', player: admin, token: 'tok-a' })
+    const memberClient = await connect()
+    await join(memberClient, { roomId: 'r1', player: member, token: 'tok-m' })
+    return { adminClient, memberClient }
+  }
+
+  it('picks the present member over the ghost on an explicit leave_room', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+    const { adminClient, memberClient } = await reconnectBoth()
+
+    const handover = waitForRoomWhere(memberClient, (room) => room.adminId !== 'a1')
+    adminClient.emit('leave_room', { roomId: 'r1' })
+    const room = await handover
+
+    expect(room.adminId).toBe('m1')
+  })
+
+  it('picks the present member over the ghost when the grace timer fires', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+    const { adminClient, memberClient } = await reconnectBoth()
+
+    const handover = waitForRoomWhere(memberClient, (room) => room.adminId !== 'a1')
+    adminClient.disconnect() // removal only happens once the grace window elapses
+    const room = await handover
+
+    expect(room.adminId).toBe('m1')
+    expect(room.players.map((p) => p.id)).not.toContain('a1')
+  })
+
+  it('still counts a member who is only refreshing (inside the grace window)', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+    const { adminClient, memberClient } = await reconnectBoth()
+
+    // A spectator that just watches the broadcast: leave_room unsubscribes every
+    // socket of the LEAVING identity before notifying, so Ana can't observe her own
+    // handover — and Bob is mid-refresh. Being an observer keeps it out of the
+    // running for admin, so it doesn't change what the test measures.
+    const watcherClient = await connect()
+    await join(watcherClient, {
+      roomId: 'r1',
+      player: { id: 'w1', name: 'Watcher', role: 'observer' },
+    })
+
+    // Bob drops but is inside the grace window, so he is still present — and must
+    // stay ahead of the ghost when Ana hands the room over.
+    memberClient.disconnect()
+    await delay(GRACE_MS / 2)
+
+    const handover = waitForRoomWhere(watcherClient, (room) => room.adminId !== 'a1')
+    adminClient.emit('leave_room', { roomId: 'r1' })
+    const room = await handover
+
+    expect(room.adminId).toBe('m1')
+  })
+})

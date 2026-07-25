@@ -82,8 +82,10 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3001
 
 async function start() {
-  // Armed before anything else so a throw in a socket handler can't take every
-  // room down with it (see crashGuards for why this one keeps serving).
+  // First thing in start() — before hydration, before any socket is accepted — so
+  // a throw in a socket handler can't take every room down with it (see crashGuards
+  // for why this one keeps serving). Module scope above still crashes outright,
+  // which is what a bad config or a corrupt import deserves.
   installCrashGuards(process)
 
   // Rehydrate persisted rooms/tokens BEFORE accepting connections, so a client
@@ -97,6 +99,16 @@ async function start() {
 
   // Setup all socket handlers (after hydrate, before we start listening).
   const disposeSocketEvents = setupSocketEvents(io, roomManager)
+
+  // listen() reports failure as an 'error' EVENT, not as a rejection — so this does
+  // NOT reach start().catch below, and an unhandled one would be turned into an
+  // uncaughtException and swallowed by the crash guard, leaving a live process with
+  // no port bound. Failing to bind is unrecoverable by definition: exit, so the
+  // platform sees a failed deploy immediately instead of a silent zombie.
+  server.on('error', (err) => {
+    logger.error('Fatal listen error:', err)
+    process.exit(1)
+  })
 
   server.listen(PORT, () => {
     logger.info(`🚀 Server listening on port ${PORT}`)
