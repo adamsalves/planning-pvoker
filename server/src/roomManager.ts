@@ -235,11 +235,19 @@ export class RoomManager {
     //
     // Observers are skipped: the promotion sets role = 'admin', and eligibleVotersOf
     // only filters out observers — so promoting one silently drafts someone who
-    // joined to WATCH into the quorum, and the round then waits on a vote that
-    // never comes. Falling back to players[0] when everyone left is an observer is
-    // deliberate: an undrivable room is worse, and a room with no voters at all has
-    // no quorum to break. The promoted player keeps admin on rejoin either way —
-    // events.ts resolves role from adminId (see its join_room role normalization).
+    // joined to WATCH into the quorum of every round from then on.
+    //
+    // Falling back to players[0] when everyone left IS an observer is deliberate: a
+    // room nobody can drive is worse than the promotion. Its cost is real but
+    // deferred — an observers-only room has no quorum to break, yet the promotion
+    // is permanent, so a player joining later finds the ex-observer counted as a
+    // voter (the new admin can take themselves out via set_round_voter). Removing
+    // that residue means letting adminId point at a player whose role isn't
+    // 'admin', which both the join_room role normalization in events.ts (role is
+    // resolved FROM adminId) and the client's crown/observer grouping assume away.
+    //
+    // The promoted player keeps admin across a rejoin in either branch, by that
+    // same events.ts normalization.
     if (wasAdmin) {
       const next = room.players.find((p) => p.role !== 'observer') ?? room.players[0]
       room.adminId = next.id
