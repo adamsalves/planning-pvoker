@@ -4,14 +4,21 @@ import type { Player, RoomConfig, Room } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
 const config: RoomConfig = { deckType: 'fibonacci', autoReveal: false }
-const admin: Player = { id: 'a1', name: 'Admin', role: 'admin' }
-const member: Player = { id: 'm1', name: 'Member', role: 'member' }
-const observer: Player = { id: 'o1', name: 'Obs', role: 'observer' }
+
+// Rebuilt per test, never shared: createRoom/joinRoom store these objects BY
+// REFERENCE, and the admin handover promotes in place (next.role = 'admin'), so
+// a module-level fixture would carry that role into every later test.
+let admin: Player
+let member: Player
+let observer: Player
 
 let rm: RoomManager
 
 beforeEach(() => {
   rm = new RoomManager()
+  admin = { id: 'a1', name: 'Admin', role: 'admin' }
+  member = { id: 'm1', name: 'Member', role: 'member' }
+  observer = { id: 'o1', name: 'Obs', role: 'observer' }
 })
 
 describe('createRoom', () => {
@@ -84,6 +91,39 @@ describe('leaveRoom', () => {
     const promoted = room?.players.find((p) => p.id === 'm1')
     expect(promoted?.role).toBe('admin')
     expect(promoted?.tag).toBe('qa') // in-place role mutation must not drop the tag
+  })
+
+  it('skips observers when handing over admin, even if one sits first in the list', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer) // sits BEFORE the member in players[]
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.adminId).toBe('m1')
+    expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('observer')
+  })
+
+  it('promotes an observer only when nobody else is left to drive the room', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer)
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.adminId).toBe('o1')
+    // Fallback: a room with no players left would be undrivable otherwise.
+    expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('admin')
+  })
+
+  it('does not add an observer to the quorum by handing them admin', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', observer)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    rm.leaveRoom('r1', 'a1') // admin goes to m1, o1 stays out of the round
+    const room = rm.castVote('r1', 'm1', 5)
+
+    // The only eligible voter voted, so autoReveal fires. With the observer
+    // promoted the round would stay open on a vote that can never come.
+    expect(room?.rounds[0].status).toBe('revealed')
   })
 
   it('deletes the room when the last player leaves', () => {

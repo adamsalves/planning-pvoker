@@ -232,8 +232,16 @@ export class RoomManager {
 
     // If the admin left, hand admin to the next remaining player so the room
     // doesn't get stuck with nobody able to drive the session.
+    //
+    // Observers are skipped: the promotion sets role = 'admin', and eligibleVotersOf
+    // only filters out observers — so promoting one silently drafts someone who
+    // joined to WATCH into the quorum, and the round then waits on a vote that
+    // never comes. Falling back to players[0] when everyone left is an observer is
+    // deliberate: an undrivable room is worse, and a room with no voters at all has
+    // no quorum to break. The promoted player keeps admin on rejoin either way —
+    // events.ts resolves role from adminId (see its join_room role normalization).
     if (wasAdmin) {
-      const next = room.players[0]
+      const next = room.players.find((p) => p.role !== 'observer') ?? room.players[0]
       room.adminId = next.id
       next.role = 'admin'
     }
