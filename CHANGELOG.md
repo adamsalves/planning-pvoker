@@ -5,6 +5,28 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O formato se
 [SemVer](https://semver.org/lang/pt-BR/). A partir da v1.0.0, as entradas abaixo
 desta são geradas automaticamente pelo [release-please](./RELEASE.md).
 
+## [1.4.0](https://github.com/adamsalves/planning-pvoker/compare/v1.3.0...v1.4.0) (2026-07-25)
+
+
+### Features
+
+* **server:** admin escolhe quem vota na rodada (fatia 1/2) ([#56](https://github.com/adamsalves/planning-pvoker/issues/56)) ([af15842](https://github.com/adamsalves/planning-pvoker/commit/af15842c38387b630c4564f494e0ba1a8334975c))
+* **server:** tag de área do jogador (fatia 1/2) ([#58](https://github.com/adamsalves/planning-pvoker/issues/58)) ([93080fb](https://github.com/adamsalves/planning-pvoker/commit/93080fbb5d0cffce9de60adb4a936848b33eb45b))
+* **ui:** admin escolhe quem vota na rodada (fatia 2/2) ([#57](https://github.com/adamsalves/planning-pvoker/issues/57)) ([addda3c](https://github.com/adamsalves/planning-pvoker/commit/addda3c279e952ada13977446c19beefbcfb5331))
+* **ui:** ícones theme-aware na home + forms (fatia 2/3) ([#53](https://github.com/adamsalves/planning-pvoker/issues/53)) ([bc652e3](https://github.com/adamsalves/planning-pvoker/commit/bc652e31dddcdae72574113e541df00ebb82a691))
+* **ui:** ícones theme-aware na votação + resumos (fatia 3b/2) ([#55](https://github.com/adamsalves/planning-pvoker/issues/55)) ([f20878e](https://github.com/adamsalves/planning-pvoker/commit/f20878e6d285216af65a0515a57da97d31549c91))
+* **ui:** ícones theme-aware no shell — navbar + 404 (fatia 1/3) ([#52](https://github.com/adamsalves/planning-pvoker/issues/52)) ([221606e](https://github.com/adamsalves/planning-pvoker/commit/221606eca0436cbd46744318e803a0a8ee1c1496))
+* **ui:** ícones theme-aware no shell da sala + setup (fatia 3a/2) ([#54](https://github.com/adamsalves/planning-pvoker/issues/54)) ([090eb0b](https://github.com/adamsalves/planning-pvoker/commit/090eb0b2ea7dc09410f5c9139bbd90b9d7666e48))
+* **ui:** tag de área do jogador (fatia 2/2) ([#59](https://github.com/adamsalves/planning-pvoker/issues/59)) ([cbd7e3b](https://github.com/adamsalves/planning-pvoker/commit/cbd7e3be43520d0d3e63c59ddc1296e8e876526c))
+* **ui:** unifica "Voltar à Sala" num banner único do layout ([#60](https://github.com/adamsalves/planning-pvoker/issues/60)) ([962f3e9](https://github.com/adamsalves/planning-pvoker/commit/962f3e906d7ba0d973ac8fd3aa7a01706bfae9dc))
+
+
+### Bug Fixes
+
+* **deps:** corrige 2 vulns HIGH de tooling (brace-expansion, js-yaml) ([#63](https://github.com/adamsalves/planning-pvoker/issues/63)) ([82254d2](https://github.com/adamsalves/planning-pvoker/commit/82254d293b4c5e55900143a92059726473ad4df6))
+* **server:** make autoReveal quorum presence-aware ([#51](https://github.com/adamsalves/planning-pvoker/issues/51)) ([fd6f72c](https://github.com/adamsalves/planning-pvoker/commit/fd6f72c9b1be1133064285bcfe6827f22d52826e))
+* **ui:** rodada de 1 votante não dispara falso consenso ([#65](https://github.com/adamsalves/planning-pvoker/issues/65)) ([6afebf5](https://github.com/adamsalves/planning-pvoker/commit/6afebf50ce039125ddd7ed91c949cfeed3ffd38a))
+
 ## [1.3.0](https://github.com/adamsalves/planning-pvoker/compare/v1.2.0...v1.3.0) (2026-07-11)
 
 
