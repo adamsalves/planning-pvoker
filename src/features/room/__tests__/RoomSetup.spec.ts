@@ -69,6 +69,18 @@ describe('RoomSetup.vue', () => {
     expect(wrapper.emitted('start')).toHaveLength(1)
   })
 
+  // Regressão: o gate de iniciar recebia `players.length` cru, então uma sala com
+  // 1 jogador + 1 espectador liberava a sessão — e ela começava com 1 votante só.
+  it.each([
+    ['1 jogador + 1 espectador', ['admin', 'observer'] as const, 1],
+    ['2 jogadores + 1 espectador', ['admin', 'member', 'observer'] as const, 2],
+  ])('conta só quem senta à mesa no gate de iniciar: %s', (_caso, roles, esperado) => {
+    const players = roles.map((role, i) => ({ id: `p${i}`, name: `P${i}`, role }))
+    const wrapper = mountSetup(true, roomWith({ players }))
+
+    expect(wrapper.findComponent(SubjectForm).props('activePlayerCount')).toBe(esperado)
+  })
+
   it('marca o ícone de espera do não-admin como decorativo', () => {
     const wrapper = mountSetup(false, roomWith())
 
