@@ -274,6 +274,39 @@ describe('RedisPersistence', () => {
     expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('BROKEN')
   })
 
+  // Sibling of the case above, with the opposite failure mode: an orphan adminId
+  // throws nothing, it leaves the room permanently un-driveable (requireAdmin never
+  // matches, and leaveRoom's wasAdmin never fires, so no handover rescues it).
+  // Dropping the room is the lesser loss. `players: []` is the degenerate case —
+  // an empty room is destroyed in-process, so a snapshot of one is already broken.
+  it.each([
+    ['adminId names nobody in players', { adminId: 'ghost' }],
+    ['no players at all', { players: [] }],
+  ])('loadAll drops a snapshot with an orphan adminId: %s', async (_, broken) => {
+    await redis.sadd('rooms:index', 'ORPHAN')
+    redis.strings.set('room:ORPHAN', { ...sampleRoom(), id: 'ORPHAN', ...broken })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms).toEqual([])
+    expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('ORPHAN')
+  })
+
+  // The guard must key off membership, not role: leaveRoom's observers-only
+  // fallback and the join normalization can both leave the admin seated with a
+  // role the client renders differently. Only "is anybody there?" is structural.
+  it('loadAll keeps a room whose admin is seated but not roled admin', async () => {
+    await redis.sadd('rooms:index', 'ROLEY')
+    redis.strings.set('room:ROLEY', {
+      ...sampleRoom(),
+      id: 'ROLEY',
+      adminId: 'p1',
+      players: [{ id: 'p1', name: 'Ana', role: 'observer' }],
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['ROLEY'])
+  })
+
   it('loadAll keeps a consistent -1 index (a room still in setup)', async () => {
     await redis.sadd('rooms:index', 'SETUP')
     redis.strings.set('room:SETUP', {

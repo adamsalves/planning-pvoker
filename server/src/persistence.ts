@@ -75,7 +75,7 @@ const roomShapeSchema = z.object({
   currentRoundIndex: z.number().int(),
 })
 
-// The shape above plus the one invariant that spans two fields. Kept as a separate
+// The shape above plus the invariants that span two fields. Kept as a separate
 // step so the field list stays a plain object literal.
 //
 // Cross-field guard: zod validates each field in isolation, so without this a
@@ -87,12 +87,31 @@ const roomShapeSchema = z.object({
 // whole process down with it. Rejecting here means such a snapshot is DISCARDED
 // like any other malformed one (loadAll drops it and self-heals the index): the
 // affected room is lost, every other room boots fine.
-const roomSchema = roomShapeSchema.refine(
-  (room) =>
-    room.currentRoundIndex === -1 ||
-    (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
-  { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
-)
+//
+// Second guard, same reasoning, different symptom: an adminId that names nobody in
+// `players` crashes nothing, it QUIETLY BRICKS the room. requireAdmin (events.ts)
+// compares the caller's id against adminId, so no admin command ever passes; and
+// leaveRoom's `wasAdmin` check never fires either, so the handover that exists to
+// rescue a room with no one driving it can't trigger. The room stays alive and
+// un-driveable until its TTL. In-process this is unreachable — createRoom takes
+// adminId from a player it just seated, and leaveRoom always repoints it at a
+// remaining player — so, again, only a rehydrated snapshot gets here. This also
+// covers `players: []`: a room only empties through leaveRoom, which destroys it.
+//
+// Other cross-field mismatches were considered and left alone deliberately: a
+// `phase` out of step with `rounds`, votes keyed by non-players, or orphan
+// excludedVoterIds all degrade cosmetically at worst. Discarding a room is a real
+// cost, so it's reserved for what actually breaks it.
+const roomSchema = roomShapeSchema
+  .refine(
+    (room) =>
+      room.currentRoundIndex === -1 ||
+      (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
+    { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
+  )
+  .refine((room) => room.players.some((p) => p.id === room.adminId), {
+    message: 'adminId must name one of the room players',
+  })
 
 // A room's token hash read back from Redis: { playerId -> token }. Values are
 // validated PER FIELD in loadAll (a single corrupt field must not drop the whole
