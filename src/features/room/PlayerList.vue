@@ -8,13 +8,13 @@ import IconEye from '~icons/lucide/eye'
 import IconUserMinus from '~icons/lucide/user-minus'
 import IconSquare from '~icons/lucide/square'
 import IconSquareCheck from '~icons/lucide/square-check'
-import type { Player } from '@/types'
+import type { Player, UiRoundStatus } from '@/types'
 import { activePlayersOf, observersOf } from '@/utils/players'
 
 interface Props {
   players: Player[]
   votes: Record<string, string | number>
-  status: 'waiting' | 'voting' | 'revealed'
+  status: UiRoundStatus
   // Tirados pela admin DESTA rodada — seguem nesta seção (não viram espectadores).
   nonVoterIds?: string[]
   // Mostra o toggle de "vota nesta rodada". Default false: o RoomSetup usa este
