@@ -1119,6 +1119,59 @@ describe('hydrate', () => {
       expect(warn).not.toHaveBeenCalled()
     })
 
+    // Sem isto o Redis guarda o adminId órfão até alguma mutação não-relacionada
+    // salvar, e o warn acima re-dispara a CADA boot — quem opera não distingue
+    // "ainda quebrado" de "consertado e re-detectado".
+    it('persists the repair, so the next boot finds it fixed', async () => {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId: 'ghost',
+            config,
+            players: [member],
+            subjects: ['A'],
+            phase: 'voting',
+            rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: {} }],
+            currentRoundIndex: 0,
+          },
+        ],
+        tokens: new Map(),
+      }
+      const manager = new RoomManager(persistence)
+      await manager.hydrate()
+      await vi.waitFor(() => expect(persistence.savedRooms.length).toBeGreaterThan(0))
+
+      expect(persistence.lastRoom?.adminId).toBe('m1')
+    })
+
+    // O outro lado: uma sala saudável não pode gerar escrita nenhuma no boot. Um
+    // save por sala a cada restart é justamente o que o write-through evita.
+    it('does not write anything when there was nothing to repair', async () => {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId: 'a1',
+            config,
+            players: [admin],
+            subjects: [],
+            phase: 'setup',
+            rounds: [],
+            currentRoundIndex: -1,
+          },
+        ],
+        tokens: new Map(),
+      }
+      const manager = new RoomManager(persistence)
+      await manager.hydrate()
+      await Promise.resolve() // deixa qualquer save agendado escoar
+
+      expect(persistence.savedRooms).toEqual([])
+    })
+
     // DISCRIMINA A ORDEM entre repairOrphanAdmin e pruneOrphanVotes. Um observer
     // promovido a admin vira elegível, então o voto dele sobrevive; se a poda
     // rodasse primeiro, ela o julgaria ainda observer e o descartaria. Inverter as

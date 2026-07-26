@@ -109,9 +109,11 @@ const roomShapeSchema = z.object({
 //     room.players and an id nobody carries never matches;
 //   - a vote keyed by a NON-PLAYER is live data, not decoration: the client feeds
 //     the raw votes map to useVoteStats, so it lands in the average and can even
-//     manufacture a consensus (see the prune in leaveRoom). Rehydration is the one
-//     path that still produces these — a ghost never leaves, so its vote is never
-//     pruned — and it's tracked as backlog rather than fixed by rejection here;
+//     manufacture a consensus. Not rejected here because it is already REPAIRED —
+//     RoomManager.pruneOrphanVotes drops exactly these on the way in. (Distinct from
+//     a rehydration GHOST, which is a seated player whose vote is legitimately keyed
+//     by a real member; that one survives the boot on purpose and is dropped later,
+//     by sealRound at the reveal.);
 //   - a `phase: 'setup'` carrying non-empty `rounds` passes both refines and then
 //     loses that history the moment startSession overwrites `room.rounds`.
 // Silent damage, not crashes — and still not worth more guards, because discarding
