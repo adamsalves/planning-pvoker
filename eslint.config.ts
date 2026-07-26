@@ -28,7 +28,16 @@ export default defineConfigWithVueTs(
     // e levá-lo para o bundle. Isto fecha a porta: helper de teste só em teste.
     name: 'app/test-utils-are-test-only',
     files: ['**/*.{vue,ts,mts,tsx}'],
-    ignores: ['**/__tests__/**', 'src/test-utils/**', 'e2e/**', 'vitest.setup.ts'],
+    // Nem todo spec mora em __tests__/: src/stores/room.spec.ts é colocalizado ao
+    // lado do módulo. Dispensar por NOME de arquivo além de por diretório.
+    ignores: [
+      '**/__tests__/**',
+      '**/*.spec.{ts,mts,tsx}',
+      '**/*.test.{ts,mts,tsx}',
+      'src/test-utils/**',
+      'e2e/**',
+      'vitest.setup.ts',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -42,6 +51,15 @@ export default defineConfigWithVueTs(
           ],
         },
       ],
+    },
+  },
+
+  {
+    name: 'app/no-type-assertions',
+    files: ['**/*.{vue,ts,mts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
     },
   },
 

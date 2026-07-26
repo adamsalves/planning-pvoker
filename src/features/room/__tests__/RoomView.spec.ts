@@ -768,7 +768,7 @@ describe('RoomView.vue quem vota na rodada', () => {
 
   it('rodada sem o campo (pré-feature) não exclui ninguém', async () => {
     const room = votingRoom([])
-    delete room.rounds[0]!.excludedVoterIds
+    delete must(room.rounds[0], 'first round').excludedVoterIds
     const wrapper = mountVoting(room)
     await flushPromises()
 

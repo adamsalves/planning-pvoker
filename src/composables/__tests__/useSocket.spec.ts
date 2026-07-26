@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Mock } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSocket } from '../useSocket'
 import { JoinAckError } from '../joinErrors'
@@ -97,25 +96,19 @@ describe('useSocket', () => {
     expect(io).toHaveBeenCalled()
 
     // Get the mocked socket logic
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     expect(mockSocket.on).toHaveBeenCalledWith('connect', expect.any(Function))
     expect(mockSocket.on).toHaveBeenCalledWith('disconnect', expect.any(Function))
     expect(mockSocket.on).toHaveBeenCalledWith('room_state_updated', expect.any(Function))
 
     // Manually trigger connect callback to test reactivity
-    const connectCb = mockSocket.on.mock.calls.find(
-      (call: unknown[]) => call[0] === 'connect',
-    )?.[1] as () => void
-    connectCb()
+    socketHandler('connect')()
 
     expect(isConnected.value).toBe(true)
 
     // Manually trigger disconnect
-    const disconnectCb = mockSocket.on.mock.calls.find(
-      (call: unknown[]) => call[0] === 'disconnect',
-    )?.[1] as () => void
-    disconnectCb()
+    socketHandler('disconnect')()
 
     expect(isConnected.value).toBe(false)
   })
@@ -126,7 +119,7 @@ describe('useSocket', () => {
 
     joinRoom('room-1', p)
 
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
     expect(mockSocket.emit).toHaveBeenCalledWith(
       'join_room',
       { roomId: 'room-1', player: p, config: undefined },
@@ -148,7 +141,7 @@ describe('useSocket', () => {
   it('emits cast_vote', () => {
     const { castVote, connect } = useSocket()
     connect() // initialize socket manually to capture exact call without chaining auto-connect if any
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     castVote('room-1', 'p1', 5)
 
@@ -172,7 +165,7 @@ describe('useSocket', () => {
   it('emits start_session', () => {
     const { startSession, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     startSession('room-1')
 
@@ -184,7 +177,7 @@ describe('useSocket', () => {
   it('emits next_round', () => {
     const { nextRound, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     nextRound('room-1')
 
@@ -196,7 +189,7 @@ describe('useSocket', () => {
   it('emits add_subjects', () => {
     const { addSubjects, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     addSubjects('room-1', ['Login', 'Signup'])
 
@@ -209,7 +202,7 @@ describe('useSocket', () => {
   it('emits reveal_votes', () => {
     const { revealVotes, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     revealVotes('room-1')
 
