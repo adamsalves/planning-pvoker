@@ -811,11 +811,14 @@ describe('hydrate', () => {
     expect(bare.getRoom('anything')).toBeUndefined()
   })
 
-  // Snapshots written before leaveRoom started pruning carry votes with no matching
-  // player. Nothing on the server counts them, but the client feeds the raw map to
-  // useVoteStats — so a departed voter still inflates the average and can fabricate
+  // Snapshots written before leaveRoom started pruning carry votes the round does not
+  // count. Nothing on the server counts them either, but the client feeds the raw map
+  // to useVoteStats — so a departed voter still inflates the average and can fabricate
   // a consensus. The fix in leaveRoom is not retroactive; this is what cleans them.
-  function seedWith(round: Round, players = [admin]): RoomManager {
+  //
+  // Takes the whole rounds array + index so the "current round isn't rounds[0]" case
+  // is expressible; the single-round overload covers the common shape.
+  function seedRounds(rounds: Round[], index: number, players = [admin]): RoomManager {
     const persistence = new RecordingPersistence()
     persistence.seed = {
       rooms: [
@@ -825,20 +828,86 @@ describe('hydrate', () => {
           config,
           players,
           subjects: ['A'],
-          phase: 'voting',
-          rounds: [round],
-          currentRoundIndex: 0,
+          phase: index === -1 ? 'setup' : 'voting',
+          rounds,
+          currentRoundIndex: index,
         },
       ],
-      tokens: new Map(),
+      tokens: new Map([['r9::a1', 'tok-9']]),
     }
     return new RoomManager(persistence)
   }
+
+  const seedWith = (round: Round, players = [admin]) => seedRounds([round], 0, players)
 
   it('drops a legacy vote with no matching player from the round in progress', async () => {
     const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { a1: 5, gone: 8 } })
     await manager.hydrate()
     expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  // The prune keys off eligibleVotersOf — the seam castVote admits through — and not
+  // off "is seated". These two fix that distinction: without them, swapping the seam
+  // for a plain room.players.some() passes the whole suite (it did, before they existed).
+  it('drops the vote of a seated OBSERVER, whom the round never counted', async () => {
+    const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { a1: 5, o1: 5 } }, [
+      admin,
+      observer,
+    ])
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  it('drops the vote of a player the admin excluded from the round', async () => {
+    const manager = seedWith(
+      {
+        id: 'x',
+        subject: 'A',
+        status: 'voting',
+        votes: { a1: 5, m1: 5 },
+        excludedVoterIds: ['m1'],
+      },
+      [admin, member],
+    )
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  // Both exclusions in ONE snapshot — the likeliest real shape of a legacy room:
+  // someone left mid-round AND the process restarted before anyone came back.
+  it('drops the departed vote while keeping the ghost in the same round', async () => {
+    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+    const manager = seedWith(
+      { id: 'x', subject: 'A', status: 'voting', votes: { g1: 8, gone: 3 } },
+      [admin, ghost],
+    )
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ g1: 8 })
+  })
+
+  // The prune must follow currentRoundIndex, not assume rounds[0]. The earlier round
+  // here is still 'voting' on purpose: even an unrevealed PAST round is out of scope.
+  it('prunes the round at currentRoundIndex and leaves earlier rounds untouched', async () => {
+    const manager = seedRounds(
+      [
+        { id: 'r0', subject: 'A', status: 'voting', votes: { a1: 1, gone: 2 } },
+        { id: 'r1', subject: 'B', status: 'voting', votes: { a1: 3, gone: 4 } },
+      ],
+      1,
+    )
+    await manager.hydrate()
+    const rounds = manager.getRoom('r9')?.rounds
+    expect(rounds?.[1].votes).toEqual({ a1: 3 })
+    expect(rounds?.[0].votes).toEqual({ a1: 1, gone: 2 })
+  })
+
+  // A room still in setup has no round to index. Guards the currentRoundIndex === -1
+  // early return, which was only ever covered by accident, from unrelated specs.
+  it('handles a room in setup, with no round to prune', async () => {
+    const manager = seedRounds([], -1)
+    await expect(manager.hydrate()).resolves.toBeUndefined()
+    expect(manager.getRoom('r9')?.rounds).toEqual([])
+    expect(manager.hasToken('r9', 'a1')).toBe(true) // o boot seguiu inteiro
   })
 
   // A revealed round is settled history — leaveRoom skips it for the same reason, so
@@ -852,6 +921,18 @@ describe('hydrate', () => {
     })
     await manager.hydrate()
     expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5, gone: 8 })
+  })
+
+  // The runtime guard on the indexed access, and why it earns its keep. persistence's
+  // refine rejects an out-of-range index, so this snapshot can only come from a fake
+  // (or a future path that skips the schema) — but if one ever reaches here, throwing
+  // is the worst outcome available: hydrate aborts mid-loop, the TOKEN map never
+  // loads, and hasToken() returning false for everyone switches OFF the
+  // anti-escalation check in join_room. Surviving the bad room is what keeps that on.
+  it('survives a snapshot whose currentRoundIndex is out of range, tokens included', async () => {
+    const manager = seedRounds([], 5)
+    await expect(manager.hydrate()).resolves.toBeUndefined()
+    expect(manager.hasToken('r9', 'a1')).toBe(true)
   })
 
   // A rehydration ghost is NOT an orphan: it is still seated, so its vote survives.
