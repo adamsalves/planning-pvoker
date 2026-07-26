@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 
-// Exportada porque este é o único componente com `defineModel`: o vue-tsc gera um
-// `__VLS_export` que referencia este tipo, e o projeto vitest (composite, portanto
-// com emissão de declarações) recusa exportar algo que use um nome privado.
-// @public: ninguém importa — o export existe só para a declaração fechar.
-/** @public */
-export interface Props {
+interface Props {
   label?: string
   type?: string
   placeholder?: string

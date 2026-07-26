@@ -1,21 +1,19 @@
 {
   "extends": "./tsconfig.app.json",
-  // O tsconfig.app.json EXCLUI `src/**/__tests__/*`; zerar o exclude aqui é o que
-  // traz os specs para dentro deste projeto. Os specs de deriva de contrato
-  // (src/types/__tests__) ainda importam `server/src`, que precisa estar listado ou
-  // o TS o reporta como arquivo fora do projeto — ver o contrato de acoplamento
-  // documentado no topo do deck-drift.spec.ts.
-  "include": [
-    "env.d.ts",
-    "src/**/*",
-    "src/**/*.vue",
-    "server/src/types.ts",
-    "server/src/validation.ts",
-    "server/src/errorCodes.ts"
-  ],
+  // O include vem do tsconfig.app.json de propósito — não duplique a lista aqui, ou
+  // ela deriva em silêncio quando o app mudar. O que traz os specs para dentro deste
+  // projeto é zerar o exclude: o app EXCLUI `src/**/__tests__/*`.
+  //
+  // Os specs de deriva de contrato (src/types/__tests__) importam `server/src`. Esses
+  // arquivos entram no programa como dependência dos specs, e são type-checados —
+  // ver o contrato de acoplamento documentado no topo do deck-drift.spec.ts.
   "exclude": [],
   "compilerOptions": {
-    "composite": true,
+    // Deliberadamente NÃO composite, como os outros dois projetos do repo. Composite
+    // obriga emissão de declarações, e isso cobrava caro por nada aqui: forçava um
+    // `export` no BaseInput.vue só para o `__VLS_export` do vue-tsc fechar, e exigia
+    // listar nominalmente cada arquivo do server importado por um spec (TS6307).
+    //
     // ESSENCIAL, e a razão de os specs terem passado meses sem type-check: sem esta
     // linha o projeto herda o tsBuildInfoFile do tsconfig.app.json, e os dois gravam
     // no MESMO arquivo. O `vue-tsc --build` então lê o carimbo do app ao checar este
