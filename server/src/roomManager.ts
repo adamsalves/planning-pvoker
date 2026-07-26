@@ -89,10 +89,46 @@ export class RoomManager {
   // separate follow-up (it needs presence broadcast to clients).
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
-    for (const room of rooms) this.rooms.set(room.id, room)
+    for (const room of rooms) {
+      this.pruneOrphanVotes(room)
+      this.rooms.set(room.id, room)
+    }
     for (const [key, token] of tokens) this.tokens.set(key, token)
     if (rooms.length > 0) {
       logger.info(`♻️  Rehydrated ${rooms.length} room(s) from persistence`)
+    }
+  }
+
+  // Drops votes in the round in progress that belong to nobody seated in the room.
+  //
+  // In-process this can't happen anymore: leaveRoom prunes the departing player's
+  // vote before saving. But snapshots written BEFORE that fix are still out there —
+  // a room whose voter left mid-round carries their vote with no matching player —
+  // and that fix is not retroactive. Such a vote is counted by the client (which
+  // feeds the raw map to useVoteStats) and by nothing on the server, so it inflates
+  // the average and can fabricate a consensus out of a voter who is gone.
+  //
+  // Beyond the legacy cleanup this is a boundary invariant worth holding: a vote
+  // must belong to a seated player. Snapshots come from outside the process.
+  //
+  // What this deliberately does NOT do — the two exclusions matter:
+  //   - Past and revealed rounds are left alone. A vote outliving its player is
+  //     EXPECTED there: leaveRoom prunes only the round in progress, precisely so a
+  //     revealed result stays the one the room saw.
+  //   - A rehydration GHOST is not an orphan. It's still in room.players (see the
+  //     note on hydrate above), so its vote survives this, by design: at boot nobody
+  //     is present yet, and pruning by presence would delete the votes of a whole
+  //     team that is simply mid-reconnect — the exact work persistence exists to
+  //     save. The ghost's vote keeps counting in the reveal stats; the ghost can no
+  //     longer STALL the round (the quorum is presence-aware), and telling "coming
+  //     back" from "gone for good" needs presence broadcast to clients, which is the
+  //     follow-up already noted above. Accepted limitation, not an oversight.
+  private pruneOrphanVotes(room: Room): void {
+    if (room.currentRoundIndex === -1) return
+    const round = room.rounds[room.currentRoundIndex]
+    if (round.status !== 'voting') return
+    for (const playerId of Object.keys(round.votes)) {
+      if (!room.players.some((p) => p.id === playerId)) delete round.votes[playerId]
     }
   }
 

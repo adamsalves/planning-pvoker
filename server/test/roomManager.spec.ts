@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { RoomManager } from '../src/roomManager'
-import type { Player, RoomConfig, Room } from '../src/types'
+import type { Player, RoomConfig, Room, Round } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
 // Frozen because createRoom keeps it BY REFERENCE as room.config: a stray write
@@ -809,5 +809,62 @@ describe('hydrate', () => {
     const bare = new RoomManager()
     await bare.hydrate()
     expect(bare.getRoom('anything')).toBeUndefined()
+  })
+
+  // Snapshots written before leaveRoom started pruning carry votes with no matching
+  // player. Nothing on the server counts them, but the client feeds the raw map to
+  // useVoteStats — so a departed voter still inflates the average and can fabricate
+  // a consensus. The fix in leaveRoom is not retroactive; this is what cleans them.
+  function seedWith(round: Round, players = [admin]): RoomManager {
+    const persistence = new RecordingPersistence()
+    persistence.seed = {
+      rooms: [
+        {
+          id: 'r9',
+          adminId: 'a1',
+          config,
+          players,
+          subjects: ['A'],
+          phase: 'voting',
+          rounds: [round],
+          currentRoundIndex: 0,
+        },
+      ],
+      tokens: new Map(),
+    }
+    return new RoomManager(persistence)
+  }
+
+  it('drops a legacy vote with no matching player from the round in progress', async () => {
+    const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { a1: 5, gone: 8 } })
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  // A revealed round is settled history — leaveRoom skips it for the same reason, so
+  // a vote outliving its player is EXPECTED there and must survive the boot intact.
+  it('leaves a revealed round intact even with a vote from a departed player', async () => {
+    const manager = seedWith({
+      id: 'x',
+      subject: 'A',
+      status: 'revealed',
+      votes: { a1: 5, gone: 8 },
+    })
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5, gone: 8 })
+  })
+
+  // A rehydration ghost is NOT an orphan: it is still seated, so its vote survives.
+  // Pruning by presence instead of membership would wipe the votes of a whole team
+  // mid-reconnect (at boot nobody is present yet) — the work persistence exists to save.
+  it('keeps the vote of a seated player who is merely absent (rehydration ghost)', async () => {
+    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+    const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { g1: 8 } }, [
+      admin,
+      ghost,
+    ])
+    manager.setPresence({ isPresent: () => false }) // ninguém conectou ainda
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ g1: 8 })
   })
 })
