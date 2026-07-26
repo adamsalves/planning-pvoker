@@ -4,6 +4,7 @@ import JoinRoomForm from '../JoinRoomForm.vue'
 import IconUser from '~icons/lucide/user'
 import IconEye from '~icons/lucide/eye'
 import IconLogIn from '~icons/lucide/log-in'
+import { must } from '@/test-utils/must'
 
 // Mock estável (hoisted) para asserir os args do submit; a lógica de joinRoom
 // (navegação/token) segue testada em useRoom.spec.
@@ -40,8 +41,8 @@ describe('JoinRoomForm.vue', () => {
     const options = wrapper.findAll('.role-option')
 
     expect(options).toHaveLength(2)
-    expect(options[0].classes()).toContain('selected') // member
-    expect(options[1].classes()).not.toContain('selected')
+    expect(must(options[0]).classes()).toContain('selected') // member
+    expect(must(options[1]).classes()).not.toContain('selected')
   })
 
   it('moves the selection to observer when picked', async () => {
@@ -50,8 +51,8 @@ describe('JoinRoomForm.vue', () => {
     await wrapper.find('input[value="observer"]').setValue()
 
     const options = wrapper.findAll('.role-option')
-    expect(options[1].classes()).toContain('selected')
-    expect(options[0].classes()).not.toContain('selected')
+    expect(must(options[1]).classes()).toContain('selected')
+    expect(must(options[0]).classes()).not.toContain('selected')
   })
 
   it('renders its own submit button', () => {
@@ -67,8 +68,8 @@ describe('JoinRoomForm.vue', () => {
 
     expect(wrapper.findComponent(IconUser).exists()).toBe(true)
     expect(wrapper.findComponent(IconEye).exists()).toBe(true)
-    expect(options[0].find('svg.role-icon').exists()).toBe(true)
-    expect(options[1].find('svg.role-icon').exists()).toBe(true)
+    expect(must(options[0]).find('svg.role-icon').exists()).toBe(true)
+    expect(must(options[1]).find('svg.role-icon').exists()).toBe(true)
     expect(wrapper.text()).not.toMatch(/🃏|👁/)
   })
 
@@ -97,7 +98,7 @@ describe('JoinRoomForm.vue', () => {
 
     expect(select.exists()).toBe(true)
     expect(select.findAll('option')).toHaveLength(6) // "Sem área" + 5 do enum
-    expect(select.findAll('option')[0].text()).toBe('Sem área')
+    expect(must(select.findAll('option')[0]).text()).toBe('Sem área')
     expect(wrapper.text()).toContain('Sua área (opcional)')
   })
 

@@ -56,12 +56,21 @@ function socketHandler(event: string) {
 }
 
 // Grab a Manager-level handler (reconnect_*) registered via socket.io.on.
-function managerHandler(event: string) {
+//
+// Devolve um wrapper em vez do handler cru: os overloads de `Manager.on` fazem o
+// TS reduzir a assinatura recuperada do mock à interseção dos eventos, cujos
+// parâmetros colapsam em `never` — então chamar `handler(1)` não compila, e
+// `handler()` reclama de aridade. O teste, por natureza, não conhece o tipo dos
+// argumentos daquele evento específico; o `Reflect.apply` repassa o que vier sem
+// nenhuma asserção (a regra do projeto proíbe `as`/`!`).
+function managerHandler(event: string): (...args: unknown[]) => void {
   const call = vi.mocked(lastSocket().io.on).mock.calls.find((c) => c[0] === event)
   if (!call) throw new Error(`manager handler not registered: ${event}`)
   const handler = call[1]
   if (typeof handler !== 'function') throw new Error(`handler is not a function: ${event}`)
-  return handler
+  return (...args: unknown[]) => {
+    Reflect.apply(handler, undefined, args)
+  }
 }
 
 const player: Player = { id: 'p1', name: 'Joe', role: 'member' }

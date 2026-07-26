@@ -6,6 +6,7 @@ import RoomSummary from '../RoomSummary.vue'
 import VoteReveal from '../VoteReveal.vue'
 import { useRoomStore } from '@/stores/room'
 import type { Room, Round } from '@/types'
+import { must } from '@/test-utils/must'
 
 function round(
   id: string,
@@ -53,7 +54,7 @@ describe('RoomSummary.vue (live room summary)', () => {
     expect(wrapper.text()).toContain('Login')
     expect(wrapper.text()).not.toContain('Checkout')
     // Os votos passados são os da rodada REVELADA — nunca os da rodada em votação.
-    expect(cards[0].props('votes')).toEqual({ p1: 5, p2: 5 })
+    expect(must(cards[0]).props('votes')).toEqual({ p1: 5, p2: 5 })
   })
 
   it('numbers rounds by their real position, not the filtered subset', () => {

@@ -5,6 +5,11 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
+    // O @vue/tsconfig fixa lib em es2020 embora o target seja esnext, então o TS
+    // nega APIs que todo navegador-alvo e o Node do CI têm (Array.prototype.at foi
+    // o caso concreto). Subir a lib não muda emissão nenhuma — só declarações.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
     "paths": {
       "@/*": ["./src/*"]
     }
