@@ -25,8 +25,18 @@ export type PlayerTag = (typeof PLAYER_TAGS)[number]
 // Foi o que aconteceu com um 'waiting' em RoundStatus, removido em 2026-07-26 —
 // nada nunca o produziu ou consumiu COMO RoundStatus (o servidor jamais teve a
 // string em `server/src/`, em commit nenhum).
-export type RoundStatus = 'voting' | 'revealed'
-export type RoomPhase = 'setup' | 'voting' | 'completed'
+// Const arrays como o resto do arquivo, e não uniões soltas, por um motivo a mais
+// aqui: união de tipo some na compilação, então nenhum teste alcança. Como estes
+// dois espelham o servidor, é o valor em runtime que torna a deriva ASSERTÁVEL —
+// ver o guarda em __tests__/contract-drift.spec.ts, que compara com as listas de
+// server/src/types.ts e falha se um lado ganhar um valor que o outro não tem.
+/** @public */
+export const ROUND_STATUSES = ['voting', 'revealed'] as const
+/** @public */
+export const ROOM_PHASES = ['setup', 'voting', 'completed'] as const
+
+export type RoundStatus = (typeof ROUND_STATUSES)[number]
+export type RoomPhase = (typeof ROOM_PHASES)[number]
 
 // ATENÇÃO: 'waiting' continua VIVO no cliente — só não é contrato de rede. É um
 // pseudo-estado de UI que significa "ainda não há rodada", nascido do
