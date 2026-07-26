@@ -262,6 +262,18 @@ export class RoomManager {
       // sobrescreve como name/role — inclusive limpando (undefined) se a pessoa
       // tirou a tag. A tag NÃO é atribuída por outro caminho no server.
       existingPlayer.tag = player.tag
+
+      // Virar espectador tira a pessoa do que a rodada conta (eligibleVotersOf
+      // filtra observers), então o voto que ela já tinha dado precisa ir junto —
+      // mesma regra e mesmo seam do leaveRoom e do setRoundVoter.
+      //
+      // Alcançável sem sair da sala de verdade: o cliente reenvia o papel do user
+      // store a cada join, então quem sai, escolhe "espectador" na home e volta
+      // DENTRO da janela de grace nunca passa pelo leaveRoom — o jogador segue na
+      // sala com o voto intacto e reaparece como espectador. Sem isto, o mapa de
+      // votos guarda o voto de alguém que a rodada não espera mais, e o cliente,
+      // que soma o mapa cru no useVoteStats, o conta na média e no consenso.
+      if (existingPlayer.role === 'observer') this.dropCurrentVote(room, player.id)
     }
 
     this.scheduleSave(roomId)
