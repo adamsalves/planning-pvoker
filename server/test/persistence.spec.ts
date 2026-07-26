@@ -326,10 +326,12 @@ describe('RedisPersistence', () => {
   })
 
   // Deliberately PERMISSIVE, and not for the reason an earlier version of this
-  // comment claimed. In-process the admin always carries role 'admin' — createRoom
-  // forces it, the join normalization resolves the role FROM adminId, and the
-  // handover in leaveRoom sets next.role = 'admin' even in the observers-only
-  // fallback. So this snapshot is as unreachable as an orphan adminId.
+  // comment claimed. In-process the admin always carries role 'admin', enforced in
+  // the SOCKET layer, not here: events.ts hands createRoom a `{ ...player, role:
+  // 'admin' }` and resolves every later join's role FROM adminId — RoomManager
+  // itself just seats whoever it is given. The handover in leaveRoom then sets
+  // next.role = 'admin' even in the observers-only fallback. So this snapshot is as
+  // unreachable as an orphan adminId.
   //
   // It is kept anyway because the room still WORKS: the admin is merely left out of
   // the quorum (eligibleVotersOf drops observers), and the state SELF-HEALS on the

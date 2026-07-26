@@ -900,4 +900,34 @@ describe('RoomView.vue voto otimista × exclusão', () => {
     expect(wrapper.findComponent(RoomVoting).props('isVotingThisRound')).toBe(false)
     expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBeNull()
   })
+
+  // O outro caminho de poda do servidor: sair da sala (grace expirada) apaga o voto
+  // da rodada em andamento. Aqui isVotingThisRound continua TRUE — a pessoa não é
+  // observer nem foi excluída —, então o watch acima não cobre; sem o watch de
+  // serverVote a carta seguiria acesa sobre um voto que o servidor não tem mais.
+  // Cenário real: blip de rede > grace, o socket reconecta e o rejoin recoloca a
+  // pessoa na sala sem nunca recarregar a instância Vue.
+  it('limpa o voto otimista quando o servidor poda o voto de quem saiu e voltou', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    const roomStore = useRoomStore()
+    roomStore.syncRoom(room([]))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    // O otimista PRECISA existir para o cenário valer: é ele que sobreviveria à
+    // poda. Um voto que só veio do servidor some sozinho quando o servidor o apaga.
+    wrapper.findComponent(RoomVoting).vm.$emit('vote', 8)
+    await flushPromises()
+    roomStore.syncRoom(room([], { 'player-2': 8 })) // servidor confirma
+    await flushPromises()
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBe(8)
+
+    // Grace expirou → leaveRoom podou o voto; o rejoin devolve a pessoa à sala.
+    roomStore.syncRoom(room([], {}))
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('isVotingThisRound')).toBe(true)
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBeNull()
+  })
 })
