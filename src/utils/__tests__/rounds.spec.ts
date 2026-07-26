@@ -33,7 +33,7 @@ describe('utils/rounds', () => {
   it('inclui só rodadas reveladas (a rodada em votação não vaza)', () => {
     const result = revealedRoundsOf(roomWith([round('a', 'revealed'), round('b', 'voting')]))
     expect(result).toHaveLength(1)
-    expect(must(result[0]).round.id).toBe('a')
+    expect(must(result[0], 'first revealed round').round.id).toBe('a')
   })
 
   it('numera pelo índice REAL, não pela posição no subconjunto filtrado', () => {

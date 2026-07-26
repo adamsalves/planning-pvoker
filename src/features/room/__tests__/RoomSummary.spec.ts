@@ -54,7 +54,7 @@ describe('RoomSummary.vue (live room summary)', () => {
     expect(wrapper.text()).toContain('Login')
     expect(wrapper.text()).not.toContain('Checkout')
     // Os votos passados são os da rodada REVELADA — nunca os da rodada em votação.
-    expect(must(cards[0]).props('votes')).toEqual({ p1: 5, p2: 5 })
+    expect(must(cards[0], 'first VoteReveal card').props('votes')).toEqual({ p1: 5, p2: 5 })
   })
 
   it('numbers rounds by their real position, not the filtered subset', () => {

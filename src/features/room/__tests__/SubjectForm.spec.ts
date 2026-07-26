@@ -89,7 +89,7 @@ describe('SubjectForm.vue', () => {
     })
 
     const removeButtons = wrapper.findAll('.remove-btn')
-    await must(removeButtons[1]).trigger('click')
+    await must(removeButtons[1], 'remove button 1 (Signup)').trigger('click')
 
     expect(wrapper.emitted()).toHaveProperty('remove')
     expect(wrapper.emitted('remove')?.[0]).toEqual([1])
@@ -101,8 +101,12 @@ describe('SubjectForm.vue', () => {
     })
 
     const buttons = wrapper.findAll('.remove-btn')
-    expect(must(buttons[0]).attributes('aria-label')).toBe('Remover Login')
-    expect(must(buttons[1]).attributes('aria-label')).toBe('Remover Signup')
+    expect(must(buttons[0], 'remove button 0 (Login)').attributes('aria-label')).toBe(
+      'Remover Login',
+    )
+    expect(must(buttons[1], 'remove button 1 (Signup)').attributes('aria-label')).toBe(
+      'Remover Signup',
+    )
   })
 
   it('disables start button when no subjects', () => {

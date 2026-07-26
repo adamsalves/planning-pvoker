@@ -41,8 +41,8 @@ describe('JoinRoomForm.vue', () => {
     const options = wrapper.findAll('.role-option')
 
     expect(options).toHaveLength(2)
-    expect(must(options[0]).classes()).toContain('selected') // member
-    expect(must(options[1]).classes()).not.toContain('selected')
+    expect(must(options[0], 'role option 0 (member)').classes()).toContain('selected')
+    expect(must(options[1], 'role option 1 (observer)').classes()).not.toContain('selected')
   })
 
   it('moves the selection to observer when picked', async () => {
@@ -51,8 +51,8 @@ describe('JoinRoomForm.vue', () => {
     await wrapper.find('input[value="observer"]').setValue()
 
     const options = wrapper.findAll('.role-option')
-    expect(must(options[1]).classes()).toContain('selected')
-    expect(must(options[0]).classes()).not.toContain('selected')
+    expect(must(options[1], 'role option 1 (observer)').classes()).toContain('selected')
+    expect(must(options[0], 'role option 0 (member)').classes()).not.toContain('selected')
   })
 
   it('renders its own submit button', () => {
@@ -68,8 +68,8 @@ describe('JoinRoomForm.vue', () => {
 
     expect(wrapper.findComponent(IconUser).exists()).toBe(true)
     expect(wrapper.findComponent(IconEye).exists()).toBe(true)
-    expect(must(options[0]).find('svg.role-icon').exists()).toBe(true)
-    expect(must(options[1]).find('svg.role-icon').exists()).toBe(true)
+    expect(must(options[0], 'role option 0 (member)').find('svg.role-icon').exists()).toBe(true)
+    expect(must(options[1], 'role option 1 (observer)').find('svg.role-icon').exists()).toBe(true)
     expect(wrapper.text()).not.toMatch(/🃏|👁/)
   })
 
@@ -98,7 +98,7 @@ describe('JoinRoomForm.vue', () => {
 
     expect(select.exists()).toBe(true)
     expect(select.findAll('option')).toHaveLength(6) // "Sem área" + 5 do enum
-    expect(must(select.findAll('option')[0]).text()).toBe('Sem área')
+    expect(must(select.findAll('option')[0], 'first tag option').text()).toBe('Sem área')
     expect(wrapper.text()).toContain('Sua área (opcional)')
   })
 

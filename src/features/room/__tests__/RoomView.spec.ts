@@ -469,10 +469,10 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     const wrapper = mountVotingRoom()
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs).toHaveLength(2)
-    expect(must(tabs[0]).text()).toContain('Votação')
-    expect(must(tabs[1]).text()).toContain('Resumo')
+    expect(must(tabs[0], 'voting tab').text()).toContain('Votação')
+    expect(must(tabs[1], 'summary tab').text()).toContain('Resumo')
     // Só a rodada revelada conta — a rodada em votação não entra no resumo.
-    expect(must(tabs[1]).text()).toContain('(1)')
+    expect(must(tabs[1], 'summary tab').text()).toContain('(1)')
   })
 
   it('defaults to the voting panel and switches to the summary on click', async () => {
@@ -499,10 +499,14 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     const tablist = wrapper.get('[role="tablist"]')
 
     await tablist.trigger('keydown', { key: 'ArrowRight' })
-    expect(must(wrapper.findAll('[role="tab"]')[1]).attributes('aria-selected')).toBe('true')
+    expect(
+      must(wrapper.findAll('[role="tab"]')[1], 'summary tab').attributes('aria-selected'),
+    ).toBe('true')
 
     await tablist.trigger('keydown', { key: 'ArrowLeft' })
-    expect(must(wrapper.findAll('[role="tab"]')[0]).attributes('aria-selected')).toBe('true')
+    expect(must(wrapper.findAll('[role="tab"]')[0], 'voting tab').attributes('aria-selected')).toBe(
+      'true',
+    )
   })
 
   it('does not render the tablist outside the voting phase', () => {
@@ -561,7 +565,9 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     roomStore.syncRoom(fresh)
     await nextTick()
 
-    expect(must(wrapper.findAll('[role="tab"]')[0]).attributes('aria-selected')).toBe('true')
+    expect(must(wrapper.findAll('[role="tab"]')[0], 'voting tab').attributes('aria-selected')).toBe(
+      'true',
+    )
   })
 
   it('moves focus to the newly selected tab on Arrow navigation (roving tabindex)', async () => {
