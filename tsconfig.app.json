@@ -5,10 +5,11 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
-    // O @vue/tsconfig fixa lib em es2020 embora o target seja esnext, então o TS
-    // nega APIs que todo navegador-alvo e o Node do CI têm (Array.prototype.at foi
-    // o caso concreto). Subir a lib não muda emissão nenhuma — só declarações.
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // A lib fica no es2020 do @vue/tsconfig DE PROPÓSITO: este projeto é o código
+    // que vai para o bundle, e o Vite só transpila sintaxe — nunca injeta polyfill
+    // de biblioteca. Manter a lib alinhada ao baseline de browsers do Vite é o que
+    // faz o TS barrar uma API que o alvo não tem. Os testes rodam em Node e
+    // precisam de mais: a lib é subida só lá, no tsconfig.vitest.json.
 
     "paths": {
       "@/*": ["./src/*"]

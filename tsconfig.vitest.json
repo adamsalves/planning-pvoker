@@ -22,6 +22,14 @@
     // projeto, conclui que está atualizado e o PULA — em silêncio, com exit 0. Só
     // `--build --force` revelava os erros. Não remova nem aponte para o do app.
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo",
+
+    // Sobe a lib SÓ para os testes: os specs rodam em Node (vitest/jsdom), onde
+    // Array.prototype.at & cia existem, e usam `.at()` de fato. Deixar isto aqui,
+    // e não no tsconfig.app.json, preserva no código de produção a guarda contra
+    // APIs acima do baseline de browsers do Vite — o mesmo arranjo que o
+    // server/tsconfig.json já faz (lib ES2022 acima do target es2020).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
     "types": ["node"]
   }
 }
