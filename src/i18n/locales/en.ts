@@ -155,6 +155,7 @@ export const en: MessageSchema = {
       votedValue: 'Voted {value}',
       waitingVote: 'Waiting for vote',
       observerSr: 'Observer',
+      absent: 'Away',
     },
     voters: {
       hint: 'Uncheck anyone not voting in this round',

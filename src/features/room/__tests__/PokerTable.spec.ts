@@ -169,4 +169,43 @@ describe('PokerTable.vue', () => {
       expect(wrapper.findAll('.non-voter-spot')).toHaveLength(0)
     })
   })
+
+  // A diferença que importa em relação ao "tirado da rodada": aquele CONTINUA
+  // sentado, o ausente não. A mesa é a metáfora de quem está em volta dela agora, e
+  // os ângulos são distribuídos sobre o total — um lugar guardado para quem não
+  // está distorce o círculo inteiro.
+  describe('jogador ausente', () => {
+    it('não recebe assento, ao contrário do tirado da rodada', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', absentPlayerIds: ['2'] },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(1) // só Adam
+      expect(wrapper.text()).toContain('Adam')
+      expect(wrapper.text()).not.toContain('Eve')
+    })
+
+    // Consequência do anterior, e o motivo de ele importar: com o ausente fora, o
+    // único restante volta à base do oval (cos=0, sin=1) em vez de dividir a volta
+    // com um lugar vazio.
+    it('redistribui os ângulos sobre quem sobrou', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', absentPlayerIds: ['2'] },
+      })
+
+      const style = must(wrapper.findAll('.player-spot')[0], 'player spot 0 (Adam)').attributes(
+        'style',
+      )
+      expect(style ?? '').toContain('--cos: 0.0000')
+      expect(style ?? '').toContain('--sin: 1.0000')
+    })
+
+    it('sem a prop, todo mundo senta (default)', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(2)
+    })
+  })
 })

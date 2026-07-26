@@ -91,6 +91,17 @@ export interface Room {
   phase: RoomPhase
   rounds: Round[]
   currentRoundIndex: number
+  // Sentados que NÃO estão presentes: sem socket vivo e fora da janela de graça.
+  // Na prática é o fantasma de rehidratação — quem está com a aba aberta tem
+  // socket, quem deu refresh está na graça, e quem passou dela o servidor já
+  // removeu. Espelha `RoomBroadcast` em server/src/types.ts, e SÓ existe no
+  // broadcast: é estado do processo (sockets/timers), nunca persistido — do lado
+  // do servidor `Room` não tem este campo, de propósito.
+  //
+  // Opcional pelo mesmo motivo de `excludedVoterIds`: nem toda sala que o cliente
+  // segura veio de um servidor que manda o campo (fixture de teste, e um cliente
+  // novo contra um servidor antigo durante um deploy). Ausente = ninguém ausente.
+  absentPlayerIds?: string[]
 }
 
 // Deck definitions — o rótulo exibido vem do catálogo i18n (chaves `decks.*`).

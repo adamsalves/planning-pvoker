@@ -64,6 +64,7 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
           :votes="currentRound.votes"
           :status="currentRound.status"
           :non-voter-ids="nonVoterIds"
+          :absent-player-ids="roomStore.absentPlayerIds"
         />
       </BaseCard>
 
@@ -133,6 +134,7 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
           :votes="currentRound?.votes ?? {}"
           :status="currentRound?.status ?? 'waiting'"
           :non-voter-ids="nonVoterIds"
+          :absent-player-ids="roomStore.absentPlayerIds"
           :voters-editable="isAdmin && currentRound?.status === 'voting'"
           @toggle-voter="(id, voting) => $emit('toggle-voter', id, voting)"
         />

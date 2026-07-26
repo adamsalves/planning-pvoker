@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPencil from '~icons/lucide/pencil'
 import { useRoomStore } from '@/stores/room'
-import { activePlayersOf } from '@/utils/players'
+import { activePlayersOf, presentPlayersOf } from '@/utils/players'
 import BaseCard from '@/components/BaseCard.vue'
 import SubjectForm from './SubjectForm.vue'
 import PlayerList from './PlayerList.vue'
@@ -24,7 +24,13 @@ const roomStore = useRoomStore()
 
 // Quem senta à mesa — espectador não conta pro gate de iniciar a sessão. Sala com
 // 1 jogador + 1 espectador é uma sessão de 1 votante, não de 2.
-const activePlayerCount = computed(() => activePlayersOf(roomStore.players).length)
+//
+// Ausente também não conta, pelo mesmo motivo: um fantasma de rehidratação não vai
+// votar, e deixá-lo no gate destrava uma sessão que na prática tem menos gente do
+// que o gate exige. Quem consegue clicar em "iniciar" está presente por definição.
+const activePlayerCount = computed(
+  () => presentPlayersOf(activePlayersOf(roomStore.players), roomStore.absentPlayerIds).length,
+)
 </script>
 
 <template>
@@ -62,7 +68,12 @@ const activePlayerCount = computed(() => activePlayersOf(roomStore.players).leng
 
     <div class="sidebar-panel">
       <BaseCard :title="t('room.participants')" class="section-card">
-        <PlayerList :players="roomStore.players" :votes="{}" status="waiting" />
+        <PlayerList
+          :players="roomStore.players"
+          :votes="{}"
+          status="waiting"
+          :absent-player-ids="roomStore.absentPlayerIds"
+        />
       </BaseCard>
     </div>
   </div>

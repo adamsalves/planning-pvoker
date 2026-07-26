@@ -82,6 +82,23 @@ export interface Room {
   currentRoundIndex: number
 }
 
+// The room AS BROADCAST. `Room` is the stored shape — what persistence writes and
+// rehydrates — and presence is emphatically NOT part of it: it lives in sockets and
+// grace timers inside the events.ts closure, is process-local, and is meaningless
+// the moment the process dies. Persisting it would rehydrate a lie.
+//
+// So the wire type is the stored one PLUS a per-broadcast projection, built fresh in
+// notifyRoomUpdate. Keeping it a separate interface is what stops `absentPlayerIds`
+// from ever reaching saveRoom: nothing that holds a `Room` can produce this.
+//
+// Who is in here: a seated player with no live socket and no pending grace timer.
+// In practice that is exactly a rehydration ghost — a live socket counts as present,
+// someone mid-refresh is inside the grace window, and once the grace expires
+// leaveRoom removes the player outright. See the note on RoomManager.hydrate.
+export interface RoomBroadcast extends Room {
+  absentPlayerIds: string[]
+}
+
 // Per-socket authenticated identity, stored on `socket.data` (the idiomatic
 // Socket.IO place) instead of ad-hoc handler closures. Set only after a valid
 // join_room — the single source of truth for authorization; ids from payloads

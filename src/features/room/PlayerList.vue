@@ -8,8 +8,9 @@ import IconEye from '~icons/lucide/eye'
 import IconUserMinus from '~icons/lucide/user-minus'
 import IconSquare from '~icons/lucide/square'
 import IconSquareCheck from '~icons/lucide/square-check'
+import IconUnplug from '~icons/lucide/unplug'
 import type { Player, UiRoundStatus } from '@/types'
-import { activePlayersOf, observersOf } from '@/utils/players'
+import { activePlayersOf, observersOf, presentPlayersOf } from '@/utils/players'
 
 interface Props {
   players: Player[]
@@ -17,6 +18,10 @@ interface Props {
   status: UiRoundStatus
   // Tirados pela admin DESTA rodada — seguem nesta seção (não viram espectadores).
   nonVoterIds?: string[]
+  // Sentados que o servidor diz não estarem presentes (fantasma de rehidratação).
+  // Continuam LISTADOS, e fora da contagem: sumir com alguém é mais confuso que
+  // mostrá-lo apagado, e quem reconectar volta ao normal sem "aparecer do nada".
+  absentPlayerIds?: string[]
   // Mostra o toggle de "vota nesta rodada". Default false: o RoomSetup usa este
   // mesmo componente sem rodada nenhuma, onde a escolha não existe.
   votersEditable?: boolean
@@ -24,6 +29,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   nonVoterIds: () => [],
+  absentPlayerIds: () => [],
   votersEditable: false,
 })
 
@@ -39,6 +45,17 @@ const { t, locale } = useI18n()
 // Separar jogadores ativos dos espectadores
 const activePlayers = computed(() => activePlayersOf(props.players))
 const observers = computed(() => observersOf(props.players))
+
+// A CONTAGEM do título é de quem está presente, a LISTA é de todo mundo sentado.
+// Divergir os dois é o ponto: "Jogadores (2)" com três linhas, uma apagada, diz a
+// verdade sobre quantas pessoas vão votar sem apagar o histórico de quem estava.
+const presentActiveCount = computed(
+  () => presentPlayersOf(activePlayers.value, props.absentPlayerIds).length,
+)
+
+function isPlayerAbsent(playerId: string): boolean {
+  return props.absentPlayerIds.includes(playerId)
+}
 
 function hasVoted(playerId: string): boolean {
   return playerId in props.votes
@@ -57,7 +74,7 @@ function isNonVoter(playerId: string): boolean {
   <div class="player-list-wrapper">
     <!-- Active Players -->
     <div class="player-section">
-      <h4 class="section-title">{{ t('room.players.title', { count: activePlayers.length }) }}</h4>
+      <h4 class="section-title">{{ t('room.players.title', { count: presentActiveCount }) }}</h4>
       <!-- Afordância do toggle. Precisa ser texto SEMPRE visível, não só o title:
            tooltip depende de hover, que não existe em touch, e o problema aqui é
            de descoberta — sem isso a admin vê só uma caixinha sem explicação. -->
@@ -67,7 +84,10 @@ function isNonVoter(playerId: string): boolean {
           v-for="player in activePlayers"
           :key="player.id"
           class="player-item"
-          :class="{ 'non-voter-item': isNonVoter(player.id) }"
+          :class="{
+            'non-voter-item': isNonVoter(player.id),
+            'absent-item': isPlayerAbsent(player.id),
+          }"
           v-memo="[
             player.name,
             player.role,
@@ -76,6 +96,7 @@ function isNonVoter(playerId: string): boolean {
             hasVoted(player.id),
             getVote(player.id),
             isNonVoter(player.id),
+            isPlayerAbsent(player.id),
             votersEditable,
             locale,
           ]"
@@ -115,9 +136,17 @@ function isNonVoter(playerId: string): boolean {
           </div>
           <div class="player-status">
             <Transition name="fade" mode="out-in">
+              <!-- Ausente vem PRIMEIRO, antes até de "fora da rodada": de quem não
+                   está ali não se espera voto nenhum, e anunciar "aguardando voto"
+                   sobre um fantasma é exatamente a mentira que este estado corrige. -->
+              <span v-if="isPlayerAbsent(player.id)" class="absent-badge" key="absent">
+                <IconUnplug aria-hidden="true" /><span class="sr-only">{{
+                  t('room.players.absent')
+                }}</span>
+              </span>
               <!-- Fora da rodada: precede votou/pendente, senão apareceria como
                    "aguardando voto" alguém de quem ninguém espera voto. -->
-              <span v-if="isNonVoter(player.id)" class="non-voter-badge" key="non-voter">
+              <span v-else-if="isNonVoter(player.id)" class="non-voter-badge" key="non-voter">
                 <IconUserMinus aria-hidden="true" /><span class="sr-only">{{
                   t('room.voters.notVotingLabel')
                 }}</span>
@@ -313,6 +342,18 @@ function isNonVoter(playerId: string): boolean {
 }
 
 .non-voter-badge {
+  font-size: var(--text-base);
+  color: var(--c-text-mute);
+}
+
+/* Ausente: mais apagado que o "fora da rodada" DE PROPÓSITO. Aquele é alguém que
+   está na sala e a admin tirou desta rodada; este é alguém que não está na sala.
+   A ordem das opacidades é a ordem da distância. */
+.absent-item {
+  opacity: 0.5;
+}
+
+.absent-badge {
   font-size: var(--text-base);
   color: var(--c-text-mute);
 }
