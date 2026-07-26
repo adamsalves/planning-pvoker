@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CreateRoomForm from '../CreateRoomForm.vue'
 import IconRocket from '~icons/lucide/rocket'
+import { must } from '@/test-utils/must'
 
 // Mock estável (hoisted) para asserir os args do submit; a lógica de createRoom
 // (navegação/token) segue testada em useRoom.spec.
@@ -28,7 +29,7 @@ describe('CreateRoomForm.vue', () => {
     expect(wrapper.text()).toContain('T-Shirt Sizes')
     expect(wrapper.text()).toContain('Sequencial')
     // fibonacci (DECK_TYPES[0]) começa selecionado
-    expect(options[0].classes()).toContain('selected')
+    expect(must(options[0], 'deck option 0 (fibonacci)').classes()).toContain('selected')
   })
 
   it('moves the selection when another deck is picked', async () => {
@@ -37,8 +38,8 @@ describe('CreateRoomForm.vue', () => {
 
     await wrapper.find('input[value="tshirt"]').setValue()
 
-    expect(options[1].classes()).toContain('selected')
-    expect(options[0].classes()).not.toContain('selected')
+    expect(must(options[1], 'deck option 1 (tshirt)').classes()).toContain('selected')
+    expect(must(options[0], 'deck option 0 (fibonacci)').classes()).not.toContain('selected')
   })
 
   it('keeps the auto-reveal checkbox focusable (sr-only, not display:none) and operable', async () => {
@@ -76,7 +77,7 @@ describe('CreateRoomForm.vue', () => {
     expect(select.exists()).toBe(true)
     // "Sem área" + os 5 valores do enum (dev/design/qa/product/other)
     expect(select.findAll('option')).toHaveLength(6)
-    expect(select.findAll('option')[0].text()).toBe('Sem área')
+    expect(must(select.findAll('option')[0], 'first tag option').text()).toBe('Sem área')
     expect(wrapper.text()).toContain('Sua área (opcional)')
   })
 

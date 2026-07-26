@@ -1,8 +1,33 @@
 {
   "extends": "./tsconfig.app.json",
+  // O include vem do tsconfig.app.json de propósito — não duplique a lista aqui, ou
+  // ela deriva em silêncio quando o app mudar. O que traz os specs para dentro deste
+  // projeto é zerar o exclude: o app EXCLUI `src/**/__tests__/*`.
+  //
+  // Os specs de deriva de contrato (src/types/__tests__) importam `server/src`. Esses
+  // arquivos entram no programa como dependência dos specs, e são type-checados —
+  // ver o contrato de acoplamento documentado no topo do deck-drift.spec.ts.
   "exclude": [],
   "compilerOptions": {
-    "composite": true,
+    // Deliberadamente NÃO composite, como os outros dois projetos do repo. Composite
+    // obriga emissão de declarações, e isso cobrava caro por nada aqui: forçava um
+    // `export` no BaseInput.vue só para o `__VLS_export` do vue-tsc fechar, e exigia
+    // listar nominalmente cada arquivo do server importado por um spec (TS6307).
+    //
+    // ESSENCIAL, e a razão de os specs terem passado meses sem type-check: sem esta
+    // linha o projeto herda o tsBuildInfoFile do tsconfig.app.json, e os dois gravam
+    // no MESMO arquivo. O `vue-tsc --build` então lê o carimbo do app ao checar este
+    // projeto, conclui que está atualizado e o PULA — em silêncio, com exit 0. Só
+    // `--build --force` revelava os erros. Não remova nem aponte para o do app.
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo",
+
+    // Sobe a lib SÓ para os testes: os specs rodam em Node (vitest/jsdom), onde
+    // Array.prototype.at & cia existem, e usam `.at()` de fato. Deixar isto aqui,
+    // e não no tsconfig.app.json, preserva no código de produção a guarda contra
+    // APIs acima do baseline de browsers do Vite — o mesmo arranjo que o
+    // server/tsconfig.json já faz (lib ES2022 acima do target es2020).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
     "types": ["node"]
   }
 }

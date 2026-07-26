@@ -23,6 +23,47 @@ export default defineConfigWithVueTs(
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
   {
+    // src/test-utils/ mora dentro do projeto de produção (o tsconfig.app.json só
+    // exclui `src/**/__tests__/*`), então nada impede um .vue de importar o `must`
+    // e levá-lo para o bundle. Isto fecha a porta: helper de teste só em teste.
+    name: 'app/test-utils-are-test-only',
+    files: ['**/*.{vue,ts,mts,tsx}'],
+    // Nem todo spec mora em __tests__/: src/stores/room.spec.ts é colocalizado ao
+    // lado do módulo. Dispensar por NOME de arquivo além de por diretório.
+    ignores: [
+      '**/__tests__/**',
+      '**/*.spec.{ts,mts,tsx}',
+      '**/*.test.{ts,mts,tsx}',
+      'src/test-utils/**',
+      'e2e/**',
+      'vitest.setup.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/test-utils/*', '**/test-utils/*'],
+              message:
+                'Helpers de teste não entram em código de produção — eles seguem para o bundle. Use-os só em __tests__/, e2e/ ou no vitest.setup.ts.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'app/no-type-assertions',
+    files: ['**/*.{vue,ts,mts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+    },
+  },
+
+  {
     name: 'app/rule-overrides',
     rules: {
       // Empty interfaces that extend a single type are intentional: module

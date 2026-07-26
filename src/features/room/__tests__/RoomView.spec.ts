@@ -19,6 +19,7 @@ import { useUserStore } from '@/stores/user'
 import { useConnectionStore } from '@/stores/connection'
 import { JoinAckError } from '@/composables/joinErrors'
 import type { Room } from '@/types'
+import { must } from '@/test-utils/must'
 
 const mockRouterPush = vi.fn()
 const mockRevealVotes = vi.fn()
@@ -434,8 +435,8 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
     // leave_room avisa o servidor (remoção imediata, sem o grace de 30s) e tem
     // de ir ANTES do disconnect — depois dele o pacote não sai.
     expect(mockLeaveRoom).toHaveBeenCalledWith('abc123')
-    expect(mockLeaveRoom.mock.invocationCallOrder[0]).toBeLessThan(
-      mockDisconnect.mock.invocationCallOrder[0],
+    expect(must(mockLeaveRoom.mock.invocationCallOrder[0], 'leave call order')).toBeLessThan(
+      must(mockDisconnect.mock.invocationCallOrder[0], 'disconnect call order'),
     )
     // F3.10 — token e vínculo com a sala descartados no leave.
     expect(userStore.sessionToken).toBeNull()
@@ -468,15 +469,15 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     const wrapper = mountVotingRoom()
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs).toHaveLength(2)
-    expect(tabs[0].text()).toContain('Votação')
-    expect(tabs[1].text()).toContain('Resumo')
+    expect(must(tabs[0], 'voting tab').text()).toContain('Votação')
+    expect(must(tabs[1], 'summary tab').text()).toContain('Resumo')
     // Só a rodada revelada conta — a rodada em votação não entra no resumo.
-    expect(tabs[1].text()).toContain('(1)')
+    expect(must(tabs[1], 'summary tab').text()).toContain('(1)')
   })
 
   it('defaults to the voting panel and switches to the summary on click', async () => {
     const wrapper = mountVotingRoom()
-    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+    const tab = (i: number) => must(wrapper.findAll('[role="tab"]')[i], `tab ${i}`)
 
     expect(tab(0).attributes('aria-selected')).toBe('true')
     expect(tab(1).attributes('aria-selected')).toBe('false')
@@ -498,10 +499,14 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     const tablist = wrapper.get('[role="tablist"]')
 
     await tablist.trigger('keydown', { key: 'ArrowRight' })
-    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+    expect(
+      must(wrapper.findAll('[role="tab"]')[1], 'summary tab').attributes('aria-selected'),
+    ).toBe('true')
 
     await tablist.trigger('keydown', { key: 'ArrowLeft' })
-    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+    expect(must(wrapper.findAll('[role="tab"]')[0], 'voting tab').attributes('aria-selected')).toBe(
+      'true',
+    )
   })
 
   it('does not render the tablist outside the voting phase', () => {
@@ -512,7 +517,7 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
   it('updates the tab counter live when the current round becomes revealed', async () => {
     const wrapper = mountVotingRoom()
     const roomStore = useRoomStore()
-    const summaryTab = () => wrapper.findAll('[role="tab"]')[1]
+    const summaryTab = () => must(wrapper.findAll('[role="tab"]')[1], 'summary tab')
 
     expect(summaryTab().text()).toContain('(1)')
 
@@ -534,7 +539,7 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
   it('resets to the voting tab when a fresh voting phase starts (session reset)', async () => {
     const wrapper = mountVotingRoom()
     const roomStore = useRoomStore()
-    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+    const tab = (i: number) => must(wrapper.findAll('[role="tab"]')[i], `tab ${i}`)
 
     // Vai pro resumo.
     await tab(1).trigger('click')
@@ -560,7 +565,9 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     roomStore.syncRoom(fresh)
     await nextTick()
 
-    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+    expect(must(wrapper.findAll('[role="tab"]')[0], 'voting tab').attributes('aria-selected')).toBe(
+      'true',
+    )
   })
 
   it('moves focus to the newly selected tab on Arrow navigation (roving tabindex)', async () => {
@@ -570,7 +577,9 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     await tablist.trigger('keydown', { key: 'ArrowRight' })
     await flushPromises() // o .focus() roda num nextTick após trocar a aba
 
-    const [votingTab, summaryTab] = wrapper.findAll('[role="tab"]')
+    const tabs = wrapper.findAll('[role="tab"]')
+    const votingTab = must(tabs[0], 'voting tab')
+    const summaryTab = must(tabs[1], 'summary tab')
     // Roving tabindex: o alvo vira focável (0) e o outro sai da ordem de tab (-1)...
     expect(summaryTab.attributes('tabindex')).toBe('0')
     expect(votingTab.attributes('tabindex')).toBe('-1')
@@ -759,7 +768,7 @@ describe('RoomView.vue quem vota na rodada', () => {
 
   it('rodada sem o campo (pré-feature) não exclui ninguém', async () => {
     const room = votingRoom([])
-    delete room.rounds[0]!.excludedVoterIds
+    delete must(room.rounds[0], 'first round').excludedVoterIds
     const wrapper = mountVoting(room)
     await flushPromises()
 

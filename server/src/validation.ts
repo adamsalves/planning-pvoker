@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DeckType, DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS } from './types'
+import { type DeckType, DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS } from './types'
 
 // Limites defensivos: as salas vivem in-memory, então payloads sem limite
 // permitiriam um cliente malicioso estourar a memória do processo.

@@ -5,6 +5,12 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
+    // A lib fica no es2020 do @vue/tsconfig DE PROPÓSITO: este projeto é o código
+    // que vai para o bundle, e o Vite só transpila sintaxe — nunca injeta polyfill
+    // de biblioteca. Manter a lib alinhada ao baseline de browsers do Vite é o que
+    // faz o TS barrar uma API que o alvo não tem. Os testes rodam em Node e
+    // precisam de mais: a lib é subida só lá, no tsconfig.vitest.json.
+
     "paths": {
       "@/*": ["./src/*"]
     }

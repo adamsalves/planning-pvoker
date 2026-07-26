@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import PokerTable from '../PokerTable.vue'
 import PokerCard from '../PokerCard.vue'
 import type { Player } from '@/types'
+import { must } from '@/test-utils/must'
 
 describe('PokerTable.vue', () => {
   const mockPlayers: Player[] = [
@@ -37,11 +38,11 @@ describe('PokerTable.vue', () => {
     // importa — checamos as strings EXATAS (toFixed(4)), não um prefixo frouxo.
     const spots = wrapper.findAll('.player-spot')
     // 1º jogador na base do oval: angle=π/2 → cos=0, sin=1.
-    const firstStyle = spots[0]!.attributes('style') ?? ''
+    const firstStyle = must(spots[0], 'player spot 0 (Adam)').attributes('style') ?? ''
     expect(firstStyle).toContain('--cos: 0.0000')
     expect(firstStyle).toContain('--sin: 1.0000')
     // 2º jogador no topo: angle=3π/2 → cos=-0 (zero negativo, CSS-válido) e sin=-1.
-    const secondStyle = spots[1]!.attributes('style') ?? ''
+    const secondStyle = must(spots[1], 'player spot 1 (Eve)').attributes('style') ?? ''
     expect(secondStyle).toContain('--cos: -0.0000')
     expect(secondStyle).toContain('--sin: -1.0000')
   })
@@ -60,7 +61,7 @@ describe('PokerTable.vue', () => {
     expect(cards).toHaveLength(1)
 
     // It should be face-down
-    expect(cards[0]!.props('faceDown')).toBe(true)
+    expect(must(cards[0], 'poker card 0').props('faceDown')).toBe(true)
 
     // 1 empty slot for Eve
     const emptySlots = wrapper.findAll('.empty-card-slot')
@@ -80,8 +81,8 @@ describe('PokerTable.vue', () => {
     expect(cards).toHaveLength(2)
 
     // Cards should NOT be face down
-    expect(cards[0]!.props('faceDown')).toBe(false)
-    expect(cards[1]!.props('faceDown')).toBe(false)
+    expect(must(cards[0], 'poker card 0').props('faceDown')).toBe(false)
+    expect(must(cards[1], 'poker card 1').props('faceDown')).toBe(false)
 
     // Values should match
     const valuesRendered = wrapper.text()
@@ -95,8 +96,10 @@ describe('PokerTable.vue', () => {
     })
 
     const spots = wrapper.findAll('.player-spot')
-    expect(spots[0]!.find('.sr-only').text()).toContain('Votou')
-    expect(spots[1]!.find('.sr-only').text()).toContain('Aguardando voto')
+    expect(must(spots[0], 'player spot 0 (Adam)').find('.sr-only').text()).toContain('Votou')
+    expect(must(spots[1], 'player spot 1 (Eve)').find('.sr-only').text()).toContain(
+      'Aguardando voto',
+    )
   })
 
   it('announces the revealed vote value via sr-only and hides the decorative card', () => {
@@ -106,9 +109,9 @@ describe('PokerTable.vue', () => {
 
     // O valor revelado é anunciado no name tag ("Votou 8")...
     const spots = wrapper.findAll('.player-spot')
-    expect(spots[0]!.find('.sr-only').text()).toBe('Votou 8')
+    expect(must(spots[0], 'player spot 0 (Adam)').find('.sr-only').text()).toBe('Votou 8')
     // ...e quem não votou não ganha anúncio nenhum
-    expect(spots[1]!.find('.sr-only').exists()).toBe(false)
+    expect(must(spots[1], 'player spot 1 (Eve)').find('.sr-only').exists()).toBe(false)
 
     // A carta da mesa é decorativa: botão desabilitado sem ação, fora da árvore de a11y
     const card = wrapper.findComponent(PokerCard)
@@ -147,7 +150,12 @@ describe('PokerTable.vue', () => {
 
     it('anuncia "não vota" em vez de "aguardando voto"', () => {
       const wrapper = mount(PokerTable, {
-        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting', nonVoterIds: ['2'] },
+        props: {
+          players: [must(mockPlayers[1], 'mock player 1 (Eve)')],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: ['2'],
+        },
       })
 
       expect(wrapper.text()).toContain('Não vota nesta rodada')

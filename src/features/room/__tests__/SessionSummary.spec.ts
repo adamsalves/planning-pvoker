@@ -6,6 +6,7 @@ import SessionSummary from '../SessionSummary.vue'
 import VoteReveal from '../VoteReveal.vue'
 import BaseButton from '@/components/BaseButton.vue'
 import type { Round } from '@/types'
+import { must } from '@/test-utils/must'
 
 function round(id: string, subject: string, votes: Record<string, string | number>): Round {
   return { id, subject, status: 'revealed', votes }
@@ -24,7 +25,9 @@ describe('SessionSummary.vue', () => {
   })
 
   it('usa singular com um único subject', () => {
-    const wrapper = mount(SessionSummary, { props: { rounds: [rounds[0]!] } })
+    const wrapper = mount(SessionSummary, {
+      props: { rounds: [must(rounds[0], 'first round')] },
+    })
     expect(wrapper.text()).toContain('1 subject votado')
     expect(wrapper.text()).not.toContain('1 subjects')
   })
