@@ -134,16 +134,15 @@ export class RoomManager {
   //     "coming back" from "gone for good" needs presence broadcast to clients — the
   //     follow-up already noted above. Accepted limitation, not an oversight.
   private pruneOrphanVotes(room: Room): void {
-    if (room.currentRoundIndex === -1) return
-    // Runtime guard, not a type guard: noUncheckedIndexedAccess is off, so TS types
-    // this as Round and would not warn. It is the only indexed access in this file
-    // reached BEFORE any in-process invariant has held — persistence.ts's refine is
-    // the sole thing standing between a hand-edited snapshot and here. And a throw
-    // costs more at this point than anywhere else: hydrate would abort mid-loop, the
-    // token map would never load, and hasToken() returning false for everyone turns
-    // OFF the anti-escalation check in join_room. index.ts keeps the process serving.
-    const round = room.rounds[room.currentRoundIndex]
-    if (!round || round.status !== 'voting') return
+    // Same resolver the single-vote seam uses, and its `!round` runtime guard earns
+    // its keep HERE above all: this is the one call reached BEFORE any in-process
+    // invariant has held — persistence.ts's refine is all that stands between a
+    // hand-edited snapshot and this line. A throw would cost more here than anywhere
+    // else: hydrate aborts mid-loop, the token map never loads, and hasToken()
+    // returning false for everyone turns OFF the anti-escalation check in join_room,
+    // while index.ts keeps the process serving.
+    const round = this.currentRoundIfVoting(room)
+    if (!round) return
 
     const counted = new Set(this.eligibleVotersOf(room, round).map((p) => p.id))
     const dropped = Object.keys(round.votes).filter((playerId) => !counted.has(playerId))
@@ -366,13 +365,9 @@ export class RoomManager {
     // timer, so no leaveRoom — and its vote survives a restart. Tracked as backlog;
     // fixing it belongs in hydrate(), not in the leave path.
     //
-    // Only the round in progress. A revealed round is settled history — the room
-    // already saw that result, and rewriting it would retroactively change what was
-    // shown (same reason setRoundVoter refuses to touch a revealed round).
-    if (room.currentRoundIndex !== -1) {
-      const currentRound = room.rounds[room.currentRoundIndex]
-      if (currentRound.status === 'voting') delete currentRound.votes[playerId]
-    }
+    // Only the round in progress — the seam below is what enforces that, and a
+    // revealed round is settled history (the room already saw that result).
+    this.dropCurrentVote(room, playerId)
 
     // A present voter just left (their grace expired). If the voters who remain
     // present have all voted, the round can now auto-reveal — the departing
@@ -468,6 +463,36 @@ export class RoomManager {
 
   // --- Voting ---
 
+  // The round that is open for votes right now, or undefined. Two guards, and both
+  // matter: -1 means the room has no round at all (setup, or after a reset), and a
+  // REVEALED round is settled history — the room already saw that result, so nothing
+  // may rewrite it. The `!round` is a runtime guard, not a type one, since
+  // noUncheckedIndexedAccess is off; it only bites on a rehydrated snapshot, the one
+  // path that reaches here without an in-process invariant having held.
+  private currentRoundIfVoting(room: Room): Round | undefined {
+    if (room.currentRoundIndex === -1) return undefined
+    const round = room.rounds[room.currentRoundIndex]
+    return round && round.status === 'voting' ? round : undefined
+  }
+
+  // Single seam for one rule: a vote whose author the round no longer counts must
+  // not reach the reveal. The server itself never trips over such a vote — every
+  // quorum path iterates room.players — but the client feeds the raw votes map to
+  // useVoteStats, so it lands in the count, the average, the distribution and in
+  // hasConsensus, where it can manufacture agreement out of somebody who is gone.
+  //
+  // THREE callers reach this from three different directions, which is exactly why
+  // it is one function: the admin takes someone out of the round (setRoundVoter),
+  // the person leaves the room for good (leaveRoom, after the grace expires), and
+  // the boot finds a snapshot carrying a vote the round does not count
+  // (pruneOrphanVotes, which drops several at once and so guards separately).
+  // Before this was extracted the rule lived duplicated at each site — and the third
+  // one arrived months later, in a PR that had to rediscover the reasoning.
+  private dropCurrentVote(room: Room, playerId: string): void {
+    const round = this.currentRoundIfVoting(room)
+    if (round) delete round.votes[playerId]
+  }
+
   public castVote(roomId: string, playerId: string, value: string | number): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null
@@ -508,9 +533,8 @@ export class RoomManager {
       round.excludedVoterIds = excluded.filter((id) => id !== playerId)
     } else if (!excluded.includes(playerId)) {
       round.excludedVoterIds = [...excluded, playerId]
-      // Drop any vote they had already cast — leaving it behind would skew the
-      // reveal stats with a vote from someone the round no longer counts.
-      delete round.votes[playerId]
+      // Drop any vote they had already cast — same seam the leave path uses.
+      this.dropCurrentVote(room, playerId)
     }
 
     // Taking the last pending voter out can complete the quorum.
