@@ -70,6 +70,49 @@ describe('joinRoom', () => {
   it('returns null for a missing room', () => {
     expect(rm.joinRoom('nope', member)).toBeNull()
   })
+
+  // Sair para a home, escolher "espectador" e voltar DENTRO da grace nunca passa
+  // pelo leaveRoom — o jogador segue sentado, com o voto. Sem a poda, o mapa fica
+  // com o voto de quem a rodada não conta mais, e o cliente soma o mapa cru.
+  function votingRoomWith(...players: Player[]): RoomManager {
+    const rm2 = new RoomManager()
+    rm2.createRoom('r1', admin, config)
+    for (const p of players) rm2.joinRoom('r1', p)
+    rm2.addSubjects('r1', ['A'])
+    rm2.startSession('r1')
+    return rm2
+  }
+
+  it('drops the vote of a player who re-joins as observer', () => {
+    const rm2 = votingRoomWith(member)
+    rm2.castVote('r1', 'm1', 5)
+    expect(rm2.getRoom('r1')?.rounds[0].votes).toEqual({ m1: 5 })
+
+    const room = rm2.joinRoom('r1', { id: 'm1', name: 'Member', role: 'observer' })
+    expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('observer')
+    expect(room?.rounds[0].votes).toEqual({})
+  })
+
+  // Só a troca PARA espectador mexe no voto. Um re-join comum (refresh, segunda
+  // aba) reenvia o mesmo papel e não pode custar o voto de ninguém.
+  it('keeps the vote when a member re-joins as a member', () => {
+    const rm2 = votingRoomWith(member)
+    rm2.castVote('r1', 'm1', 5)
+
+    const room = rm2.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member' })
+    expect(room?.rounds[0].votes).toEqual({ m1: 5 })
+  })
+
+  // Rodada revelada é história registrada — o seam já recusa, e isto fixa que a
+  // troca de papel não abre uma exceção a essa regra.
+  it('leaves a revealed round intact when a player re-joins as observer', () => {
+    const rm2 = votingRoomWith(member)
+    rm2.castVote('r1', 'm1', 5)
+    rm2.revealVotes('r1')
+
+    const room = rm2.joinRoom('r1', { id: 'm1', name: 'Member', role: 'observer' })
+    expect(room?.rounds[0].votes).toEqual({ m1: 5 })
+  })
 })
 
 describe('leaveRoom', () => {
