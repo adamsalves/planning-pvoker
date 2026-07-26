@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DeckType, PLAYER_TAGS } from './types'
+import { DeckType, DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS } from './types'
 
 // Limites defensivos: as salas vivem in-memory, então payloads sem limite
 // permitiriam um cliente malicioso estourar a memória do processo.
@@ -28,7 +28,7 @@ const roomId = z.string().trim().min(1).max(MAX_ROOM_ID)
 const playerSchema = z.object({
   id: z.string().trim().min(1).max(MAX_ID),
   name: z.string().trim().min(1).max(MAX_NAME),
-  role: z.enum(['admin', 'member', 'observer']),
+  role: z.enum(PLAYER_ROLES),
   // Auto-declarada e opcional. `.catch(undefined)` ESPELHA a persistência: a tag
   // é um enum de PRODUTO (propenso a mudar) e mora no user store persistido do
   // cliente, reenviado a cada join. Um valor fora da lista atual (cliente
@@ -39,7 +39,7 @@ const playerSchema = z.object({
 })
 
 const roomConfigSchema = z.object({
-  deckType: z.enum(['fibonacci', 'tshirt', 'sequential']),
+  deckType: z.enum(DECK_TYPES),
   autoReveal: z.boolean(),
 })
 

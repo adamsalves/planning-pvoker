@@ -1,6 +1,7 @@
 import { Redis } from '@upstash/redis'
 import { z } from 'zod'
-import { PLAYER_TAGS, type Room } from './types'
+import { DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS, ROOM_PHASES, ROUND_STATUSES } from './types'
+import type { Room } from './types'
 import { logger } from './logger'
 
 // Rooms and their session tokens are the authoritative state in-memory (see
@@ -42,14 +43,14 @@ const roomShapeSchema = z.object({
   id: z.string(),
   adminId: z.string(),
   config: z.object({
-    deckType: z.enum(['fibonacci', 'tshirt', 'sequential']),
+    deckType: z.enum(DECK_TYPES),
     autoReveal: z.boolean(),
   }),
   players: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
-      role: z.enum(['admin', 'member', 'observer']),
+      role: z.enum(PLAYER_ROLES),
       // OPCIONAL como excludedVoterIds (snapshot pré-feature não tem o campo).
       // Além disso `.catch(undefined)`: tags são um enum de PRODUTO, propenso a
       // mudar; um valor que saiu da lista degrada para "sem tag" em vez de
@@ -59,12 +60,12 @@ const roomShapeSchema = z.object({
     }),
   ),
   subjects: z.array(z.string()),
-  phase: z.enum(['setup', 'voting', 'completed']),
+  phase: z.enum(ROOM_PHASES),
   rounds: z.array(
     z.object({
       id: z.string(),
       subject: z.string(),
-      status: z.enum(['voting', 'revealed']),
+      status: z.enum(ROUND_STATUSES),
       votes: z.record(z.string(), z.union([z.string(), z.number()])),
       // OPCIONAL de propósito: snapshots gravados antes desta feature não têm o
       // campo, e um required aqui faria o safeParse falhar — o que em loadAll

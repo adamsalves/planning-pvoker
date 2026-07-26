@@ -1,13 +1,39 @@
 // Types mirrored from the Frontend
 
-// @public: exportados de propósito (módulo de tipos do domínio), mas hoje usados
-// só neste arquivo (tipam os campos de Player/Room). O tag evita o knip reportá-los
-// como over-export sem precisar do ignoreExportsUsedInFile global.
+// O VOCABULÁRIO do contrato de rede, como const arrays em vez de uniões soltas —
+// mesmo padrão que PLAYER_TAGS já usava, agora estendido aos outros quatro.
+//
+// Duas razões, nesta ordem:
+//   1. Os `z.enum` de validation.ts e persistence.ts DERIVAM daqui. Antes cada um
+//      repetia os literais na mão, então papéis e decks estavam declarados TRÊS
+//      vezes só no servidor — e foi uma terceira cópia esquecida que deixou um
+//      status de rodada fantasma sobreviver no cliente por meses (ver o guarda de
+//      deriva em src/types/__tests__).
+//   2. Const array existe em runtime, e é isso que torna a deriva contra o cliente
+//      ASSERTÁVEL. Uma união de tipos some na compilação e nenhum teste a alcança.
+//
+// Ao acrescentar um valor aqui, acrescente no espelho do cliente (src/types/index.ts)
+// — o guarda de deriva falha até que os dois batam, que é o ponto dele.
+//
+// @public: exportados de propósito (módulo de tipos do domínio); alguns são usados
+// só aqui e no guarda de deriva. O tag evita o knip reportá-los como over-export
+// sem precisar do ignoreExportsUsedInFile global.
 /** @public */
-export type Role = 'admin' | 'member' | 'observer'
-export type DeckType = 'fibonacci' | 'tshirt' | 'sequential'
+export const PLAYER_ROLES = ['admin', 'member', 'observer'] as const
 /** @public */
-export type RoomPhase = 'setup' | 'voting' | 'completed'
+export const DECK_TYPES = ['fibonacci', 'tshirt', 'sequential'] as const
+/** @public */
+export const ROOM_PHASES = ['setup', 'voting', 'completed'] as const
+/** @public */
+export const ROUND_STATUSES = ['voting', 'revealed'] as const
+
+/** @public */
+export type Role = (typeof PLAYER_ROLES)[number]
+export type DeckType = (typeof DECK_TYPES)[number]
+/** @public */
+export type RoomPhase = (typeof ROOM_PHASES)[number]
+/** @public */
+export type RoundStatus = (typeof ROUND_STATUSES)[number]
 
 // Área/disciplina auto-declarada pelo jogador na entrada. Enum fixo (single
 // source) reusado pela validação de entrada (validation.ts) e pela guarda de
@@ -36,7 +62,7 @@ export interface RoomConfig {
 export interface Round {
   id: string
   subject: string
-  status: 'voting' | 'revealed'
+  status: RoundStatus
   votes: Record<string, string | number>
   // Jogadores que o admin tirou DESTA rodada. É uma lista de EXCLUSÃO (e não de
   // votantes) de propósito: quem entra na sala depois não está nela, então entra
