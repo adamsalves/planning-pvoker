@@ -18,7 +18,13 @@ export type PlayerRole = (typeof PLAYER_ROLES)[number]
 export type JoinableRole = (typeof JOINABLE_ROLES)[number]
 export type PlayerTag = (typeof PLAYER_TAGS)[number]
 
-export type RoundStatus = 'waiting' | 'voting' | 'revealed'
+// Estes dois espelham o CONTRATO DE REDE — o servidor é quem produz os valores
+// (`Round['status']` e `Room['phase']` em server/src/types.ts, validados no
+// roomSchema da persistência). Um valor a mais aqui não cria um estado novo: cria
+// um ramo que o servidor nunca emite e que o cliente carrega achando que existe.
+// Foi o que aconteceu com um 'waiting' em RoundStatus, removido em 2026-07-26
+// depois de derivar sem que nada nunca o produzisse ou consumisse.
+export type RoundStatus = 'voting' | 'revealed'
 export type RoomPhase = 'setup' | 'voting' | 'completed'
 
 // Estado da conexão Socket.IO (fonte única no connection store). 'connecting' =
