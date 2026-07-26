@@ -618,6 +618,58 @@ describe('revealVotes / resetSession', () => {
     expect(room?.subjects).toEqual([])
     expect(room?.currentRoundIndex).toBe(-1)
   })
+
+  // Fechar a rodada descarta o voto de quem não está presente. Quem pode estar
+  // ausente, sentado e com voto neste instante? Só um fantasma de rehidratação —
+  // socket vivo conta como presente, quem caiu está na grace (também presente), e
+  // passada a grace o leaveRoom já levou jogador e voto. O quórum acima já ignorava
+  // o fantasma; sem isto, o reveal ainda contava o voto dele.
+  function roomWithGhostVote(autoReveal: boolean): RoomManager {
+    const rm2 = new RoomManager()
+    rm2.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+    rm2.createRoom('r1', admin, { ...config, autoReveal })
+    rm2.joinRoom('r1', { id: 'g1', name: 'Ghost', role: 'member' })
+    rm2.joinRoom('r1', member)
+    rm2.addSubjects('r1', ['A'])
+    rm2.startSession('r1')
+    rm2.castVote('r1', 'g1', 8) // votou antes de sumir no restart
+    return rm2
+  }
+
+  it('reveal drops the vote of an absent player (rehydration ghost)', () => {
+    const rm2 = roomWithGhostVote(false)
+    rm2.castVote('r1', 'a1', 5)
+    rm2.castVote('r1', 'm1', 5)
+
+    const room = rm2.revealVotes('r1')
+    expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 5 })
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  // O autoReveal fecha pelo mesmo seam — senão o caminho mais comum de reveal
+  // (quórum completo) continuaria carregando o voto fantasma.
+  it('autoReveal drops the absent vote too', () => {
+    const rm2 = roomWithGhostVote(true)
+    rm2.castVote('r1', 'a1', 5)
+    const room = rm2.castVote('r1', 'm1', 5) // completa o quórum dos PRESENTES
+
+    expect(room?.rounds[0].status).toBe('revealed')
+    expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 5 })
+  })
+
+  // Nenhum falso positivo: o oráculo default responde "todos presentes", então onde
+  // presença não está ligada (testes, boot sem socket) o reveal não descarta nada.
+  it('keeps every vote when presence is not wired (default oracle)', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    rm.castVote('r1', 'm1', 8)
+
+    const room = rm.revealVotes('r1')
+    expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 8 })
+  })
 })
 
 // Deep-clone a room so a recorded snapshot isn't retro-changed by a later mutation
