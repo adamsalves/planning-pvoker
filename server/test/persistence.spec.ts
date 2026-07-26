@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { RedisPersistence, NullPersistence, type RedisClient } from '../src/persistence'
+import {
+  RedisPersistence,
+  NullPersistence,
+  type RedisClient,
+  type RoomPersistence,
+} from '../src/persistence'
 import { logger } from '../src/logger'
 import type { Room } from '../src/types'
 
@@ -107,18 +112,22 @@ const sampleRoom = (id = 'ROOM1'): Room => ({
   currentRoundIndex: 0,
 })
 
+const stubWarn = () => vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
 describe('RedisPersistence', () => {
   let redis: FakeRedis
   let persistence: RedisPersistence
   // Stubbed for every test: several cases here feed loadAll a deliberately broken
   // snapshot, which now warns — without this the suite output is buried in the very
   // noise those tests are producing on purpose. Also what the two logging tests assert on.
-  let warn: ReturnType<typeof vi.spyOn<typeof logger, 'warn'>>
+  // O tipo sai por inferência do próprio helper: escrever a assinatura do spy do
+  // vitest à mão não compila, e um cast está fora de questão (regra do projeto).
+  let warn: ReturnType<typeof stubWarn>
 
   beforeEach(() => {
     redis = new FakeRedis()
     persistence = new RedisPersistence(redis, 100) // fixed TTL for assertions
-    warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    warn = stubWarn()
   })
 
   afterEach(() => {
@@ -392,7 +401,11 @@ describe('RedisPersistence', () => {
 
 describe('NullPersistence', () => {
   it('loadAll returns empty and every write is a no-op', async () => {
-    const persistence = new NullPersistence()
+    // Tipado pela PORTA, não pela classe: os métodos do NullPersistence são
+    // declarados sem parâmetros (ignoram tudo de propósito), então chamá-los pela
+    // classe não compila. O que este teste afirma é o contrato do port — que uma
+    // implementação no-op satisfaz a interface e resolve para undefined.
+    const persistence: RoomPersistence = new NullPersistence()
     const snap = await persistence.loadAll()
     expect(snap.rooms).toEqual([])
     expect(snap.tokens.size).toBe(0)

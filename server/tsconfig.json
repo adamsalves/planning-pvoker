@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
     "target": "es2020",
+    // lib acima do target de propósito: o emit continua es2020, mas o processo roda
+    // em Node 20/22 (ver `engines`), onde Array.prototype.at & cia existem. Sem isto
+    // o TS nega APIs que o runtime tem.
+    "lib": ["ES2022"],
     "module": "commonjs",
     "outDir": "./dist",
     "rootDir": "./src",
