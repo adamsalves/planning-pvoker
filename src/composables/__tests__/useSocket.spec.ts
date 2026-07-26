@@ -61,16 +61,18 @@ function socketHandler(event: string) {
 // TS reduzir a assinatura recuperada do mock à interseção dos eventos, cujos
 // parâmetros colapsam em `never` — então chamar `handler(1)` não compila, e
 // `handler()` reclama de aridade. O teste, por natureza, não conhece o tipo dos
-// argumentos daquele evento específico; o `Reflect.apply` repassa o que vier sem
-// nenhuma asserção (a regra do projeto proíbe `as`/`!`).
+// argumentos daquele evento específico.
+//
+// Alargar para `unknown` e estreitar com `typeof` devolve uma chamada válida sem
+// nenhuma asserção (a regra do projeto proíbe `as`/`!`). Sendo honesto sobre o que
+// isto é: chamar um valor estreitado para `Function` devolve `any` vindo da lib —
+// não é narrowing de verdade, só não é um cast escrito à mão.
 function managerHandler(event: string): (...args: unknown[]) => void {
   const call = vi.mocked(lastSocket().io.on).mock.calls.find((c) => c[0] === event)
   if (!call) throw new Error(`manager handler not registered: ${event}`)
-  const handler = call[1]
+  const handler: unknown = call[1]
   if (typeof handler !== 'function') throw new Error(`handler is not a function: ${event}`)
-  return (...args: unknown[]) => {
-    Reflect.apply(handler, undefined, args)
-  }
+  return (...args: unknown[]) => handler(...args)
 }
 
 const player: Player = { id: 'p1', name: 'Joe', role: 'member' }
