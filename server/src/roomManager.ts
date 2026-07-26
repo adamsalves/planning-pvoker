@@ -89,10 +89,73 @@ export class RoomManager {
   // separate follow-up (it needs presence broadcast to clients).
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
-    for (const room of rooms) this.rooms.set(room.id, room)
+    for (const room of rooms) {
+      this.pruneOrphanVotes(room)
+      this.rooms.set(room.id, room)
+    }
     for (const [key, token] of tokens) this.tokens.set(key, token)
     if (rooms.length > 0) {
       logger.info(`♻️  Rehydrated ${rooms.length} room(s) from persistence`)
+    }
+  }
+
+  // Drops votes in the round in progress whose author the round does not count.
+  //
+  // Keyed off eligibleVotersOf — the same seam castVote admits through and the
+  // quorum counts — and NOT off "is seated in the room", which is a strictly weaker
+  // claim: an observer or an admin-excluded player is seated, yet the round refuses
+  // their vote everywhere else. Using the weaker one here would let this cleanup
+  // bless data that castVote would have rejected outright.
+  //
+  // Why any of it is needed: leaveRoom prunes the departing player's vote before
+  // saving, but only since that fix, and it is not retroactive — snapshots written
+  // earlier carry the vote of someone who left mid-round, with no matching player.
+  // Nothing on the server counts such a vote (every quorum path iterates players),
+  // but the client feeds the raw map to useVoteStats, so it inflates the average and
+  // can fabricate a consensus out of a voter who is gone. Beyond that legacy
+  // cleanup, this is a boundary invariant worth holding on its own: snapshots come
+  // from outside the process.
+  //
+  // What this deliberately does NOT do — the two exclusions matter:
+  //   - Past and revealed rounds are left alone. A vote outliving its author is
+  //     EXPECTED there: leaveRoom prunes only the round in progress, precisely so a
+  //     revealed result stays the one the room saw.
+  //   - A rehydration GHOST is not pruned. It is a seated, non-excluded, non-observer
+  //     player (see the note on hydrate above), so it stays ELIGIBLE and keeps its
+  //     vote. That is deliberate, and presence is not the criterion here for a reason
+  //     more basic than policy: setPresence() is called by setupSocketEvents, which
+  //     runs AFTER hydrate (see index.ts) — during this pass the oracle is still the
+  //     constructor default that answers "everyone is present", so presence cannot be
+  //     consulted at all. Even if it could, at boot nobody has reconnected yet, and
+  //     pruning by presence would wipe the votes of a whole team that is simply
+  //     mid-reconnect: the exact work persistence exists to save. The ghost's vote
+  //     keeps counting in the reveal stats; it can no longer STALL the round (that
+  //     quorum IS presence-aware, and runs long after presence is wired), and telling
+  //     "coming back" from "gone for good" needs presence broadcast to clients — the
+  //     follow-up already noted above. Accepted limitation, not an oversight.
+  private pruneOrphanVotes(room: Room): void {
+    if (room.currentRoundIndex === -1) return
+    // Runtime guard, not a type guard: noUncheckedIndexedAccess is off, so TS types
+    // this as Round and would not warn. It is the only indexed access in this file
+    // reached BEFORE any in-process invariant has held — persistence.ts's refine is
+    // the sole thing standing between a hand-edited snapshot and here. And a throw
+    // costs more at this point than anywhere else: hydrate would abort mid-loop, the
+    // token map would never load, and hasToken() returning false for everyone turns
+    // OFF the anti-escalation check in join_room. index.ts keeps the process serving.
+    const round = room.rounds[room.currentRoundIndex]
+    if (!round || round.status !== 'voting') return
+
+    const counted = new Set(this.eligibleVotersOf(room, round).map((p) => p.id))
+    const dropped = Object.keys(round.votes).filter((playerId) => !counted.has(playerId))
+    for (const playerId of dropped) delete round.votes[playerId]
+
+    // Say it happened. This is the one step of the boot that destroys user-visible
+    // state, and hydrate only ever logs the survivors — same reasoning as the
+    // discard log in persistence.loadAll. Silent when there is nothing to drop.
+    if (dropped.length > 0) {
+      logger.warn(
+        `♻️  Room ${room.id}: dropped ${dropped.length} rehydrated vote(s) the round does not count (${dropped.join(', ')})`,
+      )
     }
   }
 
