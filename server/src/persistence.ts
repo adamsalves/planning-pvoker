@@ -99,12 +99,19 @@ const roomShapeSchema = z.object({
 // covers `players: []`: a room only empties through leaveRoom, which destroys it.
 //
 // Other cross-field mismatches were considered and left alone deliberately, but
-// they are NOT all harmless: votes keyed by non-players and orphan excludedVoterIds
-// really are cosmetic, while a `phase: 'setup'` carrying non-empty `rounds` passes
-// both refines and then loses that history the moment startSession overwrites
-// `room.rounds`. Silent data loss, not a crash — and still not worth a third guard,
-// because discarding the room destroys the same history plus the rest of the
-// session. Rejecting is reserved for damage the room can't absorb.
+// NONE of them is as harmless as "cosmetic" suggests:
+//   - orphan excludedVoterIds really are inert — eligibleVotersOf iterates
+//     room.players and an id nobody carries never matches;
+//   - a vote keyed by a NON-PLAYER is live data, not decoration: the client feeds
+//     the raw votes map to useVoteStats, so it lands in the average and can even
+//     manufacture a consensus (see the prune in leaveRoom). Rehydration is the one
+//     path that still produces these — a ghost never leaves, so its vote is never
+//     pruned — and it's tracked as backlog rather than fixed by rejection here;
+//   - a `phase: 'setup'` carrying non-empty `rounds` passes both refines and then
+//     loses that history the moment startSession overwrites `room.rounds`.
+// Silent damage, not crashes — and still not worth more guards, because discarding
+// the room destroys the same data plus the rest of the session. Rejecting stays
+// reserved for damage the room can't absorb.
 const roomSchema = roomShapeSchema
   .refine(
     (room) =>

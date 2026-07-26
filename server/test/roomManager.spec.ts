@@ -184,6 +184,63 @@ describe('leaveRoom', () => {
     expect(rm.leaveRoom('r1', 'a1')).toBeNull()
     expect(rm.getRoom('r1')).toBeUndefined()
   })
+
+  // The server itself never noticed a leftover vote (every quorum path iterates
+  // room.players), so this is about what the CLIENT computes: useVoteStats reads
+  // the raw votes map, and two matching votes with a single voter left standing
+  // read as consensus — banner and confetti for one person.
+  it("drops the leaving player's vote from the round in progress", () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    rm.castVote('r1', 'm1', 5)
+
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.rounds[0].votes).toEqual({ m1: 5 })
+  })
+
+  // Mirrors setRoundVoter's refusal to touch a revealed round: the room already
+  // saw this result, and pruning it afterwards would rewrite what was shown.
+  it('leaves a revealed round untouched (settled history)', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    rm.castVote('r1', 'm1', 8)
+    rm.revealVotes('r1')
+
+    rm.leaveRoom('r1', 'a1')
+    expect(rm.getRoom('r1')?.rounds[0].votes).toEqual({ a1: 5, m1: 8 })
+  })
+
+  // The one place the prune and the quorum touch, and the scenario the fix exists
+  // for — yet every other test here runs with autoReveal off, so nothing covered it.
+  // maybeAutoReveal runs right after the prune: the round must NOT reveal on an
+  // empty map (required.length > 0 is what holds it), and must not carry the
+  // departed vote if it does reveal.
+  it('empties the map without revealing when the only player who voted leaves', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5) // m1 still pending
+
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.rounds[0].votes).toEqual({})
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  // Guard for the currentRoundIndex === -1 branch: leaving during setup (or after
+  // a reset) must not reach into rounds[-1].
+  it('handles a leave during setup, with no round to prune', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    expect(() => rm.leaveRoom('r1', 'm1')).not.toThrow()
+    expect(rm.getRoom('r1')?.rounds).toEqual([])
+  })
 })
 
 describe('addSubjects', () => {

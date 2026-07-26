@@ -123,6 +123,20 @@ watch(
   },
 )
 
+// O servidor pode APAGAR um voto já confirmado da rodada em andamento — hoje por
+// dois caminhos: o admin tirar a pessoa da rodada (setRoundVoter) e ela SAIR da
+// sala (leaveRoom, quando a grace expira). O segundo é o traiçoeiro: num blip de
+// rede longo o Socket.IO reconecta sozinho e o rejoin recoloca a pessoa na sala,
+// mas a instância Vue nunca recarregou — sem isto o otimista sobreviveria à poda e
+// a carta seguiria acesa sobre um voto que o servidor não tem mais (com autoReveal,
+// a rodada trava esperando um voto que a pessoa acha que deu).
+//
+// Só a transição "tinha voto confirmado → não tem mais" limpa. Um otimista ainda
+// não confirmado nunca viu serverVote != null, então o clique normal não é afetado.
+watch(serverVote, (vote, previous) => {
+  if (previous !== null && vote === null) optimisticVote.value = null
+})
+
 // Quem o admin tirou DESTA rodada (server: Round.excludedVoterIds). Ausente em
 // rodadas criadas antes da feature — `?? []` = ninguém fora.
 const nonVoterIds = computed(() => currentRound.value?.excludedVoterIds ?? [])

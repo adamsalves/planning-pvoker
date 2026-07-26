@@ -280,6 +280,37 @@ export class RoomManager {
     // silently re-entering it. Trade-off: after an explicit "leave" and a
     // re-join, that player is still excluded — the UI (slice 2) has to say so.
     //
+    // Their VOTE, on the other hand, goes — the same rule setRoundVoter already
+    // applies when the admin takes someone out of a round: a vote from someone the
+    // round no longer counts skews the reveal. The asymmetry with excludedVoterIds
+    // above is the point: an orphan exclusion is INERT (eligibleVotersOf iterates
+    // room.players, so an id nobody carries never matches), while an orphan vote is
+    // live data. The server never noticed, because every quorum path iterates
+    // room.players; the client is what breaks. It feeds the raw votes map to
+    // useVoteStats, so a leftover vote still lands in the count, the average, the
+    // distribution and — worst — in hasConsensus, where it resurrects the false
+    // consensus that the "at least 2 votes" guard exists to prevent: one present
+    // voter plus one ghost vote reads as agreement, banner and confetti included.
+    //
+    // Accepted cost: "who left" includes someone who only lost the network for 31
+    // seconds and is already coming back — leaveRoom runs when the grace expires,
+    // not when the tab closes. They rejoin with no vote and have to cast again.
+    // Judged better than the alternative, which is the whole room reading a number
+    // from someone who isn't there. The client clears its optimistic vote on this
+    // same transition (RoomView), so the card doesn't lie about it.
+    //
+    // NOT covered here: a rehydration ghost never leaves — no socket, no grace
+    // timer, so no leaveRoom — and its vote survives a restart. Tracked as backlog;
+    // fixing it belongs in hydrate(), not in the leave path.
+    //
+    // Only the round in progress. A revealed round is settled history — the room
+    // already saw that result, and rewriting it would retroactively change what was
+    // shown (same reason setRoundVoter refuses to touch a revealed round).
+    if (room.currentRoundIndex !== -1) {
+      const currentRound = room.rounds[room.currentRoundIndex]
+      if (currentRound.status === 'voting') delete currentRound.votes[playerId]
+    }
+
     // A present voter just left (their grace expired). If the voters who remain
     // present have all voted, the round can now auto-reveal — the departing
     // player was the last one holding it open. No-op when autoReveal is off.
