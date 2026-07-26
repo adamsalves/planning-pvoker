@@ -583,8 +583,39 @@ export class RoomManager {
     // present eligible voters (observers-only, or an admin who excluded
     // everyone) without a single vote.
     if (required.length > 0 && required.every((p) => round.votes[p.id] !== undefined)) {
-      round.status = 'revealed'
+      this.sealRound(room, round)
     }
+  }
+
+  // Closes a round: drops the votes of players who are not present, THEN marks it
+  // revealed. The two steps are one operation on purpose — after `status` flips, the
+  // round is settled history and nothing may touch its votes.
+  //
+  // Who can possibly be absent, seated AND holding a vote at this moment? Only a
+  // rehydration ghost. A live socket is present; someone who just dropped is inside
+  // the grace window, which counts as present; and once the grace expires leaveRoom
+  // runs and takes both the player and their vote. So "absent + seated + voted" is
+  // exactly the ghost, and this prunes it precisely — no live voter can be caught.
+  //
+  // It also settles an incoherence: the quorum above ALREADY ignores absent players
+  // (that is what stops a ghost from stalling the round), while the reveal counted
+  // their votes anyway — the client sums the raw votes map in useVoteStats, so a
+  // ghost inflated the average and could manufacture a consensus among people who
+  // were no longer there. Deciding the round by one set of people and reporting it
+  // over another was the bug; both are now "who is present".
+  //
+  // Trade-off, deliberate: the reveal shows the votes of who is IN the room, not
+  // every vote ever cast for the round. Someone who voted and vanished across a
+  // restart loses their number from the result. Same rule the leave path applies —
+  // and their estimate could not be discussed by a team they are absent from anyway.
+  //
+  // The default PresenceOracle answers "everyone is present", so this is a no-op
+  // wherever presence is not wired (unit tests, NullPersistence boots).
+  private sealRound(room: Room, round: Round): void {
+    for (const playerId of Object.keys(round.votes)) {
+      if (!this.presence.isPresent(room.id, playerId)) delete round.votes[playerId]
+    }
+    round.status = 'revealed'
   }
 
   public revealVotes(roomId: string): Room | null {
@@ -592,7 +623,7 @@ export class RoomManager {
     if (!room || room.currentRoundIndex === -1) return null
 
     const round = room.rounds[room.currentRoundIndex]
-    round.status = 'revealed'
+    this.sealRound(room, round)
 
     this.scheduleSave(roomId)
     return room
