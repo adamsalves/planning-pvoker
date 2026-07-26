@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Player } from '@/types'
+import type { Player, UiRoundStatus } from '@/types'
 import { activePlayersOf } from '@/utils/players'
 import PokerCard from './PokerCard.vue'
 
 interface Props {
   players: Player[]
   votes: Record<string, string | number>
-  status: 'waiting' | 'voting' | 'revealed'
+  status: UiRoundStatus
   // Tirados pelo admin DESTA rodada. Continuam sentados de propósito (some da
   // mesa só quem é espectador da SALA) — mudam apenas de estado visual.
   nonVoterIds?: string[]
