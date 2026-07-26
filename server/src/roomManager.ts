@@ -90,6 +90,11 @@ export class RoomManager {
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
     for (const room of rooms) {
+      // ORDER MATTERS: the admin repair can promote an observer, and observers are
+      // exactly who eligibleVotersOf filters out — so running it second would let
+      // pruneOrphanVotes judge eligibility against a role the room is about to
+      // change, and drop a vote the repaired room would have counted.
+      this.repairOrphanAdmin(room)
       this.pruneOrphanVotes(room)
       this.rooms.set(room.id, room)
     }
@@ -97,6 +102,54 @@ export class RoomManager {
     if (rooms.length > 0) {
       logger.info(`♻️  Rehydrated ${rooms.length} room(s) from persistence`)
     }
+  }
+
+  // Repoints an `adminId` that names nobody in `players` at a real player.
+  //
+  // Reachable only through rehydration: createRoom takes adminId from a player it
+  // just seated, and leaveRoom always repoints it at a remaining one. Left alone the
+  // room isn't broken, it is QUIETLY BRICKED — requireAdmin (events.ts) compares the
+  // caller against adminId so no admin command passes, and leaveRoom's `wasAdmin`
+  // never fires, so the handover that exists to rescue a driverless room can't run
+  // either. It stays alive and un-driveable until its TTL.
+  //
+  // This used to be a rejection in persistence.ts, which threw away an otherwise
+  // intact room — subject backlog, round history, every other player — over one
+  // dangling string. The rejection was chosen deliberately then, on the grounds that
+  // repairing state nobody has ever observed means opening a code path to resurrect
+  // corruption that isn't understood. That reasoning is answered rather than ignored:
+  //
+  //   - the repair is NOT a general `.transform()` in the schema. It is one named
+  //     step at boot, so nothing else in the system can reach it;
+  //   - it fixes ONE field, by the same policy leaveRoom's handover already uses
+  //     (first non-observer, else the first player), so a repaired room lands in a
+  //     state the running system produces anyway;
+  //   - everything it cannot understand is still DISCARDED — the shape schema and
+  //     the currentRoundIndex refine are untouched, and `players: []` (nobody to
+  //     promote) remains a rejection;
+  //   - it is LOUD. The whole point of the original refusal was that the failure was
+  //     never observed in production; a silent repair would keep it that way.
+  //
+  // Presence is not consulted, unlike leaveRoom's handover: setPresence() runs after
+  // hydrate (see index.ts), so during this pass the oracle is still the constructor
+  // default that answers "everyone is present" — the same reason pruneOrphanVotes
+  // gives below. Whoever reconnects first is kept as admin by events.ts anyway.
+  private repairOrphanAdmin(room: Room): void {
+    if (room.players.some((p) => p.id === room.adminId)) return
+
+    // persistence.ts rejects an empty players array, so there is always a candidate;
+    // the `?? players[0]` mirrors leaveRoom for the all-observers case, where handing
+    // the room to an observer beats leaving nobody able to drive it.
+    const next = room.players.find((p) => p.role !== 'observer') ?? room.players[0]
+    if (!next) return
+
+    const orphaned = room.adminId
+    room.adminId = next.id
+    next.role = 'admin'
+    logger.warn(
+      `🛠️  Repaired orphan adminId in room ${room.id}: ${orphaned} named no seated player; ` +
+        `promoted ${next.id} (${next.name}). The snapshot was kept instead of discarded.`,
+    )
   }
 
   // Drops votes in the round in progress whose author the round does not count.
@@ -120,19 +173,22 @@ export class RoomManager {
   //   - Past and revealed rounds are left alone. A vote outliving its author is
   //     EXPECTED there: leaveRoom prunes only the round in progress, precisely so a
   //     revealed result stays the one the room saw.
-  //   - A rehydration GHOST is not pruned. It is a seated, non-excluded, non-observer
-  //     player (see the note on hydrate above), so it stays ELIGIBLE and keeps its
-  //     vote. That is deliberate, and presence is not the criterion here for a reason
-  //     more basic than policy: setPresence() is called by setupSocketEvents, which
-  //     runs AFTER hydrate (see index.ts) — during this pass the oracle is still the
-  //     constructor default that answers "everyone is present", so presence cannot be
-  //     consulted at all. Even if it could, at boot nobody has reconnected yet, and
-  //     pruning by presence would wipe the votes of a whole team that is simply
-  //     mid-reconnect: the exact work persistence exists to save. The ghost's vote
-  //     keeps counting in the reveal stats; it can no longer STALL the round (that
-  //     quorum IS presence-aware, and runs long after presence is wired), and telling
-  //     "coming back" from "gone for good" needs presence broadcast to clients — the
-  //     follow-up already noted above. Accepted limitation, not an oversight.
+  //   - A rehydration GHOST is not pruned HERE. It is a seated, non-excluded,
+  //     non-observer player (see the note on hydrate above), so it stays ELIGIBLE and
+  //     keeps its vote through this pass. That is deliberate, and presence is not the
+  //     criterion here for a reason more basic than policy: setPresence() is called by
+  //     setupSocketEvents, which runs AFTER hydrate (see index.ts) — during this pass
+  //     the oracle is still the constructor default that answers "everyone is
+  //     present", so presence cannot be consulted at all. Even if it could, at boot
+  //     nobody has reconnected yet, and pruning by presence would wipe the votes of a
+  //     whole team that is simply mid-reconnect: the exact work persistence exists to
+  //     save.
+  //
+  //     Deferred, not accepted: sealRound() prunes by presence AT THE REVEAL, which is
+  //     the moment the answer is both knowable and needed — presence is wired by then,
+  //     and a ghost's vote can no longer reach the stats the client computes. So the
+  //     ghost keeps its vote here and loses it there. Do not "fix" this by pruning at
+  //     boot; that is the version that destroys a reconnecting team's work.
   private pruneOrphanVotes(room: Room): void {
     // Same resolver the single-vote seam uses, and its `!round` runtime guard earns
     // its keep HERE above all: this is the one call reached BEFORE any in-process
@@ -338,6 +394,13 @@ export class RoomManager {
     //
     // When nobody is present at all the whole list is the pool: the room is dormant,
     // and whoever reconnects first is kept as admin by events.ts anyway.
+    //
+    // SECOND HOME FOR THIS POLICY: repairOrphanAdmin() runs the same selection at
+    // boot, to repoint an adminId that a snapshot left dangling. It deliberately
+    // drops the presence filter (the oracle isn't wired during hydrate) but keeps
+    // "first non-observer, else the first player" identical. The two are the only
+    // places that decide who inherits a room — change one and the other has to
+    // follow, or a room's admin depends on whether the server restarted.
     if (wasAdmin) {
       const present = room.players.filter((p) => this.presence.isPresent(room.id, p.id))
       const pool = present.length > 0 ? present : room.players

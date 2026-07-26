@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { RoomManager } from '../src/roomManager'
+import { logger } from '../src/logger'
 import type { Player, RoomConfig, Room, Round } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
@@ -1042,5 +1043,108 @@ describe('hydrate', () => {
     manager.setPresence({ isPresent: () => false }) // ninguém conectou ainda
     await manager.hydrate()
     expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ g1: 8 })
+  })
+
+  // An adminId naming nobody used to make persistence DISCARD the whole room. It is
+  // repaired here instead, so the backlog and the round history survive.
+  describe('orphan adminId repair', () => {
+    let warn: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    function seedRoom(adminId: string, players: Player[]): RoomManager {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId,
+            config,
+            players,
+            subjects: ['A'],
+            phase: 'voting',
+            rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: {} }],
+            currentRoundIndex: 0,
+          },
+        ],
+        tokens: new Map(),
+      }
+      return new RoomManager(persistence)
+    }
+
+    it('repoints a dangling adminId at the first non-observer and promotes them', async () => {
+      const manager = seedRoom('ghost', [observer, member])
+      await manager.hydrate()
+
+      const room = manager.getRoom('r9')
+      expect(room?.adminId).toBe('m1') // pulou o observer, como o handover do leaveRoom
+      expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('admin')
+      expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('observer')
+    })
+
+    // Mesmo fallback deliberado do leaveRoom: uma sala que ninguém pode dirigir é
+    // pior que promover um espectador.
+    it('falls back to the first player when everyone is an observer', async () => {
+      const manager = seedRoom('ghost', [observer])
+      await manager.hydrate()
+
+      expect(manager.getRoom('r9')?.adminId).toBe('o1')
+      expect(manager.getRoom('r9')?.players[0].role).toBe('admin')
+    })
+
+    // O ponto inteiro da decisão original era que a falha nunca foi observada em
+    // produção. Um reparo silencioso a manteria assim.
+    it('says so, loudly, naming the room and the orphaned id', async () => {
+      const manager = seedRoom('ghost', [member])
+      await manager.hydrate()
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      const message = String(warn.mock.calls[0]?.[0])
+      expect(message).toContain('r9')
+      expect(message).toContain('ghost')
+      expect(message).toContain('m1')
+    })
+
+    it('leaves a healthy room alone, and stays silent about it', async () => {
+      const manager = seedRoom('a1', [admin, member])
+      await manager.hydrate()
+
+      expect(manager.getRoom('r9')?.adminId).toBe('a1')
+      expect(manager.getRoom('r9')?.players.find((p) => p.id === 'm1')?.role).toBe('member')
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    // DISCRIMINA A ORDEM entre repairOrphanAdmin e pruneOrphanVotes. Um observer
+    // promovido a admin vira elegível, então o voto dele sobrevive; se a poda
+    // rodasse primeiro, ela o julgaria ainda observer e o descartaria. Inverter as
+    // duas linhas do hydrate derruba este teste e nenhum outro.
+    it('promotes BEFORE pruning, so the new admin keeps the vote they had cast', async () => {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId: 'ghost',
+            config,
+            players: [observer], // único jogador → cai no fallback e é promovido
+            subjects: ['A'],
+            phase: 'voting',
+            rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: { o1: 5 } }],
+            currentRoundIndex: 0,
+          },
+        ],
+        tokens: new Map(),
+      }
+      const manager = new RoomManager(persistence)
+      await manager.hydrate()
+
+      expect(manager.getRoom('r9')?.players[0].role).toBe('admin')
+      expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ o1: 5 })
+    })
   })
 })

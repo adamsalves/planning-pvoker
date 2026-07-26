@@ -89,15 +89,19 @@ const roomShapeSchema = z.object({
 // like any other malformed one (loadAll drops it and self-heals the index): the
 // affected room is lost, every other room boots fine.
 //
-// Second guard, same reasoning, different symptom: an adminId that names nobody in
-// `players` crashes nothing, it QUIETLY BRICKS the room. requireAdmin (events.ts)
-// compares the caller's id against adminId, so no admin command ever passes; and
-// leaveRoom's `wasAdmin` check never fires either, so the handover that exists to
-// rescue a room with no one driving it can't trigger. The room stays alive and
-// un-driveable until its TTL. In-process this is unreachable — createRoom takes
-// adminId from a player it just seated, and leaveRoom always repoints it at a
-// remaining player — so, again, only a rehydrated snapshot gets here. This also
-// covers `players: []`: a room only empties through leaveRoom, which destroys it.
+// Second guard: a room with NO players. There is nothing to rebuild and nobody to
+// promote, so it can only be discarded. In-process this is unreachable — a room
+// only empties through leaveRoom, which destroys it rather than storing an empty
+// one — so, again, only a rehydrated snapshot gets here.
+//
+// What this guard NO LONGER covers, deliberately: an `adminId` naming nobody in
+// `players`. That used to be rejected here too, which meant discarding an otherwise
+// intact room — backlog, round history and all — over a single dangling string.
+// It is now REPAIRED at boot instead, in RoomManager.hydrate(): see
+// repairOrphanAdmin() there for the policy and for why the repair is safe where a
+// general `.transform()` would not be. The invariant itself is unchanged and still
+// holds for every room the process serves; only the enforcement point moved, from
+// "reject the snapshot" to "repoint the admin, loudly".
 //
 // Other cross-field mismatches were considered and left alone deliberately, but
 // NONE of them is as harmless as "cosmetic" suggests:
@@ -120,8 +124,8 @@ const roomSchema = roomShapeSchema
       (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
     { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
   )
-  .refine((room) => room.players.some((p) => p.id === room.adminId), {
-    message: 'adminId must name one of the room players',
+  .refine((room) => room.players.length > 0, {
+    message: 'a room must carry at least one player',
   })
 
 // A room's token hash read back from Redis: { playerId -> token }. Values are
