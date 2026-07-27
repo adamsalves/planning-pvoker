@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import IconPencil from '~icons/lucide/pencil'
 import RoomSetup from '../RoomSetup.vue'
 import SubjectForm from '../SubjectForm.vue'
+import PlayerList from '../PlayerList.vue'
 import { useRoomStore } from '@/stores/room'
 import type { Room } from '@/types'
 
@@ -88,5 +89,33 @@ describe('RoomSetup.vue', () => {
     const icon = wrapper.findComponent(IconPencil)
     expect(icon.exists()).toBe(true)
     expect(icon.attributes('aria-hidden')).toBe('true')
+  })
+
+  // Costura de integração store → RoomSetup → PlayerList, e a DECISÃO sobre o gate.
+  describe('presença', () => {
+    function roomWithAbsent(): Room {
+      return roomWith({
+        players: [
+          { id: 'p1', name: 'Ana', role: 'admin' },
+          { id: 'p2', name: 'Bruno', role: 'member' },
+        ],
+        absentPlayerIds: ['p2'],
+      })
+    }
+
+    it('repassa absentPlayerIds do store para a PlayerList', () => {
+      const wrapper = mountSetup(true, roomWithAbsent())
+      expect(wrapper.findComponent(PlayerList).props('absentPlayerIds')).toEqual(['p2'])
+    })
+
+    // DECISÃO DELIBERADA, e o motivo de existir teste: o gate conta SENTADOS, não
+    // presentes. Filtrar ausentes travaria a sala — um fantasma nunca sai sozinho,
+    // não existe "expulsar", e uma sala que reiniciou no setup ficaria presa em
+    // "aguardando jogadores" até o TTL de 24h. Destravar cedo é inofensivo: o
+    // quórum do reveal É presença-aware no servidor. Falha se alguém "corrigir".
+    it('conta o ausente no gate de iniciar — de propósito', () => {
+      const wrapper = mountSetup(true, roomWithAbsent())
+      expect(wrapper.findComponent(SubjectForm).props('activePlayerCount')).toBe(2)
+    })
   })
 })

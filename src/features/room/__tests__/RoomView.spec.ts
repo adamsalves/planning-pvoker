@@ -724,6 +724,31 @@ describe('RoomView.vue quem vota na rodada', () => {
     return mount(RoomView, { global: { stubs: childStubs } })
   }
 
+  // O bug que o code review pegou: sem presença no voterCount, o fantasma de
+  // rehidratação (sentado, não-observer, não-excluído) entrava no DENOMINADOR — e
+  // como o sealRound apaga o voto dele no servidor, o reveal mostrava "1/2 votos"
+  // com uma pessoa só na sala. É o mesmo filtro que o quórum do servidor aplica.
+  it('desconta os AUSENTES do voterCount (senão o reveal mente "1/2")', async () => {
+    const room = votingRoom([])
+    room.absentPlayerIds = ['player-2'] // Bob é fantasma; Cida já é observer
+    const wrapper = mountVoting(room)
+    await flushPromises()
+
+    // Sobra só a Ana entre os votantes presentes.
+    expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(1)
+  })
+
+  // O outro lado: com a Ana sozinha e presente, um voto dela FECHA a rodada. Com o
+  // fantasma no cálculo, o "todos votaram" nunca apareceria.
+  it('allVotersVoted ignora o voto que nunca vem de quem está ausente', async () => {
+    const room = votingRoom([], { 'player-1': 5 })
+    room.absentPlayerIds = ['player-2']
+    const wrapper = mountVoting(room)
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('allVotersVoted')).toBe(true)
+  })
+
   it('desconta os excluídos do voterCount (denominador do reveal)', async () => {
     // 3 jogadores, sendo 1 observer → 2 votantes; excluir o Bob deixa 1.
     const wrapper = mountVoting(votingRoom(['player-2']))

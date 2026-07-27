@@ -13,7 +13,7 @@ import type { PlayerRole } from '@/types'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { isObserver as isObserverPlayer, roundVotersOf } from '@/utils/players'
+import { isObserver as isObserverPlayer, roundVotersOf, presentPlayersOf } from '@/utils/players'
 import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -98,6 +98,9 @@ const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
 const deckLabel = computed(() => t(`decks.${deckType.value}`))
 const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
+// Ausentes segundo o servidor (sem socket e fora da graça) — na prática o fantasma
+// de rehidratação. Entra no cálculo de quem a rodada espera votar.
+const absentPlayerIds = computed(() => roomStore.absentPlayerIds)
 
 // Compartilhar sala (link de convite / Web Share) — lógica em useShareRoom.
 const { shareStatus, shareRoom } = useShareRoom(roomId)
@@ -141,15 +144,25 @@ watch(serverVote, (vote, previous) => {
 // rodadas criadas antes da feature — `?? []` = ninguém fora.
 const nonVoterIds = computed(() => currentRound.value?.excludedVoterIds ?? [])
 
-// Quem a rodada espera votar: nem observer nem excluído. É o denominador do
-// VoteReveal e a base do "todos votaram" — NÃO confundir com quem senta à mesa
-// (activePlayersOf), que inclui o excluído.
-const voterCount = computed(() => roundVotersOf(players.value, nonVoterIds.value).length)
+// Quem a rodada espera votar: presente, nem observer, nem excluído. É o
+// denominador do VoteReveal e a base do "todos votaram" — NÃO confundir com quem
+// senta à mesa (activePlayersOf), que inclui o excluído.
+//
+// A presença tem de entrar AQUI, e é o mesmo filtro que o quórum do servidor
+// aplica. Sem ela, um fantasma de rehidratação (sentado, não-observer, não
+// excluído) entra no denominador — e como o sealRound apaga o voto dele, o reveal
+// exibia "1/2 votos" com uma pessoa só na sala. Exatamente "fazer a sala parecer
+// mais cheia do que está", que é o que esta feature existe para impedir.
+const roundVoters = computed(() =>
+  roundVotersOf(presentPlayersOf(players.value, absentPlayerIds.value), nonVoterIds.value),
+)
+
+const voterCount = computed(() => roundVoters.value.length)
 
 const allVotersVoted = computed(() => {
   const round = currentRound.value
   if (!round) return false
-  const voters = roundVotersOf(players.value, nonVoterIds.value)
+  const voters = roundVoters.value
   // Guard length: sala só de observers (ou todos excluídos) NÃO conta como
   // "todos votaram" — [].every() é true e marcaria a rodada como concluída.
   return voters.length > 0 && voters.every((p) => p.id in round.votes)

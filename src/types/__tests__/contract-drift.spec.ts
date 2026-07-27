@@ -48,4 +48,15 @@ describe('contract vocabulary drift guard (client × server)', () => {
   it('guards every vocabulary the two sides share', () => {
     expect(VOCABULARIES).toHaveLength(5)
   })
+
+  // WHAT THIS GUARD DOES NOT COVER, so nobody reads it as broader than it is: only
+  // VOCABULARIES — the const arrays. Interface FIELDS are invisible to it, because a
+  // type has no runtime value to compare. So `Room.absentPlayerIds` (optional on the
+  // client, required as `RoomBroadcast.absentPlayerIds` on the server), `tag`,
+  // `excludedVoterIds` and every other field are held in sync by the cross-reference
+  // comments on both declarations and by nothing else. Adding a field on one side
+  // and forgetting the other compiles clean and fails silently at runtime — the exact
+  // shape of the bug that motivated this file. If a field-level guard ever becomes
+  // worth it, it needs a runtime witness (a sample object both sides validate), not
+  // another type.
 })

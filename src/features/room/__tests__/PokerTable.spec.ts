@@ -169,4 +169,53 @@ describe('PokerTable.vue', () => {
       expect(wrapper.findAll('.non-voter-spot')).toHaveLength(0)
     })
   })
+
+  // A diferença que importa em relação ao "tirado da rodada": aquele CONTINUA
+  // sentado, o ausente não. A mesa é a metáfora de quem está em volta dela agora, e
+  // os ângulos são distribuídos sobre o total — um lugar guardado para quem não
+  // está distorce o círculo inteiro.
+  describe('jogador ausente', () => {
+    it('não recebe assento, ao contrário do tirado da rodada', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', absentPlayerIds: ['2'] },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(1) // só Adam
+      expect(wrapper.text()).toContain('Adam')
+      expect(wrapper.text()).not.toContain('Eve')
+    })
+
+    // Consequência do anterior. TEM de asseverar um spot com índice > 0: o ângulo é
+    // `π/2 + (index/total)·2π`, então o índice 0 cai em π/2 para QUALQUER total —
+    // uma versão anterior deste teste olhava o spot 0 e não podia falhar.
+    //
+    // Com 3 ativos e 1 ausente, o spot 1 passa de 1/3 da volta (210°) para 1/2
+    // (270°, o topo do oval: cos=-0, sin=-1). Se o ausente ainda ocupasse lugar, os
+    // valores seriam os de 1/3.
+    it('redistribui os ângulos sobre quem sobrou', () => {
+      const players: Player[] = [
+        { id: '1', name: 'Adam', role: 'admin' },
+        { id: '2', name: 'Eve', role: 'member' },
+        { id: '4', name: 'Cain', role: 'member' },
+      ]
+      const wrapper = mount(PokerTable, {
+        props: { players, votes: {}, status: 'voting', absentPlayerIds: ['2'] },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(2)
+      const style =
+        must(wrapper.findAll('.player-spot')[1], 'player spot 1 (Cain)').attributes('style') ?? ''
+      // 2 sentados → o segundo vai ao topo. Com 3, iria para cos≈0.8660/sin≈-0.5000.
+      expect(style).toContain('--cos: -0.0000')
+      expect(style).toContain('--sin: -1.0000')
+    })
+
+    it('sem a prop, todo mundo senta (default)', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(2)
+    })
+  })
 })

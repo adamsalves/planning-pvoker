@@ -24,6 +24,19 @@ const roomStore = useRoomStore()
 
 // Quem senta à mesa — espectador não conta pro gate de iniciar a sessão. Sala com
 // 1 jogador + 1 espectador é uma sessão de 1 votante, não de 2.
+//
+// Presença NÃO entra aqui, e é uma escolha, não esquecimento. Filtrar ausentes
+// tornaria o gate mais honesto no papel e criaria um BECO SEM SAÍDA na prática:
+// um fantasma de rehidratação nunca sai sozinho (sem socket → sem disconnect →
+// sem grace → sem leaveRoom), o produto não tem "expulsar", e uma sala que
+// reiniciou durante o setup com só uma pessoa de volta ficaria travada em
+// "aguardando jogadores" até o TTL de 24h. Sair e voltar piora: com ninguém
+// presente o handover do leaveRoom devolve a sala a um fantasma.
+//
+// Aqui o gate é só um empurrão contra iniciar sozinho, e destravá-lo cedo demais
+// não quebra nada — o quórum do reveal É presença-aware no servidor, então uma
+// sessão iniciada com fantasmas na conta revela normalmente quando quem está
+// presente vota. Contar sentados é o lado seguro do erro.
 const activePlayerCount = computed(() => activePlayersOf(roomStore.players).length)
 </script>
 
@@ -62,7 +75,12 @@ const activePlayerCount = computed(() => activePlayersOf(roomStore.players).leng
 
     <div class="sidebar-panel">
       <BaseCard :title="t('room.participants')" class="section-card">
-        <PlayerList :players="roomStore.players" :votes="{}" status="waiting" />
+        <PlayerList
+          :players="roomStore.players"
+          :votes="{}"
+          status="waiting"
+          :absent-player-ids="roomStore.absentPlayerIds"
+        />
       </BaseCard>
     </div>
   </div>

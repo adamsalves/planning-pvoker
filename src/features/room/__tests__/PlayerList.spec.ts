@@ -306,4 +306,69 @@ describe('PlayerList.vue', () => {
       expect(wrapper.find('.player-tag-badge').text()).toContain('QA')
     })
   })
+
+  // Fantasma de rehidratação: continua SENTADO (o servidor não o remove), mas o
+  // broadcast o marca ausente. A lista mostra, a contagem não conta.
+  describe('jogador ausente', () => {
+    const props = {
+      players: mockPlayers,
+      votes: {},
+      status: 'voting' as const,
+      absentPlayerIds: ['2'],
+    }
+
+    it('continua listado, ao contrário do espectador', () => {
+      const wrapper = mount(PlayerList, { props })
+
+      // Escopado à seção de ativos: a de espectadores usa a mesma classe de item.
+      const activeItems = wrapper.findAll('.player-section:not(.observers) .player-item')
+
+      expect(wrapper.text()).toContain('Member')
+      expect(activeItems).toHaveLength(2) // Admin + Member, o ausente entre eles
+      expect(wrapper.findAll('.absent-item')).toHaveLength(1)
+    })
+
+    // O ponto da feature: a sala não pode parecer mais cheia do que está. Com 2
+    // ativos e 1 ausente o título diz 1 — e a lista segue com as duas linhas.
+    it('sai da CONTAGEM do título sem sair da lista', () => {
+      const wrapper = mount(PlayerList, { props })
+
+      expect(wrapper.text()).toContain('Jogadores (1)')
+      expect(wrapper.text()).not.toContain('Jogadores (2)')
+    })
+
+    // Precedência: "ausente" tem de vencer "aguardando voto", senão a UI anuncia
+    // que se espera o voto de quem não está na sala — a mentira que isto corrige.
+    it('anuncia "ausente" em vez de "aguardando voto"', () => {
+      const wrapper = mount(PlayerList, { props })
+      const absent = wrapper.get('.absent-item')
+
+      expect(absent.find('.absent-badge').exists()).toBe(true)
+      expect(absent.find('.pending-badge').exists()).toBe(false)
+      expect(absent.get('.absent-badge').find('.sr-only').text()).toBe('Ausente')
+    })
+
+    // Sem a prop, ninguém é ausente — cobre o servidor antigo durante um deploy e
+    // toda fixture que não conhece o campo.
+    it('não marca ninguém quando a prop não vem (default)', () => {
+      const wrapper = mount(PlayerList, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' as const },
+      })
+
+      expect(wrapper.findAll('.absent-item')).toHaveLength(0)
+      expect(wrapper.text()).toContain('Jogadores (2)')
+    })
+
+    // v-memo: isPlayerAbsent TEM de estar nas deps. Quem reconecta depois do mount
+    // precisa deixar de aparecer apagado sem esperar outro motivo de repaint.
+    it('repinta a linha quando a ausência muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, { props })
+      expect(wrapper.findAll('.absent-item')).toHaveLength(1)
+
+      await wrapper.setProps({ absentPlayerIds: [] })
+
+      expect(wrapper.findAll('.absent-item')).toHaveLength(0)
+      expect(wrapper.text()).toContain('Jogadores (2)')
+    })
+  })
 })

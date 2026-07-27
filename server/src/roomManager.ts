@@ -78,15 +78,18 @@ export class RoomManager {
   //
   // Known trade-off: presence/grace timers (events.ts) are ephemeral and lost on
   // restart, so a rehydrated room comes back with every player it had — including
-  // ones who won't reconnect. Such a "ghost" still APPEARS in the player list
-  // until the room's TTL expires (no disconnect fires for a socket that never
-  // existed in this process). It no longer blocks progress, though: the autoReveal
-  // quorum is presence-aware (see maybeAutoReveal + the PresenceOracle), so a ghost
-  // is excluded from the quorum and can neither stall the reveal nor pin the room.
-  // A grace-based boot reaper is still avoided on purpose — the free-tier cold
-  // start (~60s) exceeds the reconnect grace (~30s) and would evict the room
-  // before the team finishes reconnecting. Hiding the ghost from the UI is a
-  // separate follow-up (it needs presence broadcast to clients).
+  // ones who won't reconnect. Such a "ghost" stays SEATED until the room's TTL
+  // expires (no disconnect fires for a socket that never existed in this process),
+  // and that is deliberate: a grace-based boot reaper is avoided because the
+  // free-tier cold start (~60s) exceeds the reconnect grace (~30s) and would evict
+  // the room before the team finishes reconnecting.
+  //
+  // Seated, however, no longer means COUNTED or even shown as present. The autoReveal
+  // quorum is presence-aware (maybeAutoReveal + the PresenceOracle), sealRound drops
+  // an absent player's vote at the reveal, and notifyRoomUpdate now ships
+  // `absentPlayerIds` so the client renders the ghost as absent instead of as a
+  // teammate who is about to vote. A ghost can neither stall the round, nor skew the
+  // stats, nor make the room look fuller than it is.
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
     for (const room of rooms) {
