@@ -25,7 +25,7 @@ Documentação de acompanhamento do projeto. Cada fase concluída é registrada 
 src/
 ├── assets/          → CSS global e design tokens
 ├── components/      → Componentes reutilizáveis (BaseButton, BaseCard…)
-├── composables/     → Lógica reutilizável (useRoom, useWebSocket…)
+├── composables/     → Lógica reutilizável (useRoom, useSocket…)
 ├── features/        → Módulos por feature
 │   ├── home/        → Tela inicial (criar/entrar)
 │   ├── room/        → Componentes e lógica da sala
@@ -666,7 +666,7 @@ O `position: sticky` no sidebar mantém a lista de jogadores visível durante sc
 
 **Objetivo:** Refinar a aplicação para máxima performance, acessibilidade e robustez técnica.
 
-### Conceitos Praticados
+### Conceitos Praticados — Fase 5
 
 #### Performance — `v-memo` & `shallowRef`
 
@@ -683,7 +683,9 @@ Para evitar re-renders desnecessários em listas de alta frequência (como a lis
 </li>
 ```
 
-**Nota:** O array de dependências do `v-memo` inclui **todos** os valores reativos que afetam a renderização de cada item — nome, role, status da rodada, se votou e o valor do voto. Se nenhum desses mudar, o Vue pula completamente o re-render daquele `<li>`.
+**Nota:** O array de dependências do `v-memo` inclui **todos** os valores reativos que afetam a renderização de cada item. Se nenhum mudar, o Vue pula completamente o re-render daquele `<li>`.
+
+**A armadilha, aprendida depois:** essa lista é uma dependência manual, e o compilador não a verifica. Cada estado novo que a linha passou a mostrar — a tag da área, "fora desta rodada", "ausente" — precisou ser **acrescentado à mão**, e esquecer significa uma linha que simplesmente não repinta. Foi por isso que o `locale` entrou na lista: sem ele, o nome acessível do toggle (interpolado com `t()`) congelava no idioma antigo enquanto o badge ao lado já tinha traduzido. A regra que ficou: **todo valor reativo lido dentro do `<li>` vai nas deps**, e todo estado novo ganha um teste que muda a prop DEPOIS do mount.
 
 E para estados complexos que não precisam de reatividade profunda (deep tracking), usamos `shallowRef`:
 
@@ -706,8 +708,261 @@ Implementação de labels e estados para tecnologias assistivas:
 
 Substituição de tipos `any` por tipagem forte em mocks de Socket.IO e melhoria na configuração do Vitest para isolar testes unitários de E2E.
 
-### Verificação
+### Verificação — Fase 5
 
 - ✅ `npm run test:unit` — 100% de sucesso com mocks tipados.
 - ✅ Lighthouse / Accessibility audit — Menus e botões totalmente semânticos.
 - ✅ Bundle analysis — Redução no tamanho inicial via Lazy Loading generalizado.
+
+---
+
+## Fase 6 — Tempo Real de Verdade: Presença, Reconexão e Identidade
+
+**Objetivo:** sair do "funciona com todo mundo online e a rede boa" para o que acontece de verdade — abas que fecham, redes que caem, servidores que reiniciam.
+
+### Conceitos Praticados — Fase 6
+
+#### O cliente não é fonte da verdade sobre quem ele é
+
+A primeira versão confiava no `playerId` que o cliente mandava. O problema: o `adminId` da sala viaja no broadcast para todo mundo. Qualquer um podia entrar de novo dizendo `player.id = <adminId>` e virar admin.
+
+A correção é um **token de sessão por (sala, jogador)**, guardado fora do objeto `Room` justamente para nunca ser serializado no broadcast:
+
+```ts
+// server/src/roomManager.ts
+private tokens: Map<string, string> = new Map()
+```
+
+O token é devolvido só no _ack_ do `join_room` (que vai para um socket só), e é ele que prova a identidade num rejoin. O papel também passou a ser **derivado do servidor**, não aceito do cliente:
+
+```ts
+// server/src/events.ts — normalização no join
+const role = player.id === room.adminId ? 'admin' : player.role === 'admin' ? 'member' : player.role
+```
+
+**A lição:** todo dado que o cliente manda é uma _sugestão_. O que decide é o estado do servidor mais um segredo que só o dono da identidade tem.
+
+#### Presença ≠ estar na lista
+
+Um refresh não pode expulsar ninguém da sala, mas alguém que fechou a aba também não pode travar a rodada para sempre. Isso virou uma **janela de graça**: ao perder o último socket, o jogador entra num timer; se voltar antes, nada aconteceu.
+
+```ts
+// server/src/events.ts
+const isPresent = (roomId: string, playerId: string): boolean => {
+  const key = presenceKey(roomId, playerId)
+  return activeSockets.has(key) || leaveTimers.has(key)
+}
+```
+
+Presença é estado do **processo** — sockets e timers. Por isso ela é injetada no `RoomManager` por uma porta estreita (`PresenceOracle`) em vez de o `RoomManager` conhecer sockets:
+
+```ts
+export interface PresenceOracle {
+  isPresent(roomId: string, playerId: string): boolean
+}
+```
+
+O padrão aqui é **inversão de dependência**: o núcleo do domínio declara o que precisa saber, e a camada de transporte fornece. Um efeito colateral valioso é que o `RoomManager` continua testável sem nenhum socket — o default responde "todos presentes", e os testes injetam o que quiserem.
+
+#### O mesmo conceito em três momentos diferentes
+
+Um "quem conta" aparece em lugares que parecem iguais e não são. Confundi-los foi a origem de vários bugs:
+
+| Conceito          | Função                               | Pergunta que responde                 |
+| ----------------- | ------------------------------------ | ------------------------------------- |
+| Sentado à mesa    | `activePlayersOf`                    | quem aparece na mesa (não-espectador) |
+| Votante da rodada | `roundVotersOf` / `eligibleVotersOf` | de quem a rodada espera voto          |
+| Presente          | `presentPlayersOf`                   | quem está de fato conectado agora     |
+
+São três eixos independentes: um espectador está sentado? Não. Alguém tirado da rodada está sentado? Sim, mas não vota. Um fantasma vota? Está elegível, mas não está lá.
+
+### Verificação — Fase 6
+
+- ✅ Rejoin com token válido preserva identidade e papel; sem token, é recusado.
+- ✅ Refresh dentro da janela de graça não remove o jogador nem trava a rodada.
+- ✅ Testes de socket ponta a ponta (cliente Socket.IO real contra servidor real), não só unitários do `RoomManager`.
+
+---
+
+## Fase 7 — Persistência Sem Banco de Dados
+
+**Objetivo:** o plano free do Render hiberna e reinicia. Uma sala não podia morrer junto com o processo.
+
+### Conceitos Praticados — Fase 7
+
+#### Write-through, e não "o banco é a verdade"
+
+A escolha de arquitetura foi manter as `Map`s em memória como autoritativas e **espelhar** cada mutação para o Redis, em vez de ler do Redis a cada operação:
+
+```
+mutação → Map (síncrono, autoritativo) → snapshot no Redis (async, best-effort)
+```
+
+O ganho é que a API pública do `RoomManager` continua **síncrona** e os testes existentes não mudaram uma linha. O custo é que uma escrita perdida só custa durabilidade, nunca correção — e é por isso que ela pode ser best-effort.
+
+Escritas concorrentes para a mesma sala são **coalescidas**: no máximo um save em voo por sala, e uma sala mutada durante o save é remarcada e re-salva com o estado mais novo. Colapsar snapshots intermediários é seguro porque só o último importa para quem reidrata.
+
+#### O que vem de fora é `unknown` até prova em contrário
+
+Um snapshot lido do Redis é dado externo — pode estar corrompido, ter schema antigo, ter sido escrito por uma versão anterior. Ele passa por zod antes de virar `Room`:
+
+```ts
+const parsedRoom = roomSchema.safeParse(raw)
+if (!parsedRoom.success) {
+  /* descarta esta sala, segue o boot */
+}
+```
+
+Duas decisões que só aparecem quando você tenta:
+
+**Campos novos entram como opcionais.** `excludedVoterIds` e `tag` são `.optional()` porque snapshots gravados antes da feature não os têm — um `required` faria o `safeParse` falhar e **todas as salas vivas morreriam no deploy** que introduziu o campo.
+
+**Enum de produto degrada, enum estrutural rejeita.** A tag usa `.optional().catch(undefined)`: se um valor sair da lista, o jogador perde a tag em vez de a sala inteira ser descartada. Já `role` e `deckType` não levam `.catch` — são estruturais, e um valor inválido ali significa dado que não dá para interpretar.
+
+#### Guardas de relação, não só de forma
+
+Zod valida campo a campo. Ele não pega `currentRoundIndex: 1` com `rounds: []` — cada campo é válido sozinho, só a **relação** está quebrada. E esse caso arma um `TypeError` dentro de um handler de socket, que derruba o processo:
+
+```ts
+.refine(
+  (room) =>
+    room.currentRoundIndex === -1 ||
+    (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
+  { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
+)
+```
+
+A régua que ficou: **rejeitar é para o dano que a sala não absorve.** Um índice fora de faixa derruba o processo → rejeita. Um `excludedVoterIds` órfão é inerte → passa. E há um terceiro caminho, aprendido depois: um `adminId` apontando para ninguém não derruba nada, mas deixa a sala impossível de dirigir — esse caso é **reparado** no boot, não descartado, porque descartar custaria o backlog e o histórico inteiros por causa de uma string.
+
+### Verificação — Fase 7
+
+- ✅ Redeploy do backend com sala ativa: a sala volta, com backlog e rodadas.
+- ✅ Sem as variáveis do Redis, o servidor roda igual à v1 (100% memória).
+- ✅ Snapshot malformado é descartado com o motivo no log, e o boot segue com as outras salas.
+
+---
+
+## Fase 8 — i18n, Tema e Ícones
+
+**Objetivo:** o produto falar duas línguas, respeitar a preferência de tema do sistema e parar de depender de emoji do SO para comunicar estado.
+
+### Conceitos Praticados — Fase 8
+
+#### Catálogo tipado — e o limite honesto disso
+
+O `vue-i18n` aceita qualquer string em `t()`, e um typo vira texto faltando em produção, silenciosamente. A augmentação de módulo ensina o schema do app ao editor:
+
+```ts
+// src/i18n/vue-i18n.d.ts
+import type { MessageSchema } from './locales/pt-BR'
+
+declare module 'vue-i18n' {
+  export interface DefineLocaleMessage extends MessageSchema {}
+}
+```
+
+O limite, que vale registrar porque é fácil acreditar no contrário: isso dá **autocomplete e go-to-definition**, não erro de compilação. O `t()` é tipado `key: Key extends string`, então continua aceitando qualquer string — e precisa aceitar, porque o app usa chaves dinâmicas (``t(`decks.${x}`)``, `t(errorKey)`). Um literal digitado errado passa pelo compilador.
+
+O que o compilador **de fato** reprova é a **paridade entre os catálogos**, e ela vem de outro lugar:
+
+```ts
+// src/i18n/locales/pt-BR.ts — o master
+export type MessageSchema = typeof ptBR
+
+// src/i18n/locales/en.ts — tipado contra ele
+export const en: MessageSchema = {
+  /* … */
+}
+```
+
+O pt-BR é a **fonte do schema**, e o `en` é tipado contra ele: chave faltando ou sobrando no inglês não compila. A lição transferível: uma augmentação de tipo pode entregar ergonomia sem entregar garantia — vale conferir qual das duas você ganhou antes de confiar nela.
+
+#### Erro guardado como chave, traduzido no render
+
+O caso que quebra a intuição: uma mensagem de validação já na tela precisa **re-traduzir** quando o idioma muda. Guardar a string traduzida congela o idioma do momento em que o erro apareceu. A solução é guardar a **chave** e traduzir na renderização.
+
+#### Ícone é dado ou é decoração — nunca os dois
+
+Emoji são renderizados pelo SO, com cor fixa: num tema escuro eles brigam com tudo. A troca foi para SVG inline em build-time (`unplugin-icons` + Lucide), herdando `currentColor` — recolorem com o tema de graça.
+
+A regra que decidiu o que trocar: **emoji fica quando é marca ou dado** (o 🃏 do logo, o ☕ que é um valor real do baralho); **vira ícone quando é rótulo de estado** (votou, aguardando, espectador). E todo ícone decorativo sai da árvore de acessibilidade com `aria-hidden="true"`, com o significado no texto ao lado — quem usa leitor de tela ouve o rótulo, não "imagem".
+
+### Verificação — Fase 8
+
+- ✅ Trocar idioma com erro de validação na tela re-traduz o erro.
+- ✅ Tema claro/escuro/automático persistido, e os ícones acompanham.
+- ✅ O badge de estado renderiza o componente de ícone esperado, e não o do estado
+  vizinho (`findComponent(IconHourglass)` presente, `IconCheck` ausente) — a asserção
+  alveja o ícone certo, não a mera ausência de emoji.
+
+---
+
+## Fase 9 — A Qualidade Que o Compilador Não Dá de Graça
+
+**Objetivo:** fechar os vãos onde "está verde" não significava "está certo".
+
+### Conceitos Praticados — Fase 9
+
+#### Suíte verde ≠ suíte discriminante
+
+O aprendizado mais transferível do projeto inteiro. Um teste que passa não prova nada sozinho: ele pode estar asseverando algo que é verdade **independentemente** do código sob teste.
+
+Um caso real daqui: um teste conferia a posição do primeiro jogador na mesa depois de filtrar os ausentes. Passava. Só que o ângulo é `π/2 + (index/total)·2π` — para `index 0` isso é `π/2` **para qualquer total**. O teste não podia falhar.
+
+A ferramenta contra isso é **teste por mutação**: quebre de propósito o comportamento que o teste alega cobrir e confirme que ele falha.
+
+```bash
+# quebre a linha de propósito, rode só o spec que alega cobri-la, confira o
+# EXIT CODE (não o resumo da saída) e reverta. Continuou verde? Não discrimina.
+npx vitest run src/utils/__tests__/players.spec.ts; echo "EXIT=$?"
+```
+
+Um corolário: **fixture de um elemento esconde bug.** Com uma lista de um item, `.some()`, `.every()`, `[0]` e "o último" são indistinguíveis.
+
+#### O gate que passava sem checar nada
+
+Por meses o `type-check` retornava 0 sem nunca olhar os specs — dos **dois** lados, por causas diferentes.
+
+No cliente, a causa não era design do `vue-tsc`, como se supôs por muito tempo: era uma linha de config. Dois projetos TypeScript gravando no **mesmo** `tsBuildInfoFile`, então o `--build` lia o carimbo de um ao checar o outro, concluía "atualizado" e pulava.
+
+No servidor era outra coisa: o `tsconfig.json` existe para **emitir** (`include: src`, saída em `dist`), e por isso nunca enxergou `test/`. A correção foi um `tsconfig.check.json` separado, que só checa e inclui os testes — e um passo próprio no CI, distinto do build.
+
+A lição não é sobre TypeScript. É que **um gate precisa ser testado como qualquer outro código**: plante um erro e confirme que ele reprova. Um gate que nunca reprovou nada é indistinguível de um gate que não existe. E o corolário que os dois lados juntos ensinam: mesmo sintoma não implica mesma causa — cada gate se prova sozinho, sem herdar o diagnóstico do vizinho.
+
+#### Proibir asserção de tipo, e o que aparece no lugar
+
+`as` e `!` silenciam o compilador exatamente onde a informação é mais valiosa. A regra virou lint (`consistent-type-assertions: never` + `no-non-null-assertion`), e o que a substitui é mais interessante do que a proibição:
+
+```ts
+// src/test-utils/must.ts — narrowing por FLUXO DE CONTROLE, não por asserção
+export function must<T>(value: T | undefined | null, what: string): T {
+  if (value === undefined || value === null) {
+    throw new Error(`Expected ${what} to be defined, got ${String(value)}`)
+  }
+  return value
+}
+```
+
+A diferença com `!` não é ideológica: o `throw` é uma saída **real**, então a falha vira `Expected summary tab to be defined` em vez de `Cannot read properties of undefined` dez linhas adiante. O rótulo é obrigatório de propósito — com um default genérico, o default vence e a mensagem volta a não dizer nada.
+
+Outros dois padrões que apareceram ao remover os casts: **o helper cast-free que o arquivo já tinha** costuma ser exatamente o que o cast reimplementava à mão; e **nomear o valor** elimina `array[N]!` melhor do que embrulhá-lo.
+
+#### O contrato que o compilador não vê
+
+Os tipos de rede são declarados dos dois lados — `server/src/types.ts` e `src/types/index.ts` — sem nada ligando um ao outro. Uma união de tipos **some na compilação**, então nenhum teste alcança. A solução foi declarar os vocabulários como const arrays, que existem em runtime:
+
+```ts
+export const ROUND_STATUSES = ['voting', 'revealed'] as const
+export type RoundStatus = (typeof ROUND_STATUSES)[number]
+```
+
+Com valor em runtime, a deriva vira **assertável** — um teste compara as listas dos dois lados e falha se divergirem. Foi o que expôs um `'waiting'` que o cliente carregava e o servidor nunca emitiu, em commit nenhum.
+
+O limite continua registrado: o guarda cobre **vocabulários**, não campos de interface. Um campo adicionado de um lado só compila limpo e falha em runtime.
+
+### Verificação — Fase 9
+
+- ✅ `npm run type-check` cobre `src/` e os specs, nos dois lados, e reprova erro plantado.
+- ✅ `eslint` reprova `as` (fora de `as const`) e `!`.
+- ✅ `knip` reprova export não usado.
+- ✅ Cobertura nova acompanhada de mutação que prova que ela discrimina.
