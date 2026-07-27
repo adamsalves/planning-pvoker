@@ -293,21 +293,32 @@ describe('RedisPersistence', () => {
     expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('BROKEN')
   })
 
-  // Sibling of the case above, with the opposite failure mode: an orphan adminId
-  // throws nothing, it leaves the room permanently un-driveable (requireAdmin never
-  // matches, and leaveRoom's wasAdmin never fires, so no handover rescues it).
-  // Dropping the room is the lesser loss. `players: []` is the degenerate case —
-  // an empty room is destroyed in-process, so a snapshot of one is already broken.
-  it.each([
-    ['adminId names nobody in players', { adminId: 'ghost' }],
-    ['no players at all', { players: [] }],
-  ])('loadAll drops a snapshot with an orphan adminId: %s', async (_, broken) => {
-    await redis.sadd('rooms:index', 'ORPHAN')
-    redis.strings.set('room:ORPHAN', { ...sampleRoom(), id: 'ORPHAN', ...broken })
+  // A room with NO players can only be discarded: nothing to rebuild, and nobody to
+  // promote if the admin is dangling. An empty room is destroyed in-process, so a
+  // snapshot of one is already broken.
+  it('loadAll drops a snapshot with no players at all', async () => {
+    await redis.sadd('rooms:index', 'EMPTY')
+    redis.strings.set('room:EMPTY', { ...sampleRoom(), id: 'EMPTY', players: [] })
 
     const snap = await persistence.loadAll()
     expect(snap.rooms).toEqual([])
-    expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('ORPHAN')
+    expect([...(redis.sets.get('rooms:index') ?? [])]).not.toContain('EMPTY')
+  })
+
+  // An orphan adminId used to be rejected HERE, which threw away an otherwise intact
+  // room over one dangling string. It is now repaired at boot instead
+  // (RoomManager.repairOrphanAdmin), so this layer must let it THROUGH — the room and
+  // its history survive. Fails if someone reinstates the refine.
+  it('loadAll keeps a snapshot whose adminId names nobody (repaired later, in hydrate)', async () => {
+    await redis.sadd('rooms:index', 'ORPHAN')
+    redis.strings.set('room:ORPHAN', { ...sampleRoom(), id: 'ORPHAN', adminId: 'ghost' })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['ORPHAN'])
+    // Untouched at this layer: persistence validates, it does not repair.
+    expect(snap.rooms[0].adminId).toBe('ghost')
+    expect([...(redis.sets.get('rooms:index') ?? [])]).toContain('ORPHAN')
+    expect(warn).not.toHaveBeenCalled()
   })
 
   // Every other case here seats a SINGLE player, where "some player matches" is
@@ -364,13 +375,13 @@ describe('RedisPersistence', () => {
   // survivors — so the refine messages have to reach an operator, or a room vanishes
   // with no explanation. Pins the reason, not just the fact that something was said.
   it('loadAll reports WHY it discarded a snapshot', async () => {
-    await redis.sadd('rooms:index', 'ORPHAN')
-    redis.strings.set('room:ORPHAN', { ...sampleRoom(), id: 'ORPHAN', adminId: 'ghost' })
+    await redis.sadd('rooms:index', 'EMPTY')
+    redis.strings.set('room:EMPTY', { ...sampleRoom(), id: 'EMPTY', players: [] })
 
     await persistence.loadAll()
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0][0]).toContain('ORPHAN')
-    expect(warn.mock.calls[0][0]).toContain('adminId must name one of the room players')
+    expect(warn.mock.calls[0][0]).toContain('EMPTY')
+    expect(warn.mock.calls[0][0]).toContain('a room must carry at least one player')
   })
 
   // The other half of the contract: an index entry whose room simply expired is the
