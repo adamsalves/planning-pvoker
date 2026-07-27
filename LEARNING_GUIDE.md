@@ -666,7 +666,7 @@ O `position: sticky` no sidebar mantém a lista de jogadores visível durante sc
 
 **Objetivo:** Refinar a aplicação para máxima performance, acessibilidade e robustez técnica.
 
-### Conceitos Praticados
+### Conceitos Praticados — Fase 5
 
 #### Performance — `v-memo` & `shallowRef`
 
@@ -708,7 +708,7 @@ Implementação de labels e estados para tecnologias assistivas:
 
 Substituição de tipos `any` por tipagem forte em mocks de Socket.IO e melhoria na configuração do Vitest para isolar testes unitários de E2E.
 
-### Verificação
+### Verificação — Fase 5
 
 - ✅ `npm run test:unit` — 100% de sucesso com mocks tipados.
 - ✅ Lighthouse / Accessibility audit — Menus e botões totalmente semânticos.
@@ -848,16 +848,34 @@ A régua que ficou: **rejeitar é para o dano que a sala não absorve.** Um índ
 
 ### Conceitos Praticados — Fase 8
 
-#### Catálogo tipado por chave
+#### Catálogo tipado — e o limite honesto disso
 
-O `vue-i18n` aceita qualquer string em `t()` — um typo vira texto faltando em produção, silenciosamente. A augmentação de módulo transforma isso em erro de compilação:
+O `vue-i18n` aceita qualquer string em `t()`, e um typo vira texto faltando em produção, silenciosamente. A augmentação de módulo ensina o schema do app ao editor:
 
 ```ts
 // src/i18n/vue-i18n.d.ts
-export type MessageSchema = typeof ptBR
+import type { MessageSchema } from './locales/pt-BR'
+
+declare module 'vue-i18n' {
+  export interface DefineLocaleMessage extends MessageSchema {}
+}
 ```
 
-O catálogo pt-BR é a **fonte do schema**, e o `en` é tipado contra ele: chave faltando ou sobrando no inglês não compila.
+O limite, que vale registrar porque é fácil acreditar no contrário: isso dá **autocomplete e go-to-definition**, não erro de compilação. O `t()` é tipado `key: Key extends string`, então continua aceitando qualquer string — e precisa aceitar, porque o app usa chaves dinâmicas (``t(`decks.${x}`)``, `t(errorKey)`). Um literal digitado errado passa pelo compilador.
+
+O que o compilador **de fato** reprova é a **paridade entre os catálogos**, e ela vem de outro lugar:
+
+```ts
+// src/i18n/locales/pt-BR.ts — o master
+export type MessageSchema = typeof ptBR
+
+// src/i18n/locales/en.ts — tipado contra ele
+export const en: MessageSchema = {
+  /* … */
+}
+```
+
+O pt-BR é a **fonte do schema**, e o `en` é tipado contra ele: chave faltando ou sobrando no inglês não compila. A lição transferível: uma augmentação de tipo pode entregar ergonomia sem entregar garantia — vale conferir qual das duas você ganhou antes de confiar nela.
 
 #### Erro guardado como chave, traduzido no render
 
@@ -873,7 +891,9 @@ A regra que decidiu o que trocar: **emoji fica quando é marca ou dado** (o 🃏
 
 - ✅ Trocar idioma com erro de validação na tela re-traduz o erro.
 - ✅ Tema claro/escuro/automático persistido, e os ícones acompanham.
-- ✅ Nenhum emoji de estado no DOM (asserção nos testes de componente).
+- ✅ O badge de estado renderiza o componente de ícone esperado, e não o do estado
+  vizinho (`findComponent(IconHourglass)` presente, `IconCheck` ausente) — a asserção
+  alveja o ícone certo, não a mera ausência de emoji.
 
 ---
 
@@ -892,17 +912,22 @@ Um caso real daqui: um teste conferia a posição do primeiro jogador na mesa de
 A ferramenta contra isso é **teste por mutação**: quebre de propósito o comportamento que o teste alega cobrir e confirme que ele falha.
 
 ```bash
-# quebra a linha, roda a suíte, confere o exit code, reverte
-npm run type-check; echo "EXIT=$?"
+# quebre a linha de propósito, rode só o spec que alega cobri-la, confira o
+# EXIT CODE (não o resumo da saída) e reverta. Continuou verde? Não discrimina.
+npx vitest run src/utils/__tests__/players.spec.ts; echo "EXIT=$?"
 ```
 
 Um corolário: **fixture de um elemento esconde bug.** Com uma lista de um item, `.some()`, `.every()`, `[0]` e "o último" são indistinguíveis.
 
 #### O gate que passava sem checar nada
 
-Por meses o `npm run type-check` retornava 0 sem nunca olhar os `*.spec.ts`. A causa não era design do `vue-tsc` — era uma linha de config: dois projetos TypeScript gravando no **mesmo** `tsBuildInfoFile`, então o `--build` lia o carimbo de um ao checar o outro, concluía "atualizado" e pulava.
+Por meses o `type-check` retornava 0 sem nunca olhar os specs — dos **dois** lados, por causas diferentes.
 
-A lição não é sobre TypeScript. É que **um gate precisa ser testado como qualquer outro código**: plante um erro e confirme que ele reprova. Um gate que nunca reprovou nada é indistinguível de um gate que não existe.
+No cliente, a causa não era design do `vue-tsc`, como se supôs por muito tempo: era uma linha de config. Dois projetos TypeScript gravando no **mesmo** `tsBuildInfoFile`, então o `--build` lia o carimbo de um ao checar o outro, concluía "atualizado" e pulava.
+
+No servidor era outra coisa: o `tsconfig.json` existe para **emitir** (`include: src`, saída em `dist`), e por isso nunca enxergou `test/`. A correção foi um `tsconfig.check.json` separado, que só checa e inclui os testes — e um passo próprio no CI, distinto do build.
+
+A lição não é sobre TypeScript. É que **um gate precisa ser testado como qualquer outro código**: plante um erro e confirme que ele reprova. Um gate que nunca reprovou nada é indistinguível de um gate que não existe. E o corolário que os dois lados juntos ensinam: mesmo sintoma não implica mesma causa — cada gate se prova sozinho, sem herdar o diagnóstico do vizinho.
 
 #### Proibir asserção de tipo, e o que aparece no lugar
 

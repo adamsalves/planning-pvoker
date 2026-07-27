@@ -53,4 +53,15 @@ O e2e exige os browsers do Playwright (`npx playwright install chromium`) — se
 
 Suíte verde não é suíte discriminante. Ao adicionar cobertura, **verifique por mutação**: quebre de propósito o comportamento que o teste alega cobrir e confirme que ele falha — e que os outros não. Uma fixture de um elemento só esconde a diferença entre `.some()`, `.every()`, `[0]` e o último.
 
-Testes acompanham a mudança no mesmo commit. Comentários explicam o **porquê** (em português, como o resto do repositório), não o quê.
+Testes acompanham a mudança no mesmo commit. Comentários explicam o **porquê**, não o quê.
+
+Sobre o idioma dos comentários: o repositório é misto e não vale uniformizar agora.
+
+| Onde                                                                                          | Idioma predominante |
+| --------------------------------------------------------------------------------------------- | ------------------- |
+| Cliente (`src/`)                                                                              | português           |
+| `server/src/validation.ts`, `logger.ts`                                                       | português           |
+| `server/src/roomManager.ts`, `persistence.ts`, `events.ts`, `crashGuards.ts`, `errorCodes.ts` | inglês              |
+| `server/src/types.ts`                                                                         | misto               |
+
+**Siga o idioma do trecho que você está editando** — um comentário em pt-BR no meio de trezentas linhas em inglês salta aos olhos no diff. Prosa de documentação (`.md`) é sempre em português.

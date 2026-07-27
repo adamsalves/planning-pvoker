@@ -51,7 +51,7 @@ changelog da próxima versão).
 ## Processo de release (develop → main)
 
 1. Garantir a `develop` verde (`npm run validate`) e o smoke manual de produção
-   (passos de integração do `DEPLOYMENT_PLAN.md`).
+   (seção "Verificação depois de um deploy" do `DEPLOYMENT_PLAN.md`).
 2. Abrir um **PR de release** `develop → main` (título `release: vX.Y.Z`).
 3. CI verde no PR (o workflow roda em PRs para `main`).
 4. **Merge** → o auto-deploy publica (ver abaixo).
@@ -97,10 +97,13 @@ commits — por isso a disciplina de Conventional Commits importa.
 Variáveis de ambiente (definidas nos painéis, **não** no repo):
 
 - **Netlify:** `VITE_WS_URL` = URL do backend no Render (ex.: `https://planning-pvoker.onrender.com`).
-- **Render:** origens de CORS (`CLIENT_ORIGIN`/`CLIENT_ORIGINS`/`CORS_ORIGIN`),
-  `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (persistência, ativa desde a
-  v1.3.0), e os opcionais `RECONNECT_GRACE_MS` e `ROOM_TTL_SECONDS`. O `PORT` é
-  provido pelo Render. Tabela completa no `DEPLOYMENT_PLAN.md`.
+  É a única obrigatória do lado do front.
+- **Render:** nenhuma é obrigatória — o servidor sobe sem nenhuma delas. `UPSTASH_REDIS_REST_URL` /
+  `UPSTASH_REDIS_REST_TOKEN` **ligam a persistência** (em uso desde a v1.3.0; sem elas o servidor
+  roda só em memória); as origens de CORS (`CLIENT_ORIGIN`/`CLIENT_ORIGINS`/`CORS_ORIGIN`) são
+  aditivas às que já vêm no default; `RECONNECT_GRACE_MS`, `ROOM_TTL_SECONDS` e `NODE_ENV` ajustam
+  comportamento. O `PORT` e o `RENDER_EXTERNAL_URL` são providos pelo Render.
+  Tabela completa no `DEPLOYMENT_PLAN.md`.
 
 ## Rollback
 

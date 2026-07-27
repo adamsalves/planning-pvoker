@@ -47,21 +47,20 @@ O `PORT` é provido pelo Render e já é lido em `server/src/index.ts`.
 
 ### Variáveis de ambiente
 
-| Variável                                           | Obrigatória         | Papel                                                                      |
-| -------------------------------------------------- | ------------------- | -------------------------------------------------------------------------- |
-| `CLIENT_ORIGIN` / `CLIENT_ORIGINS` / `CORS_ORIGIN` | sim, em produção    | Origens aceitas no CORS. Sem elas o servidor não libera o front publicado. |
-| `UPSTASH_REDIS_REST_URL`                           | não                 | Ativa a persistência. Ausente = só memória.                                |
-| `UPSTASH_REDIS_REST_TOKEN`                         | não                 | Par da anterior. As duas juntas, ou nenhuma.                               |
-| `RECONNECT_GRACE_MS`                               | não                 | Janela de graça da reconexão (padrão 30s).                                 |
-| `ROOM_TTL_SECONDS`                                 | não                 | Expiração das salas no Redis (padrão 24h).                                 |
-| `PORT`                                             | provida pelo Render | —                                                                          |
+| Variável                                           | Obrigatória         | Papel                                                                                                                         |
+| -------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `CLIENT_ORIGIN` / `CLIENT_ORIGINS` / `CORS_ORIGIN` | não                 | Origens **adicionais** no CORS (lista separada por vírgula). Ver a nota abaixo — as de produção já vêm no default.            |
+| `RENDER_EXTERNAL_URL`                              | provida pelo Render | Entra na mesma lista de origens aceitas.                                                                                      |
+| `UPSTASH_REDIS_REST_URL`                           | não                 | Ativa a persistência. Ausente = só memória.                                                                                   |
+| `UPSTASH_REDIS_REST_TOKEN`                         | não                 | Par da anterior. As duas juntas, ou nenhuma.                                                                                  |
+| `RECONNECT_GRACE_MS`                               | não                 | Janela de graça da reconexão (padrão 30s).                                                                                    |
+| `ROOM_TTL_SECONDS`                                 | não                 | Expiração das salas no Redis (padrão 24h), renovada a cada escrita.                                                           |
+| `NODE_ENV`                                         | não (`production`)  | Em `production`, silencia os logs de debug por-conexão — que incluem nome e id de jogador. `info`/`warn`/`error` seguem indo. |
+| `PORT`                                             | provida pelo Render | —                                                                                                                             |
 
-O log do boot diz qual modo de persistência está ativo:
+**Sobre o CORS:** nenhuma dessas variáveis é obrigatória. O front publicado, os deploy-previews do Netlify (por regex) e o `localhost` de desenvolvimento já estão no default de `server/src/index.ts` — as variáveis são **aditivas**, para quando surgir uma origem nova (outro domínio, um preview fora do padrão). Uma origem não prevista é rejeitada com erro de CORS.
 
-```
-🗄️  Persistence: Upstash Redis (write-through snapshots)
-🗄️  Persistence: in-memory only (set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN to enable Redis)
-```
+O log do boot diz qual modo de persistência está ativo: procure a linha `🗄️ Persistence:` nos logs do Render. Ela aponta ou para o Redis (snapshots write-through) ou para o modo só-memória, neste caso nomeando as variáveis que faltam. O texto exato vive em `server/src/persistence.ts` — não vale copiar para cá, porque diverge no primeiro dia em que alguém editar o log.
 
 ## O que a persistência resolve — e o que não
 
@@ -69,7 +68,7 @@ O log do boot diz qual modo de persistência está ativo:
 
 **Não resolve:**
 
-- **Presença.** Sockets e timers de graça são estado do processo e morrem com ele. Uma sala reidratada volta com todos os jogadores que tinha, inclusive quem não vai reconectar — o "fantasma". Ele é excluído do quórum, tem o voto descartado no reveal, e a UI o mostra como ausente, mas continua sentado até a sala expirar.
+- **Presença.** Sockets e timers de graça são estado do processo e morrem com ele. Uma sala reidratada volta com todos os jogadores que tinha, inclusive quem não vai reconectar — o "fantasma". Ele é excluído do quórum, tem o voto descartado no reveal, e a UI o mostra como ausente, mas continua **sentado** à mesa. O TTL do Redis não resolve isso durante a sessão: ele é renovado a cada escrita, então uma sala ativa nunca expira no meio do uso. Na prática o fantasma fica até a sala ser abandonada por inteiro.
 - **Múltiplas instâncias.** Ver acima: falta o adapter compartilhado.
 - **Cold start.** O plano free do Render hiberna; a primeira conexão depois disso demora (~60s). O cliente cobre isso com um overlay de reconexão em vez de falhar.
 
