@@ -12,6 +12,9 @@ export const useRoomStore = defineStore('room', () => {
   // Getters
   const isInRoom = computed(() => currentRoom.value !== null)
   const players = computed(() => currentRoom.value?.players ?? [])
+  // `?? []` cobre os dois casos de ausência do campo (sala nula, ou broadcast de um
+  // servidor que ainda não manda presença) com o mesmo significado: ninguém ausente.
+  const absentPlayerIds = computed(() => currentRoom.value?.absentPlayerIds ?? [])
   const currentRound = computed(() => {
     if (!currentRoom.value || currentRoom.value.rounds.length === 0) return null
     if (currentRoom.value.currentRoundIndex === -1) return null
@@ -49,6 +52,7 @@ export const useRoomStore = defineStore('room', () => {
     currentRoom,
     isInRoom,
     players,
+    absentPlayerIds,
     currentRound,
     roomConfig,
     phase,

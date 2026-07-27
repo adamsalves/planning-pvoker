@@ -49,6 +49,13 @@ jobs:
       - name: Build (tsc)
         run: npm run build
         working-directory: server
+      # Separado do build de propósito: o build usa o tsconfig.json (só `src`, emite
+      # para dist) e por isso NÃO olhava os testes. Este passo é quem type-checa
+      # `test/` — sem ele, spec com erro de tipo chega na main, porque o vitest
+      # transpila sem checar.
+      - name: Type-check (inclui os testes)
+        run: npm run type-check
+        working-directory: server
       - name: Test (vitest)
         run: npm test
         working-directory: server

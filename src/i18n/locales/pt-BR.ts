@@ -156,6 +156,7 @@ export const ptBR = {
       votedValue: 'Votou {value}',
       waitingVote: 'Aguardando voto',
       observerSr: 'Espectador',
+      absent: 'Ausente',
     },
     voters: {
       hint: 'Desmarque quem não vota nesta rodada',

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import type { UiRoundStatus } from '@/types'
 
 interface Props {
   subject: string
   roundNumber: number
   totalSubjects: number
-  status: 'waiting' | 'voting' | 'revealed'
+  status: UiRoundStatus
 }
 
 defineProps<Props>()

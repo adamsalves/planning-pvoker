@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useRoomStore } from './room'
 import type { Player, RoomConfig } from '@/types'
+import { must } from '@/test-utils/must'
 
 describe('Room Store', () => {
   beforeEach(() => {
@@ -27,14 +28,14 @@ describe('Room Store', () => {
 
     store.syncRoom(serverRoom)
 
-    expect(store.currentRoom).toBeDefined()
-    expect(store.currentRoom!.id).toBe('room-123')
-    expect(store.currentRoom!.adminId).toBe('p1')
-    expect(store.currentRoom!.config.deckType).toBe('fibonacci')
-    expect(store.currentRoom!.players).toHaveLength(1)
-    expect(store.currentRoom!.players[0]!.name).toBe('Admin')
-    expect(store.currentRoom!.subjects).toEqual(['Login', 'Signup'])
-    expect(store.currentRoom!.phase).toBe('setup')
+    const synced = must(store.currentRoom, 'synced room')
+    expect(synced.id).toBe('room-123')
+    expect(synced.adminId).toBe('p1')
+    expect(synced.config.deckType).toBe('fibonacci')
+    expect(synced.players).toHaveLength(1)
+    expect(must(synced.players[0], 'first synced player').name).toBe('Admin')
+    expect(synced.subjects).toEqual(['Login', 'Signup'])
+    expect(synced.phase).toBe('setup')
   })
 
   it('computes currentRound properly', () => {

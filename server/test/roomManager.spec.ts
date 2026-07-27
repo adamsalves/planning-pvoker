@@ -1,17 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { RoomManager } from '../src/roomManager'
-import type { Player, RoomConfig, Room } from '../src/types'
+import { logger } from '../src/logger'
+import type { Player, RoomConfig, Room, Round } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
-const config: RoomConfig = { deckType: 'fibonacci', autoReveal: false }
-const admin: Player = { id: 'a1', name: 'Admin', role: 'admin' }
-const member: Player = { id: 'm1', name: 'Member', role: 'member' }
-const observer: Player = { id: 'o1', name: 'Obs', role: 'observer' }
+// Frozen because createRoom keeps it BY REFERENCE as room.config: a stray write
+// would leak into every later test. Nothing mutates it today — the freeze is what
+// keeps that true. Same reasoning as the per-test player fixtures below.
+const config: Readonly<RoomConfig> = Object.freeze({ deckType: 'fibonacci', autoReveal: false })
+
+// Rebuilt per test, never shared: createRoom/joinRoom store these objects BY
+// REFERENCE, and the admin handover promotes in place (next.role = 'admin'), so
+// a module-level fixture would carry that role into every later test. These three
+// can't be frozen instead — they are the ones the handover legitimately mutates.
+let admin: Player
+let member: Player
+let observer: Player
 
 let rm: RoomManager
 
 beforeEach(() => {
   rm = new RoomManager()
+  admin = { id: 'a1', name: 'Admin', role: 'admin' }
+  member = { id: 'm1', name: 'Member', role: 'member' }
+  observer = { id: 'o1', name: 'Obs', role: 'observer' }
 })
 
 describe('createRoom', () => {
@@ -59,6 +71,49 @@ describe('joinRoom', () => {
   it('returns null for a missing room', () => {
     expect(rm.joinRoom('nope', member)).toBeNull()
   })
+
+  // Sair para a home, escolher "espectador" e voltar DENTRO da grace nunca passa
+  // pelo leaveRoom — o jogador segue sentado, com o voto. Sem a poda, o mapa fica
+  // com o voto de quem a rodada não conta mais, e o cliente soma o mapa cru.
+  function votingRoomWith(...players: Player[]): RoomManager {
+    const rm2 = new RoomManager()
+    rm2.createRoom('r1', admin, config)
+    for (const p of players) rm2.joinRoom('r1', p)
+    rm2.addSubjects('r1', ['A'])
+    rm2.startSession('r1')
+    return rm2
+  }
+
+  it('drops the vote of a player who re-joins as observer', () => {
+    const rm2 = votingRoomWith(member)
+    rm2.castVote('r1', 'm1', 5)
+    expect(rm2.getRoom('r1')?.rounds[0].votes).toEqual({ m1: 5 })
+
+    const room = rm2.joinRoom('r1', { id: 'm1', name: 'Member', role: 'observer' })
+    expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('observer')
+    expect(room?.rounds[0].votes).toEqual({})
+  })
+
+  // Só a troca PARA espectador mexe no voto. Um re-join comum (refresh, segunda
+  // aba) reenvia o mesmo papel e não pode custar o voto de ninguém.
+  it('keeps the vote when a member re-joins as a member', () => {
+    const rm2 = votingRoomWith(member)
+    rm2.castVote('r1', 'm1', 5)
+
+    const room = rm2.joinRoom('r1', { id: 'm1', name: 'Member', role: 'member' })
+    expect(room?.rounds[0].votes).toEqual({ m1: 5 })
+  })
+
+  // Rodada revelada é história registrada — o seam já recusa, e isto fixa que a
+  // troca de papel não abre uma exceção a essa regra.
+  it('leaves a revealed round intact when a player re-joins as observer', () => {
+    const rm2 = votingRoomWith(member)
+    rm2.castVote('r1', 'm1', 5)
+    rm2.revealVotes('r1')
+
+    const room = rm2.joinRoom('r1', { id: 'm1', name: 'Member', role: 'observer' })
+    expect(room?.rounds[0].votes).toEqual({ m1: 5 })
+  })
 })
 
 describe('leaveRoom', () => {
@@ -86,10 +141,149 @@ describe('leaveRoom', () => {
     expect(promoted?.tag).toBe('qa') // in-place role mutation must not drop the tag
   })
 
+  it('skips observers when handing over admin, even if one sits first in the list', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer) // sits BEFORE the member in players[]
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.adminId).toBe('m1')
+    expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('observer')
+  })
+
+  it('promotes an observer only when nobody else is left to drive the room', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer)
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.adminId).toBe('o1')
+    // Fallback: a room with no players left would be undrivable otherwise.
+    expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('admin')
+  })
+
+  // Characterization, NOT an endorsement: the fallback promotion is permanent, so
+  // its "no quorum to break" justification expires as soon as someone joins. See
+  // the comment on the handover in roomManager for why removing this residue costs
+  // more than it's worth. If that ever changes, this test SHOULD fail.
+  it('leaves the fallback-promoted observer in the quorum once the room fills up again', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', observer)
+    rm.leaveRoom('r1', 'a1') // observers-only room → o1 promoted by the fallback
+    rm.joinRoom('r1', member) // ...and now the room has a real voter again
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    const room = rm.castVote('r1', 'm1', 5)
+    // The round still waits on the ex-observer, who is now a full voter.
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  it('does not add an observer to the quorum by handing them admin', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', observer)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    rm.leaveRoom('r1', 'a1') // admin goes to m1, o1 stays out of the round
+    const room = rm.castVote('r1', 'm1', 5)
+
+    // The only eligible voter voted, so autoReveal fires. With the observer
+    // promoted the round would stay open on a vote that can never come.
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  it('hands admin to a present player instead of a rehydration ghost', () => {
+    rm.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'g1', name: 'Ghost', role: 'member' }) // sits before m1
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    // g1 is eligible but has no socket and no grace timer — it would inherit a room
+    // it can never drive.
+    expect(room?.adminId).toBe('m1')
+  })
+
+  it('prefers a present observer over an absent voter', () => {
+    rm.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', { id: 'g1', name: 'Ghost', role: 'member' })
+    rm.joinRoom('r1', observer)
+    const room = rm.leaveRoom('r1', 'a1')
+    // Someone who can actually drive the room beats a voter who is never coming
+    // back — same fallback trade-off as the observers-only case.
+    expect(room?.adminId).toBe('o1')
+  })
+
+  it('falls back to the whole list when nobody is present (dormant room)', () => {
+    rm.setPresence({ isPresent: () => false })
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', observer)
+    rm.joinRoom('r1', member)
+    const room = rm.leaveRoom('r1', 'a1')
+    // No present pool to pick from, so the observer preference still applies.
+    expect(room?.adminId).toBe('m1')
+  })
+
   it('deletes the room when the last player leaves', () => {
     rm.createRoom('r1', admin, config)
     expect(rm.leaveRoom('r1', 'a1')).toBeNull()
     expect(rm.getRoom('r1')).toBeUndefined()
+  })
+
+  // The server itself never noticed a leftover vote (every quorum path iterates
+  // room.players), so this is about what the CLIENT computes: useVoteStats reads
+  // the raw votes map, and two matching votes with a single voter left standing
+  // read as consensus — banner and confetti for one person.
+  it("drops the leaving player's vote from the round in progress", () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    rm.castVote('r1', 'm1', 5)
+
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.rounds[0].votes).toEqual({ m1: 5 })
+  })
+
+  // Mirrors setRoundVoter's refusal to touch a revealed round: the room already
+  // saw this result, and pruning it afterwards would rewrite what was shown.
+  it('leaves a revealed round untouched (settled history)', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    rm.castVote('r1', 'm1', 8)
+    rm.revealVotes('r1')
+
+    rm.leaveRoom('r1', 'a1')
+    expect(rm.getRoom('r1')?.rounds[0].votes).toEqual({ a1: 5, m1: 8 })
+  })
+
+  // The one place the prune and the quorum touch, and the scenario the fix exists
+  // for — yet every other test here runs with autoReveal off, so nothing covered it.
+  // maybeAutoReveal runs right after the prune: the round must NOT reveal on an
+  // empty map (required.length > 0 is what holds it), and must not carry the
+  // departed vote if it does reveal.
+  it('empties the map without revealing when the only player who voted leaves', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5) // m1 still pending
+
+    const room = rm.leaveRoom('r1', 'a1')
+    expect(room?.rounds[0].votes).toEqual({})
+    expect(room?.rounds[0].status).toBe('voting')
+  })
+
+  // Guard for the currentRoundIndex === -1 branch: leaving during setup (or after
+  // a reset) must not reach into rounds[-1].
+  it('handles a leave during setup, with no round to prune', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    expect(() => rm.leaveRoom('r1', 'm1')).not.toThrow()
+    expect(rm.getRoom('r1')?.rounds).toEqual([])
   })
 })
 
@@ -196,7 +390,7 @@ describe('autoReveal quorum is presence-aware', () => {
   const autoRevealConfig: RoomConfig = { deckType: 'fibonacci', autoReveal: true }
   // A third eligible voter that stands in for a rehydration ghost: eligible to
   // vote, but never present (no socket, no grace timer).
-  const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+  const ghost: Readonly<Player> = Object.freeze({ id: 'g1', name: 'Ghost', role: 'member' })
 
   // Seeds a voting room [admin, member, ghost] with autoReveal on, and an oracle
   // where only admin + member are present.
@@ -257,7 +451,8 @@ describe('autoReveal quorum is presence-aware', () => {
 })
 
 describe('setRoundVoter (admin chooses who votes in the round)', () => {
-  const other: Player = { id: 'm2', name: 'Other', role: 'member' }
+  // Frozen for the same reason as `config` — shared across this describe's tests.
+  const other: Readonly<Player> = Object.freeze({ id: 'm2', name: 'Other', role: 'member' })
 
   // Voting room [admin, member, other, observer] on subject A, autoReveal off.
   function seeded(autoReveal = false) {
@@ -352,7 +547,7 @@ describe('setRoundVoter (admin chooses who votes in the round)', () => {
   // Intersection with the presence-aware quorum (PR #51): the two filters have
   // to compose, so the round waits on eligible ∩ present.
   describe('composed with presence', () => {
-    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+    const ghost: Readonly<Player> = Object.freeze({ id: 'g1', name: 'Ghost', role: 'member' })
 
     // [admin, member, ghost] voting on A, autoReveal on, ghost never present.
     function seededWithGhost() {
@@ -466,6 +661,58 @@ describe('revealVotes / resetSession', () => {
     expect(room?.phase).toBe('setup')
     expect(room?.subjects).toEqual([])
     expect(room?.currentRoundIndex).toBe(-1)
+  })
+
+  // Fechar a rodada descarta o voto de quem não está presente. Quem pode estar
+  // ausente, sentado e com voto neste instante? Só um fantasma de rehidratação —
+  // socket vivo conta como presente, quem caiu está na grace (também presente), e
+  // passada a grace o leaveRoom já levou jogador e voto. O quórum acima já ignorava
+  // o fantasma; sem isto, o reveal ainda contava o voto dele.
+  function roomWithGhostVote(autoReveal: boolean): RoomManager {
+    const rm2 = new RoomManager()
+    rm2.setPresence({ isPresent: (_roomId, playerId) => playerId !== 'g1' })
+    rm2.createRoom('r1', admin, { ...config, autoReveal })
+    rm2.joinRoom('r1', { id: 'g1', name: 'Ghost', role: 'member' })
+    rm2.joinRoom('r1', member)
+    rm2.addSubjects('r1', ['A'])
+    rm2.startSession('r1')
+    rm2.castVote('r1', 'g1', 8) // votou antes de sumir no restart
+    return rm2
+  }
+
+  it('reveal drops the vote of an absent player (rehydration ghost)', () => {
+    const rm2 = roomWithGhostVote(false)
+    rm2.castVote('r1', 'a1', 5)
+    rm2.castVote('r1', 'm1', 5)
+
+    const room = rm2.revealVotes('r1')
+    expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 5 })
+    expect(room?.rounds[0].status).toBe('revealed')
+  })
+
+  // O autoReveal fecha pelo mesmo seam — senão o caminho mais comum de reveal
+  // (quórum completo) continuaria carregando o voto fantasma.
+  it('autoReveal drops the absent vote too', () => {
+    const rm2 = roomWithGhostVote(true)
+    rm2.castVote('r1', 'a1', 5)
+    const room = rm2.castVote('r1', 'm1', 5) // completa o quórum dos PRESENTES
+
+    expect(room?.rounds[0].status).toBe('revealed')
+    expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 5 })
+  })
+
+  // Nenhum falso positivo: o oráculo default responde "todos presentes", então onde
+  // presença não está ligada (testes, boot sem socket) o reveal não descarta nada.
+  it('keeps every vote when presence is not wired (default oracle)', () => {
+    rm.createRoom('r1', admin, config)
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    rm.castVote('r1', 'm1', 8)
+
+    const room = rm.revealVotes('r1')
+    expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 8 })
   })
 })
 
@@ -658,5 +905,299 @@ describe('hydrate', () => {
     const bare = new RoomManager()
     await bare.hydrate()
     expect(bare.getRoom('anything')).toBeUndefined()
+  })
+
+  // Snapshots written before leaveRoom started pruning carry votes the round does not
+  // count. Nothing on the server counts them either, but the client feeds the raw map
+  // to useVoteStats — so a departed voter still inflates the average and can fabricate
+  // a consensus. The fix in leaveRoom is not retroactive; this is what cleans them.
+  //
+  // Takes the whole rounds array + index so the "current round isn't rounds[0]" case
+  // is expressible; the single-round overload covers the common shape.
+  function seedRounds(rounds: Round[], index: number, players = [admin]): RoomManager {
+    const persistence = new RecordingPersistence()
+    persistence.seed = {
+      rooms: [
+        {
+          id: 'r9',
+          adminId: 'a1',
+          config,
+          players,
+          subjects: ['A'],
+          phase: index === -1 ? 'setup' : 'voting',
+          rounds,
+          currentRoundIndex: index,
+        },
+      ],
+      tokens: new Map([['r9::a1', 'tok-9']]),
+    }
+    return new RoomManager(persistence)
+  }
+
+  const seedWith = (round: Round, players = [admin]) => seedRounds([round], 0, players)
+
+  it('drops a legacy vote with no matching player from the round in progress', async () => {
+    const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { a1: 5, gone: 8 } })
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  // The prune keys off eligibleVotersOf — the seam castVote admits through — and not
+  // off "is seated". These two fix that distinction: without them, swapping the seam
+  // for a plain room.players.some() passes the whole suite (it did, before they existed).
+  it('drops the vote of a seated OBSERVER, whom the round never counted', async () => {
+    const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { a1: 5, o1: 5 } }, [
+      admin,
+      observer,
+    ])
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  it('drops the vote of a player the admin excluded from the round', async () => {
+    const manager = seedWith(
+      {
+        id: 'x',
+        subject: 'A',
+        status: 'voting',
+        votes: { a1: 5, m1: 5 },
+        excludedVoterIds: ['m1'],
+      },
+      [admin, member],
+    )
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
+  // Both exclusions in ONE snapshot — the likeliest real shape of a legacy room:
+  // someone left mid-round AND the process restarted before anyone came back.
+  it('drops the departed vote while keeping the ghost in the same round', async () => {
+    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+    const manager = seedWith(
+      { id: 'x', subject: 'A', status: 'voting', votes: { g1: 8, gone: 3 } },
+      [admin, ghost],
+    )
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ g1: 8 })
+  })
+
+  // The prune must follow currentRoundIndex, not assume rounds[0]. The earlier round
+  // here is still 'voting' on purpose: even an unrevealed PAST round is out of scope.
+  it('prunes the round at currentRoundIndex and leaves earlier rounds untouched', async () => {
+    const manager = seedRounds(
+      [
+        { id: 'r0', subject: 'A', status: 'voting', votes: { a1: 1, gone: 2 } },
+        { id: 'r1', subject: 'B', status: 'voting', votes: { a1: 3, gone: 4 } },
+      ],
+      1,
+    )
+    await manager.hydrate()
+    const rounds = manager.getRoom('r9')?.rounds
+    expect(rounds?.[1].votes).toEqual({ a1: 3 })
+    expect(rounds?.[0].votes).toEqual({ a1: 1, gone: 2 })
+  })
+
+  // A room still in setup has no round to index. Guards the currentRoundIndex === -1
+  // early return, which was only ever covered by accident, from unrelated specs.
+  it('handles a room in setup, with no round to prune', async () => {
+    const manager = seedRounds([], -1)
+    await expect(manager.hydrate()).resolves.toBeUndefined()
+    expect(manager.getRoom('r9')?.rounds).toEqual([])
+    expect(manager.hasToken('r9', 'a1')).toBe(true) // o boot seguiu inteiro
+  })
+
+  // A revealed round is settled history — leaveRoom skips it for the same reason, so
+  // a vote outliving its player is EXPECTED there and must survive the boot intact.
+  it('leaves a revealed round intact even with a vote from a departed player', async () => {
+    const manager = seedWith({
+      id: 'x',
+      subject: 'A',
+      status: 'revealed',
+      votes: { a1: 5, gone: 8 },
+    })
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ a1: 5, gone: 8 })
+  })
+
+  // The runtime guard on the indexed access, and why it earns its keep. persistence's
+  // refine rejects an out-of-range index, so this snapshot can only come from a fake
+  // (or a future path that skips the schema) — but if one ever reaches here, throwing
+  // is the worst outcome available: hydrate aborts mid-loop, the TOKEN map never
+  // loads, and hasToken() returning false for everyone switches OFF the
+  // anti-escalation check in join_room. Surviving the bad room is what keeps that on.
+  it('survives a snapshot whose currentRoundIndex is out of range, tokens included', async () => {
+    const manager = seedRounds([], 5)
+    await expect(manager.hydrate()).resolves.toBeUndefined()
+    expect(manager.hasToken('r9', 'a1')).toBe(true)
+  })
+
+  // A rehydration ghost is NOT an orphan: it is still seated, so its vote survives.
+  // Pruning by presence instead of membership would wipe the votes of a whole team
+  // mid-reconnect (at boot nobody is present yet) — the work persistence exists to save.
+  it('keeps the vote of a seated player who is merely absent (rehydration ghost)', async () => {
+    const ghost: Player = { id: 'g1', name: 'Ghost', role: 'member' }
+    const manager = seedWith({ id: 'x', subject: 'A', status: 'voting', votes: { g1: 8 } }, [
+      admin,
+      ghost,
+    ])
+    manager.setPresence({ isPresent: () => false }) // ninguém conectou ainda
+    await manager.hydrate()
+    expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ g1: 8 })
+  })
+
+  // An adminId naming nobody used to make persistence DISCARD the whole room. It is
+  // repaired here instead, so the backlog and the round history survive.
+  describe('orphan adminId repair', () => {
+    let warn: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    function seedRoom(adminId: string, players: Player[]): RoomManager {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId,
+            config,
+            players,
+            subjects: ['A'],
+            phase: 'voting',
+            rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: {} }],
+            currentRoundIndex: 0,
+          },
+        ],
+        tokens: new Map(),
+      }
+      return new RoomManager(persistence)
+    }
+
+    it('repoints a dangling adminId at the first non-observer and promotes them', async () => {
+      const manager = seedRoom('ghost', [observer, member])
+      await manager.hydrate()
+
+      const room = manager.getRoom('r9')
+      expect(room?.adminId).toBe('m1') // pulou o observer, como o handover do leaveRoom
+      expect(room?.players.find((p) => p.id === 'm1')?.role).toBe('admin')
+      expect(room?.players.find((p) => p.id === 'o1')?.role).toBe('observer')
+    })
+
+    // Mesmo fallback deliberado do leaveRoom: uma sala que ninguém pode dirigir é
+    // pior que promover um espectador.
+    it('falls back to the first player when everyone is an observer', async () => {
+      const manager = seedRoom('ghost', [observer])
+      await manager.hydrate()
+
+      expect(manager.getRoom('r9')?.adminId).toBe('o1')
+      expect(manager.getRoom('r9')?.players[0].role).toBe('admin')
+    })
+
+    // O ponto inteiro da decisão original era que a falha nunca foi observada em
+    // produção. Um reparo silencioso a manteria assim.
+    it('says so, loudly, naming the room and the orphaned id', async () => {
+      const manager = seedRoom('ghost', [member])
+      await manager.hydrate()
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      const message = String(warn.mock.calls[0]?.[0])
+      expect(message).toContain('r9')
+      expect(message).toContain('ghost')
+      expect(message).toContain('m1')
+    })
+
+    it('leaves a healthy room alone, and stays silent about it', async () => {
+      const manager = seedRoom('a1', [admin, member])
+      await manager.hydrate()
+
+      expect(manager.getRoom('r9')?.adminId).toBe('a1')
+      expect(manager.getRoom('r9')?.players.find((p) => p.id === 'm1')?.role).toBe('member')
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    // Sem isto o Redis guarda o adminId órfão até alguma mutação não-relacionada
+    // salvar, e o warn acima re-dispara a CADA boot — quem opera não distingue
+    // "ainda quebrado" de "consertado e re-detectado".
+    it('persists the repair, so the next boot finds it fixed', async () => {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId: 'ghost',
+            config,
+            players: [member],
+            subjects: ['A'],
+            phase: 'voting',
+            rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: {} }],
+            currentRoundIndex: 0,
+          },
+        ],
+        tokens: new Map(),
+      }
+      const manager = new RoomManager(persistence)
+      await manager.hydrate()
+      await vi.waitFor(() => expect(persistence.savedRooms.length).toBeGreaterThan(0))
+
+      expect(persistence.lastRoom?.adminId).toBe('m1')
+    })
+
+    // O outro lado: uma sala saudável não pode gerar escrita nenhuma no boot. Um
+    // save por sala a cada restart é justamente o que o write-through evita.
+    it('does not write anything when there was nothing to repair', async () => {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId: 'a1',
+            config,
+            players: [admin],
+            subjects: [],
+            phase: 'setup',
+            rounds: [],
+            currentRoundIndex: -1,
+          },
+        ],
+        tokens: new Map(),
+      }
+      const manager = new RoomManager(persistence)
+      await manager.hydrate()
+      await Promise.resolve() // deixa qualquer save agendado escoar
+
+      expect(persistence.savedRooms).toEqual([])
+    })
+
+    // DISCRIMINA A ORDEM entre repairOrphanAdmin e pruneOrphanVotes. Um observer
+    // promovido a admin vira elegível, então o voto dele sobrevive; se a poda
+    // rodasse primeiro, ela o julgaria ainda observer e o descartaria. Inverter as
+    // duas linhas do hydrate derruba este teste e nenhum outro.
+    it('promotes BEFORE pruning, so the new admin keeps the vote they had cast', async () => {
+      const persistence = new RecordingPersistence()
+      persistence.seed = {
+        rooms: [
+          {
+            id: 'r9',
+            adminId: 'ghost',
+            config,
+            players: [observer], // único jogador → cai no fallback e é promovido
+            subjects: ['A'],
+            phase: 'voting',
+            rounds: [{ id: 'x', subject: 'A', status: 'voting', votes: { o1: 5 } }],
+            currentRoundIndex: 0,
+          },
+        ],
+        tokens: new Map(),
+      }
+      const manager = new RoomManager(persistence)
+      await manager.hydrate()
+
+      expect(manager.getRoom('r9')?.players[0].role).toBe('admin')
+      expect(manager.getRoom('r9')?.rounds[0].votes).toEqual({ o1: 5 })
+    })
   })
 })

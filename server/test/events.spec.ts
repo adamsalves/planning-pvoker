@@ -4,7 +4,7 @@ import { Server } from 'socket.io'
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client'
 import { RoomManager } from '../src/roomManager'
 import { setupSocketEvents } from '../src/events'
-import type { Player, Room, RoomConfig } from '../src/types'
+import type { Player, Room, RoomBroadcast, RoomConfig } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
 // Short grace window so reconnection tests don't wait the real 30s. Kept
@@ -83,9 +83,15 @@ function leaveRoom(socket: ClientSocket, data: unknown): Promise<LeaveAck> {
   })
 }
 
-function waitForRoomWhere(socket: ClientSocket, predicate: (room: Room) => boolean): Promise<Room> {
+// Typed as RoomBroadcast, not Room: what travels on room_state_updated is the
+// stored room PLUS the per-broadcast presence projection. Using Room here would
+// hide absentPlayerIds from every assertion in this file.
+function waitForRoomWhere(
+  socket: ClientSocket,
+  predicate: (room: RoomBroadcast) => boolean,
+): Promise<RoomBroadcast> {
   return new Promise((resolve) => {
-    const handler = (room: Room) => {
+    const handler = (room: RoomBroadcast) => {
       if (predicate(room)) {
         socket.off('room_state_updated', handler)
         resolve(room)
@@ -93,6 +99,13 @@ function waitForRoomWhere(socket: ClientSocket, predicate: (room: Room) => boole
     }
     socket.on('room_state_updated', handler)
   })
+}
+
+// First broadcast this socket sees, whatever it says. Distinct from
+// waitForRoomWhere: presence assertions care about the payload as-is, not about
+// waiting for some state to arrive.
+function nextRoomUpdate(socket: ClientSocket): Promise<RoomBroadcast> {
+  return waitForRoomWhere(socket, () => true)
 }
 
 // Narrows a join ack to its room without a non-null assertion (the project
@@ -833,10 +846,204 @@ describe('rehydration ghost does not block autoReveal', () => {
     const room = await revealed
 
     expect(room.rounds[0].status).toBe('revealed')
-    // The ghost is still listed (hiding it from the UI is out of scope) and never
-    // voted — yet the round revealed because it is not present, so it is excluded
-    // from the quorum. Before the fix, the ghost would keep the round stuck.
+    // The ghost stays SEATED and never voted — yet the round revealed, because it is
+    // not present and so is excluded from the quorum. Before the fix it kept the
+    // round stuck. It is also reported as absent, so the client renders it as away
+    // instead of as a teammate about to vote.
     expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'g1', 'm1'])
+    expect(room.absentPlayerIds).toEqual(['g1'])
     expect(room.rounds[0].votes['g1']).toBeUndefined()
+  })
+})
+
+// The unit tests for this live in roomManager.spec, but they inject a fake oracle.
+// These exercise the REAL one from events.ts — the seam where the key format or the
+// timing of markAbsent could diverge from what leaveRoom assumes.
+describe('admin handover skips a player who is not present', () => {
+  const ghost: Player = { id: 'g1', name: 'Casper', role: 'member' }
+
+  // Room rehydrated as [admin, ghost, member]: the ghost sits BEFORE the member, so
+  // any handover that ignores presence picks it.
+  function seedManager(): RoomManager {
+    const room: Room = {
+      id: 'r1',
+      adminId: 'a1',
+      config,
+      players: [admin, ghost, member],
+      subjects: [],
+      phase: 'setup',
+      rounds: [],
+      currentRoundIndex: -1,
+    }
+    const tokens = new Map<string, string>([
+      ['r1::a1', 'tok-a'],
+      ['r1::m1', 'tok-m'],
+    ])
+    return new RoomManager(new SeedPersistence({ rooms: [room], tokens }))
+  }
+
+  async function reconnectBoth() {
+    const adminClient = await connect()
+    await join(adminClient, { roomId: 'r1', player: admin, token: 'tok-a' })
+    const memberClient = await connect()
+    await join(memberClient, { roomId: 'r1', player: member, token: 'tok-m' })
+    return { adminClient, memberClient }
+  }
+
+  it('picks the present member over the ghost on an explicit leave_room', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+    const { adminClient, memberClient } = await reconnectBoth()
+
+    const handover = waitForRoomWhere(memberClient, (room) => room.adminId !== 'a1')
+    adminClient.emit('leave_room', { roomId: 'r1' })
+    const room = await handover
+
+    expect(room.adminId).toBe('m1')
+  })
+
+  it('picks the present member over the ghost when the grace timer fires', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+    const { adminClient, memberClient } = await reconnectBoth()
+
+    const handover = waitForRoomWhere(memberClient, (room) => room.adminId !== 'a1')
+    adminClient.disconnect() // removal only happens once the grace window elapses
+    const room = await handover
+
+    expect(room.adminId).toBe('m1')
+    expect(room.players.map((p) => p.id)).not.toContain('a1')
+  })
+
+  it('still counts a member who is only refreshing (inside the grace window)', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+    const { adminClient, memberClient } = await reconnectBoth()
+
+    // A spectator that just watches the broadcast: leave_room unsubscribes every
+    // socket of the LEAVING identity before notifying, so Ana can't observe her own
+    // handover — and Bob is mid-refresh. Being an observer keeps it out of the
+    // running for admin, so it doesn't change what the test measures.
+    const watcherClient = await connect()
+    await join(watcherClient, {
+      roomId: 'r1',
+      player: { id: 'w1', name: 'Watcher', role: 'observer' },
+    })
+
+    // Bob drops but is inside the grace window, so he is still present — and must
+    // stay ahead of the ghost when Ana hands the room over.
+    memberClient.disconnect()
+    await delay(GRACE_MS / 2)
+
+    const handover = waitForRoomWhere(watcherClient, (room) => room.adminId !== 'a1')
+    adminClient.emit('leave_room', { roomId: 'r1' })
+    const room = await handover
+
+    expect(room.adminId).toBe('m1')
+  })
+})
+
+// The wire contract for presence. Everything else in this file exercises what the
+// server DECIDES; this exercises what it TELLS the client, which is the only thing
+// the UI can render an absent player from.
+describe('presence in the room broadcast', () => {
+  const ghost: Player = { id: 'g1', name: 'Casper', role: 'member' }
+
+  function seedManager(persistence?: RoomPersistence): RoomManager {
+    const room: Room = {
+      id: 'r1',
+      adminId: 'a1',
+      config,
+      players: [admin, ghost],
+      subjects: [],
+      phase: 'setup',
+      rounds: [],
+      currentRoundIndex: -1,
+    }
+    const snapshot: PersistenceSnapshot = {
+      rooms: [room],
+      tokens: new Map([['r1::a1', 'tok-a']]),
+    }
+    return new RoomManager(persistence ?? new SeedPersistence(snapshot))
+  }
+
+  it('reports nobody absent when every seated player is connected', async () => {
+    const client = await connect()
+    await join(client, { roomId: 'r1', player: admin, config })
+
+    const update = nextRoomUpdate(client)
+    client.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
+    const room = await update
+
+    expect(room.absentPlayerIds).toEqual([])
+  })
+
+  // The case the whole feature exists for: after a restart the room comes back with
+  // players who never reconnect. They stay seated, and the broadcast says so.
+  it('reports a rehydrated ghost as absent while the reconnected player is not', async () => {
+    const manager = seedManager()
+    await manager.hydrate()
+    await restartWith(manager)
+
+    const adminClient = await connect()
+    const update = nextRoomUpdate(adminClient)
+    await join(adminClient, { roomId: 'r1', player: admin, token: 'tok-a' })
+    const room = await update
+
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'g1'])
+    expect(room.absentPlayerIds).toEqual(['g1'])
+  })
+
+  // Someone mid-refresh is INSIDE the grace window and must not be reported absent —
+  // otherwise every reload would flicker the whole team to "away". This is the line
+  // between "reconnecting" and "gone", and it is the same line the quorum uses.
+  it('does not report a player who is merely inside the reconnect grace window', async () => {
+    const adminClient = await connect()
+    await join(adminClient, { roomId: 'r1', player: admin, config })
+    const memberClient = await connect()
+    await join(memberClient, { roomId: 'r1', player: member })
+
+    memberClient.disconnect()
+    await delay(GRACE_MS / 2) // ainda dentro da graça
+
+    const update = nextRoomUpdate(adminClient)
+    adminClient.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
+    const room = await update
+
+    expect(room.players.map((p) => p.id).sort()).toEqual(['a1', 'm1'])
+    expect(room.absentPlayerIds).toEqual([])
+  })
+
+  // Guards the spread in notifyRoomUpdate. Presence is process state — sockets and
+  // grace timers — and persisting it would rehydrate a lie: every player would come
+  // back flagged with whatever they happened to be at snapshot time. If someone
+  // "simplifies" the projection into an assignment onto `room`, this fails.
+  it('never writes absentPlayerIds to persistence', async () => {
+    const saved: Room[] = []
+    const recorder: RoomPersistence = {
+      loadAll: () => Promise.resolve({ rooms: [], tokens: new Map<string, string>() }),
+      saveRoom: (room: Room) => {
+        saved.push(JSON.parse(JSON.stringify(room)))
+        return Promise.resolve()
+      },
+      deleteRoom: () => Promise.resolve(),
+      saveToken: () => Promise.resolve(),
+      deleteToken: () => Promise.resolve(),
+    }
+    await restartWith(new RoomManager(recorder))
+
+    const client = await connect()
+    await join(client, { roomId: 'r1', player: admin, config })
+    const update = nextRoomUpdate(client)
+    client.emit('add_subjects', { roomId: 'r1', subjects: ['A'] })
+    await update
+
+    expect(saved.length).toBeGreaterThan(0)
+    for (const room of saved) {
+      expect(room).not.toHaveProperty('absentPlayerIds')
+    }
   })
 })

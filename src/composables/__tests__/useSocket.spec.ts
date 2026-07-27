@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Mock } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSocket } from '../useSocket'
 import { JoinAckError } from '../joinErrors'
@@ -56,12 +55,23 @@ function socketHandler(event: string) {
 }
 
 // Grab a Manager-level handler (reconnect_*) registered via socket.io.on.
-function managerHandler(event: string) {
+//
+// Devolve um wrapper em vez do handler cru: os overloads de `Manager.on` fazem o
+// TS reduzir a assinatura recuperada do mock à interseção dos eventos, cujos
+// parâmetros colapsam em `never` — então chamar `handler(1)` não compila, e
+// `handler()` reclama de aridade. O teste, por natureza, não conhece o tipo dos
+// argumentos daquele evento específico.
+//
+// Alargar para `unknown` e estreitar com `typeof` devolve uma chamada válida sem
+// nenhuma asserção (a regra do projeto proíbe `as`/`!`). Sendo honesto sobre o que
+// isto é: chamar um valor estreitado para `Function` devolve `any` vindo da lib —
+// não é narrowing de verdade, só não é um cast escrito à mão.
+function managerHandler(event: string): (...args: unknown[]) => void {
   const call = vi.mocked(lastSocket().io.on).mock.calls.find((c) => c[0] === event)
   if (!call) throw new Error(`manager handler not registered: ${event}`)
-  const handler = call[1]
+  const handler: unknown = call[1]
   if (typeof handler !== 'function') throw new Error(`handler is not a function: ${event}`)
-  return handler
+  return (...args: unknown[]) => handler(...args)
 }
 
 const player: Player = { id: 'p1', name: 'Joe', role: 'member' }
@@ -86,25 +96,19 @@ describe('useSocket', () => {
     expect(io).toHaveBeenCalled()
 
     // Get the mocked socket logic
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     expect(mockSocket.on).toHaveBeenCalledWith('connect', expect.any(Function))
     expect(mockSocket.on).toHaveBeenCalledWith('disconnect', expect.any(Function))
     expect(mockSocket.on).toHaveBeenCalledWith('room_state_updated', expect.any(Function))
 
     // Manually trigger connect callback to test reactivity
-    const connectCb = mockSocket.on.mock.calls.find(
-      (call: unknown[]) => call[0] === 'connect',
-    )?.[1] as () => void
-    connectCb()
+    socketHandler('connect')()
 
     expect(isConnected.value).toBe(true)
 
     // Manually trigger disconnect
-    const disconnectCb = mockSocket.on.mock.calls.find(
-      (call: unknown[]) => call[0] === 'disconnect',
-    )?.[1] as () => void
-    disconnectCb()
+    socketHandler('disconnect')()
 
     expect(isConnected.value).toBe(false)
   })
@@ -115,7 +119,7 @@ describe('useSocket', () => {
 
     joinRoom('room-1', p)
 
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
     expect(mockSocket.emit).toHaveBeenCalledWith(
       'join_room',
       { roomId: 'room-1', player: p, config: undefined },
@@ -137,7 +141,7 @@ describe('useSocket', () => {
   it('emits cast_vote', () => {
     const { castVote, connect } = useSocket()
     connect() // initialize socket manually to capture exact call without chaining auto-connect if any
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     castVote('room-1', 'p1', 5)
 
@@ -161,7 +165,7 @@ describe('useSocket', () => {
   it('emits start_session', () => {
     const { startSession, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     startSession('room-1')
 
@@ -173,7 +177,7 @@ describe('useSocket', () => {
   it('emits next_round', () => {
     const { nextRound, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     nextRound('room-1')
 
@@ -185,7 +189,7 @@ describe('useSocket', () => {
   it('emits add_subjects', () => {
     const { addSubjects, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     addSubjects('room-1', ['Login', 'Signup'])
 
@@ -198,7 +202,7 @@ describe('useSocket', () => {
   it('emits reveal_votes', () => {
     const { revealVotes, connect } = useSocket()
     connect()
-    const mockSocket = (io as Mock).mock.results[0]!.value
+    const mockSocket = lastSocket()
 
     revealVotes('room-1')
 

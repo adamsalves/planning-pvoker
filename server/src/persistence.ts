@@ -1,6 +1,7 @@
 import { Redis } from '@upstash/redis'
 import { z } from 'zod'
-import { PLAYER_TAGS, type Room } from './types'
+import { DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS, ROOM_PHASES, ROUND_STATUSES } from './types'
+import type { Room } from './types'
 import { logger } from './logger'
 
 // Rooms and their session tokens are the authoritative state in-memory (see
@@ -38,18 +39,18 @@ export interface RedisClient {
 // Structural guard for a room snapshot read back from Redis. Mirrors the Room
 // type; a snapshot that's missing (expired) or malformed (schema drift, partial
 // write, corruption) fails safeParse and is skipped rather than crashing the boot.
-const roomSchema = z.object({
+const roomShapeSchema = z.object({
   id: z.string(),
   adminId: z.string(),
   config: z.object({
-    deckType: z.enum(['fibonacci', 'tshirt', 'sequential']),
+    deckType: z.enum(DECK_TYPES),
     autoReveal: z.boolean(),
   }),
   players: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
-      role: z.enum(['admin', 'member', 'observer']),
+      role: z.enum(PLAYER_ROLES),
       // OPCIONAL como excludedVoterIds (snapshot pré-feature não tem o campo).
       // Além disso `.catch(undefined)`: tags são um enum de PRODUTO, propenso a
       // mudar; um valor que saiu da lista degrada para "sem tag" em vez de
@@ -59,12 +60,12 @@ const roomSchema = z.object({
     }),
   ),
   subjects: z.array(z.string()),
-  phase: z.enum(['setup', 'voting', 'completed']),
+  phase: z.enum(ROOM_PHASES),
   rounds: z.array(
     z.object({
       id: z.string(),
       subject: z.string(),
-      status: z.enum(['voting', 'revealed']),
+      status: z.enum(ROUND_STATUSES),
       votes: z.record(z.string(), z.union([z.string(), z.number()])),
       // OPCIONAL de propósito: snapshots gravados antes desta feature não têm o
       // campo, e um required aqui faria o safeParse falhar — o que em loadAll
@@ -72,8 +73,62 @@ const roomSchema = z.object({
       excludedVoterIds: z.array(z.string()).optional(),
     }),
   ),
-  currentRoundIndex: z.number(),
+  currentRoundIndex: z.number().int(),
 })
+
+// The shape above plus the invariants that span two fields. Kept as a separate
+// step so the field list stays a plain object literal.
+//
+// Cross-field guard: zod validates each field in isolation, so without this a
+// snapshot could come back claiming currentRoundIndex 1 with rounds: []. Every
+// in-process path keeps the two in sync (startSession/nextRound/resetSession),
+// which makes a REHYDRATED snapshot the only way to get an out-of-range index —
+// and castVote/setRoundVoter/revealVotes index `rounds[currentRoundIndex]`
+// unguarded, so it would throw a TypeError inside a socket handler and take the
+// whole process down with it. Rejecting here means such a snapshot is DISCARDED
+// like any other malformed one (loadAll drops it and self-heals the index): the
+// affected room is lost, every other room boots fine.
+//
+// Second guard: a room with NO players. There is nothing to rebuild and nobody to
+// promote, so it can only be discarded. In-process this is unreachable — a room
+// only empties through leaveRoom, which destroys it rather than storing an empty
+// one — so, again, only a rehydrated snapshot gets here.
+//
+// What this guard NO LONGER covers, deliberately: an `adminId` naming nobody in
+// `players`. That used to be rejected here too, which meant discarding an otherwise
+// intact room — backlog, round history and all — over a single dangling string.
+// It is now REPAIRED at boot instead, in RoomManager.hydrate(): see
+// repairOrphanAdmin() there for the policy and for why the repair is safe where a
+// general `.transform()` would not be. The invariant itself is unchanged and still
+// holds for every room the process serves; only the enforcement point moved, from
+// "reject the snapshot" to "repoint the admin, loudly".
+//
+// Other cross-field mismatches were considered and left alone deliberately, but
+// NONE of them is as harmless as "cosmetic" suggests:
+//   - orphan excludedVoterIds really are inert — eligibleVotersOf iterates
+//     room.players and an id nobody carries never matches;
+//   - a vote keyed by a NON-PLAYER is live data, not decoration: the client feeds
+//     the raw votes map to useVoteStats, so it lands in the average and can even
+//     manufacture a consensus. Not rejected here because it is already REPAIRED —
+//     RoomManager.pruneOrphanVotes drops exactly these on the way in. (Distinct from
+//     a rehydration GHOST, which is a seated player whose vote is legitimately keyed
+//     by a real member; that one survives the boot on purpose and is dropped later,
+//     by sealRound at the reveal.);
+//   - a `phase: 'setup'` carrying non-empty `rounds` passes both refines and then
+//     loses that history the moment startSession overwrites `room.rounds`.
+// Silent damage, not crashes — and still not worth more guards, because discarding
+// the room destroys the same data plus the rest of the session. Rejecting stays
+// reserved for damage the room can't absorb.
+const roomSchema = roomShapeSchema
+  .refine(
+    (room) =>
+      room.currentRoundIndex === -1 ||
+      (room.currentRoundIndex >= 0 && room.currentRoundIndex < room.rounds.length),
+    { message: 'currentRoundIndex must be -1 or a valid index into rounds' },
+  )
+  .refine((room) => room.players.length > 0, {
+    message: 'a room must carry at least one player',
+  })
 
 // A room's token hash read back from Redis: { playerId -> token }. Values are
 // validated PER FIELD in loadAll (a single corrupt field must not drop the whole
@@ -154,9 +209,24 @@ export class RedisPersistence implements RoomPersistence {
     const staleIds: string[] = []
 
     for (const id of ids) {
-      const parsedRoom = roomSchema.safeParse(await this.redis.get(roomKey(id)))
+      const raw = await this.redis.get(roomKey(id))
+      const parsedRoom = roomSchema.safeParse(raw)
       if (!parsedRoom.success) {
         // Missing (expired via TTL) or malformed (schema drift/corruption) — forget it.
+        //
+        // Say WHY when there was actually something there to reject. Dropping a room
+        // is the one operation here that destroys user-visible state, and hydrate()
+        // only ever logs the SURVIVORS ("Rehydrated N room(s)") — so without this an
+        // operator sees a room vanish with no way to tell what was wrong with it. The
+        // refine messages above exist precisely to be read here.
+        //
+        // A null/undefined value is the ROUTINE case (the room's TTL lapsed while its
+        // index entry lingered) and stays silent: it isn't corruption, and warning on
+        // every expired room would bury the reports that matter.
+        if (raw !== null && raw !== undefined) {
+          const reasons = parsedRoom.error.issues.map((issue) => issue.message).join('; ')
+          logger.warn(`🗄️  Discarding malformed snapshot for room ${id}: ${reasons}`)
+        }
         staleIds.push(id)
         continue
       }

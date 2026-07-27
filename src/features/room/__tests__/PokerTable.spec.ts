@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import PokerTable from '../PokerTable.vue'
 import PokerCard from '../PokerCard.vue'
 import type { Player } from '@/types'
+import { must } from '@/test-utils/must'
 
 describe('PokerTable.vue', () => {
   const mockPlayers: Player[] = [
@@ -37,11 +38,11 @@ describe('PokerTable.vue', () => {
     // importa — checamos as strings EXATAS (toFixed(4)), não um prefixo frouxo.
     const spots = wrapper.findAll('.player-spot')
     // 1º jogador na base do oval: angle=π/2 → cos=0, sin=1.
-    const firstStyle = spots[0]!.attributes('style') ?? ''
+    const firstStyle = must(spots[0], 'player spot 0 (Adam)').attributes('style') ?? ''
     expect(firstStyle).toContain('--cos: 0.0000')
     expect(firstStyle).toContain('--sin: 1.0000')
     // 2º jogador no topo: angle=3π/2 → cos=-0 (zero negativo, CSS-válido) e sin=-1.
-    const secondStyle = spots[1]!.attributes('style') ?? ''
+    const secondStyle = must(spots[1], 'player spot 1 (Eve)').attributes('style') ?? ''
     expect(secondStyle).toContain('--cos: -0.0000')
     expect(secondStyle).toContain('--sin: -1.0000')
   })
@@ -60,7 +61,7 @@ describe('PokerTable.vue', () => {
     expect(cards).toHaveLength(1)
 
     // It should be face-down
-    expect(cards[0]!.props('faceDown')).toBe(true)
+    expect(must(cards[0], 'poker card 0').props('faceDown')).toBe(true)
 
     // 1 empty slot for Eve
     const emptySlots = wrapper.findAll('.empty-card-slot')
@@ -80,8 +81,8 @@ describe('PokerTable.vue', () => {
     expect(cards).toHaveLength(2)
 
     // Cards should NOT be face down
-    expect(cards[0]!.props('faceDown')).toBe(false)
-    expect(cards[1]!.props('faceDown')).toBe(false)
+    expect(must(cards[0], 'poker card 0').props('faceDown')).toBe(false)
+    expect(must(cards[1], 'poker card 1').props('faceDown')).toBe(false)
 
     // Values should match
     const valuesRendered = wrapper.text()
@@ -95,8 +96,10 @@ describe('PokerTable.vue', () => {
     })
 
     const spots = wrapper.findAll('.player-spot')
-    expect(spots[0]!.find('.sr-only').text()).toContain('Votou')
-    expect(spots[1]!.find('.sr-only').text()).toContain('Aguardando voto')
+    expect(must(spots[0], 'player spot 0 (Adam)').find('.sr-only').text()).toContain('Votou')
+    expect(must(spots[1], 'player spot 1 (Eve)').find('.sr-only').text()).toContain(
+      'Aguardando voto',
+    )
   })
 
   it('announces the revealed vote value via sr-only and hides the decorative card', () => {
@@ -106,9 +109,9 @@ describe('PokerTable.vue', () => {
 
     // O valor revelado é anunciado no name tag ("Votou 8")...
     const spots = wrapper.findAll('.player-spot')
-    expect(spots[0]!.find('.sr-only').text()).toBe('Votou 8')
+    expect(must(spots[0], 'player spot 0 (Adam)').find('.sr-only').text()).toBe('Votou 8')
     // ...e quem não votou não ganha anúncio nenhum
-    expect(spots[1]!.find('.sr-only').exists()).toBe(false)
+    expect(must(spots[1], 'player spot 1 (Eve)').find('.sr-only').exists()).toBe(false)
 
     // A carta da mesa é decorativa: botão desabilitado sem ação, fora da árvore de a11y
     const card = wrapper.findComponent(PokerCard)
@@ -147,7 +150,12 @@ describe('PokerTable.vue', () => {
 
     it('anuncia "não vota" em vez de "aguardando voto"', () => {
       const wrapper = mount(PokerTable, {
-        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting', nonVoterIds: ['2'] },
+        props: {
+          players: [must(mockPlayers[1], 'mock player 1 (Eve)')],
+          votes: {},
+          status: 'voting',
+          nonVoterIds: ['2'],
+        },
       })
 
       expect(wrapper.text()).toContain('Não vota nesta rodada')
@@ -159,6 +167,55 @@ describe('PokerTable.vue', () => {
         props: { players: mockPlayers, votes: {}, status: 'voting' },
       })
       expect(wrapper.findAll('.non-voter-spot')).toHaveLength(0)
+    })
+  })
+
+  // A diferença que importa em relação ao "tirado da rodada": aquele CONTINUA
+  // sentado, o ausente não. A mesa é a metáfora de quem está em volta dela agora, e
+  // os ângulos são distribuídos sobre o total — um lugar guardado para quem não
+  // está distorce o círculo inteiro.
+  describe('jogador ausente', () => {
+    it('não recebe assento, ao contrário do tirado da rodada', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting', absentPlayerIds: ['2'] },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(1) // só Adam
+      expect(wrapper.text()).toContain('Adam')
+      expect(wrapper.text()).not.toContain('Eve')
+    })
+
+    // Consequência do anterior. TEM de asseverar um spot com índice > 0: o ângulo é
+    // `π/2 + (index/total)·2π`, então o índice 0 cai em π/2 para QUALQUER total —
+    // uma versão anterior deste teste olhava o spot 0 e não podia falhar.
+    //
+    // Com 3 ativos e 1 ausente, o spot 1 passa de 1/3 da volta (210°) para 1/2
+    // (270°, o topo do oval: cos=-0, sin=-1). Se o ausente ainda ocupasse lugar, os
+    // valores seriam os de 1/3.
+    it('redistribui os ângulos sobre quem sobrou', () => {
+      const players: Player[] = [
+        { id: '1', name: 'Adam', role: 'admin' },
+        { id: '2', name: 'Eve', role: 'member' },
+        { id: '4', name: 'Cain', role: 'member' },
+      ]
+      const wrapper = mount(PokerTable, {
+        props: { players, votes: {}, status: 'voting', absentPlayerIds: ['2'] },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(2)
+      const style =
+        must(wrapper.findAll('.player-spot')[1], 'player spot 1 (Cain)').attributes('style') ?? ''
+      // 2 sentados → o segundo vai ao topo. Com 3, iria para cos≈0.8660/sin≈-0.5000.
+      expect(style).toContain('--cos: -0.0000')
+      expect(style).toContain('--sin: -1.0000')
+    })
+
+    it('sem a prop, todo mundo senta (default)', () => {
+      const wrapper = mount(PokerTable, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' },
+      })
+
+      expect(wrapper.findAll('.player-spot')).toHaveLength(2)
     })
   })
 })

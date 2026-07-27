@@ -11,7 +11,7 @@ import {
 } from './validation'
 import { logger } from './logger'
 import type { AckErrorCode } from './errorCodes'
-import type { SocketData } from './types'
+import type { RoomBroadcast, SocketData } from './types'
 
 // Server/Socket typed with SocketData so the authenticated identity lives on
 // `socket.data` (idiomatic Socket.IO), fully typed — no `any`, no closures.
@@ -50,11 +50,28 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
   }
   roomManager.setPresence({ isPresent })
 
+  // The ONE place room state reaches clients (11 call sites, and the only `.emit` of
+  // room state in this file), which is why the presence projection belongs here and
+  // nowhere else.
+  //
+  // The spread is load-bearing, not style: it builds a NEW object per broadcast, so
+  // `absentPlayerIds` never lands on the stored room and can never reach saveRoom.
+  // Assigning the field onto `room` instead would persist process-local state and
+  // rehydrate it as fact after the next restart. Shallow is fine — everything read
+  // here is read-only.
+  //
+  // Note the join_room ack also carries `room` (the stored one, without this field).
+  // Harmless today: this broadcast is emitted immediately BEFORE that ack and the
+  // client takes room state only from here — the ack is read for `error`/`token`
+  // only. If the client ever starts syncing from the ack, it has to use this shape.
   const notifyRoomUpdate = (roomId: string) => {
     const room = roomManager.getRoom(roomId)
     if (room) {
-      // Broadcast full state to everyone in the room
-      io.to(roomId).emit('room_state_updated', room)
+      const absentPlayerIds = room.players
+        .filter((player) => !isPresent(roomId, player.id))
+        .map((player) => player.id)
+      const broadcast: RoomBroadcast = { ...room, absentPlayerIds }
+      io.to(roomId).emit('room_state_updated', broadcast)
     }
   }
 

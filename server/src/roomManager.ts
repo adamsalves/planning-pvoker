@@ -78,21 +78,162 @@ export class RoomManager {
   //
   // Known trade-off: presence/grace timers (events.ts) are ephemeral and lost on
   // restart, so a rehydrated room comes back with every player it had — including
-  // ones who won't reconnect. Such a "ghost" still APPEARS in the player list
-  // until the room's TTL expires (no disconnect fires for a socket that never
-  // existed in this process). It no longer blocks progress, though: the autoReveal
-  // quorum is presence-aware (see maybeAutoReveal + the PresenceOracle), so a ghost
-  // is excluded from the quorum and can neither stall the reveal nor pin the room.
-  // A grace-based boot reaper is still avoided on purpose — the free-tier cold
-  // start (~60s) exceeds the reconnect grace (~30s) and would evict the room
-  // before the team finishes reconnecting. Hiding the ghost from the UI is a
-  // separate follow-up (it needs presence broadcast to clients).
+  // ones who won't reconnect. Such a "ghost" stays SEATED until the room's TTL
+  // expires (no disconnect fires for a socket that never existed in this process),
+  // and that is deliberate: a grace-based boot reaper is avoided because the
+  // free-tier cold start (~60s) exceeds the reconnect grace (~30s) and would evict
+  // the room before the team finishes reconnecting.
+  //
+  // Seated, however, no longer means COUNTED or even shown as present. The autoReveal
+  // quorum is presence-aware (maybeAutoReveal + the PresenceOracle), sealRound drops
+  // an absent player's vote at the reveal, and notifyRoomUpdate now ships
+  // `absentPlayerIds` so the client renders the ghost as absent instead of as a
+  // teammate who is about to vote. A ghost can neither stall the round, nor skew the
+  // stats, nor make the room look fuller than it is.
   public async hydrate(): Promise<void> {
     const { rooms, tokens } = await this.persistence.loadAll()
-    for (const room of rooms) this.rooms.set(room.id, room)
+    for (const room of rooms) {
+      // ORDER MATTERS, in the all-observers case: the repair promotes the first
+      // player when nobody is a non-observer, and observers are exactly who
+      // eligibleVotersOf filters out — so running the prune first would judge
+      // eligibility against a role the room is about to change, and drop a vote the
+      // repaired room would have counted. In every other case the repair picks a
+      // non-observer and the order is indifferent.
+      const repaired = this.repairOrphanAdmin(room)
+      this.pruneOrphanVotes(room)
+      this.rooms.set(room.id, room)
+      // Write the repair back, AFTER the map holds it (flushSave reads current
+      // state). Without this the snapshot keeps the orphan adminId until some
+      // unrelated mutation happens to save, and the warn below re-fires on every
+      // boot — an operator can't tell "still broken" from "fixed and re-detected".
+      if (repaired) this.scheduleSave(room.id)
+    }
     for (const [key, token] of tokens) this.tokens.set(key, token)
     if (rooms.length > 0) {
       logger.info(`♻️  Rehydrated ${rooms.length} room(s) from persistence`)
+    }
+  }
+
+  // Repoints an `adminId` that names nobody in `players` at a real player.
+  //
+  // Reachable only through rehydration: createRoom takes adminId from a player it
+  // just seated, and leaveRoom always repoints it at a remaining one. Left alone the
+  // room isn't broken, it is QUIETLY BRICKED — requireAdmin (events.ts) compares the
+  // caller against adminId so no admin command passes, and leaveRoom's `wasAdmin`
+  // never fires, so the handover that exists to rescue a driverless room can't run
+  // either. It stays alive and un-driveable until its TTL.
+  //
+  // This used to be a rejection in persistence.ts, which threw away an otherwise
+  // intact room — subject backlog, round history, every other player — over one
+  // dangling string. The rejection was chosen deliberately then, on the grounds that
+  // repairing state nobody has ever observed means opening a code path to resurrect
+  // corruption that isn't understood. That reasoning is answered rather than ignored:
+  //
+  //   - the repair is NOT a general `.transform()` in the schema. It is one named
+  //     step at boot, so nothing else in the system can reach it;
+  //   - it fixes ONE field, by the same policy leaveRoom's handover already uses
+  //     (first non-observer, else the first player), so a repaired room lands in a
+  //     state the running system produces anyway;
+  //   - everything it cannot understand is still DISCARDED — the shape schema and
+  //     the currentRoundIndex refine are untouched, and `players: []` (nobody to
+  //     promote) remains a rejection;
+  //   - it is LOUD. The whole point of the original refusal was that the failure was
+  //     never observed in production; a silent repair would keep it that way.
+  //
+  // leaveRoom's handover filters by presence first and this does not — but that is
+  // an ABSENCE OF EFFECT, not a different policy. setPresence() runs after hydrate
+  // (see index.ts), so during this pass the oracle is still the constructor default
+  // answering "everyone is present": the filter would keep the whole list and select
+  // identically. Written without it because a filter that provably cannot discriminate
+  // reads as a rule someone must maintain. Same reason pruneOrphanVotes gives below.
+  //
+  // Inherited cost, identical to leaveRoom's and documented there at length: when
+  // every seated player is an observer the promotion drafts one into `admin`, which
+  // makes them a voter (eligibleVotersOf only filters observers) for every later
+  // round. It is permanent — events.ts resolves role FROM adminId on join, so they
+  // cannot demote themselves by rejoining — and the new admin can take themselves
+  // out of a round via set_round_voter. A room nobody can drive is still worse.
+  //
+  // Returns whether it changed anything, so the caller can persist the repair.
+  private repairOrphanAdmin(room: Room): boolean {
+    if (room.players.some((p) => p.id === room.adminId)) return false
+
+    // persistence.ts rejects an empty players array, so there is always a candidate.
+    // The guard is not dead code even so: RoomPersistence is a PORT, and an
+    // implementation that doesn't run the zod schema (every test double here) can
+    // hand over a room this method must not throw on.
+    const next = room.players.find((p) => p.role !== 'observer') ?? room.players[0]
+    if (!next) return false
+
+    const orphaned = room.adminId
+    room.adminId = next.id
+    next.role = 'admin'
+    logger.warn(
+      `🛠️  Repaired orphan adminId in room ${room.id}: ${orphaned} named no seated player; ` +
+        `promoted ${next.id} (${next.name}). The snapshot was kept instead of discarded.`,
+    )
+    return true
+  }
+
+  // Drops votes in the round in progress whose author the round does not count.
+  //
+  // Keyed off eligibleVotersOf — the same seam castVote admits through and the
+  // quorum counts — and NOT off "is seated in the room", which is a strictly weaker
+  // claim: an observer or an admin-excluded player is seated, yet the round refuses
+  // their vote everywhere else. Using the weaker one here would let this cleanup
+  // bless data that castVote would have rejected outright.
+  //
+  // Why any of it is needed: leaveRoom prunes the departing player's vote before
+  // saving, but only since that fix, and it is not retroactive — snapshots written
+  // earlier carry the vote of someone who left mid-round, with no matching player.
+  // Nothing on the server counts such a vote (every quorum path iterates players),
+  // but the client feeds the raw map to useVoteStats, so it inflates the average and
+  // can fabricate a consensus out of a voter who is gone. Beyond that legacy
+  // cleanup, this is a boundary invariant worth holding on its own: snapshots come
+  // from outside the process.
+  //
+  // What this deliberately does NOT do — the two exclusions matter:
+  //   - Past and revealed rounds are left alone. A vote outliving its author is
+  //     EXPECTED there: leaveRoom prunes only the round in progress, precisely so a
+  //     revealed result stays the one the room saw.
+  //   - A rehydration GHOST is not pruned HERE. It is a seated, non-excluded,
+  //     non-observer player (see the note on hydrate above), so it stays ELIGIBLE and
+  //     keeps its vote through this pass. That is deliberate, and presence is not the
+  //     criterion here for a reason more basic than policy: setPresence() is called by
+  //     setupSocketEvents, which runs AFTER hydrate (see index.ts) — during this pass
+  //     the oracle is still the constructor default that answers "everyone is
+  //     present", so presence cannot be consulted at all. Even if it could, at boot
+  //     nobody has reconnected yet, and pruning by presence would wipe the votes of a
+  //     whole team that is simply mid-reconnect: the exact work persistence exists to
+  //     save.
+  //
+  //     Deferred, not accepted: sealRound() prunes by presence AT THE REVEAL, which is
+  //     the moment the answer is both knowable and needed — presence is wired by then,
+  //     and a ghost's vote can no longer reach the stats the client computes. So the
+  //     ghost keeps its vote here and loses it there. Do not "fix" this by pruning at
+  //     boot; that is the version that destroys a reconnecting team's work.
+  private pruneOrphanVotes(room: Room): void {
+    // Same resolver the single-vote seam uses, and its `!round` runtime guard earns
+    // its keep HERE above all: this is the one call reached BEFORE any in-process
+    // invariant has held — persistence.ts's refine is all that stands between a
+    // hand-edited snapshot and this line. A throw would cost more here than anywhere
+    // else: hydrate aborts mid-loop, the token map never loads, and hasToken()
+    // returning false for everyone turns OFF the anti-escalation check in join_room,
+    // while index.ts keeps the process serving.
+    const round = this.currentRoundIfVoting(room)
+    if (!round) return
+
+    const counted = new Set(this.eligibleVotersOf(room, round).map((p) => p.id))
+    const dropped = Object.keys(round.votes).filter((playerId) => !counted.has(playerId))
+    for (const playerId of dropped) delete round.votes[playerId]
+
+    // Say it happened. This is the one step of the boot that destroys user-visible
+    // state, and hydrate only ever logs the survivors — same reasoning as the
+    // discard log in persistence.loadAll. Silent when there is nothing to drop.
+    if (dropped.length > 0) {
+      logger.warn(
+        `♻️  Room ${room.id}: dropped ${dropped.length} rehydrated vote(s) the round does not count (${dropped.join(', ')})`,
+      )
     }
   }
 
@@ -200,6 +341,18 @@ export class RoomManager {
       // sobrescreve como name/role — inclusive limpando (undefined) se a pessoa
       // tirou a tag. A tag NÃO é atribuída por outro caminho no server.
       existingPlayer.tag = player.tag
+
+      // Virar espectador tira a pessoa do que a rodada conta (eligibleVotersOf
+      // filtra observers), então o voto que ela já tinha dado precisa ir junto —
+      // mesma regra e mesmo seam do leaveRoom e do setRoundVoter.
+      //
+      // Alcançável sem sair da sala de verdade: o cliente reenvia o papel do user
+      // store a cada join, então quem sai, escolhe "espectador" na home e volta
+      // DENTRO da janela de grace nunca passa pelo leaveRoom — o jogador segue na
+      // sala com o voto intacto e reaparece como espectador. Sem isto, o mapa de
+      // votos guarda o voto de alguém que a rodada não espera mais, e o cliente,
+      // que soma o mapa cru no useVoteStats, o conta na média e no consenso.
+      if (existingPlayer.role === 'observer') this.dropCurrentVote(room, player.id)
     }
 
     this.scheduleSave(roomId)
@@ -232,8 +385,49 @@ export class RoomManager {
 
     // If the admin left, hand admin to the next remaining player so the room
     // doesn't get stuck with nobody able to drive the session.
+    //
+    // Observers are skipped: the promotion sets role = 'admin', and eligibleVotersOf
+    // only filters out observers — so promoting one silently drafts someone who
+    // joined to WATCH into the quorum of every round from then on.
+    //
+    // Falling back to players[0] when everyone left IS an observer is deliberate: a
+    // room nobody can drive is worse than the promotion. Its cost is real but
+    // deferred — an observers-only room has no quorum to break, yet the promotion
+    // is permanent, so a player joining later finds the ex-observer counted as a
+    // voter (the new admin can take themselves out via set_round_voter). Removing
+    // that residue means letting adminId point at a player whose role isn't
+    // 'admin', which both the join_room role normalization in events.ts (role is
+    // resolved FROM adminId) and the client's crown/observer grouping assume away.
+    //
+    // The promoted player keeps admin across a rejoin in either branch, by that
+    // same events.ts normalization.
+    //
+    // Presence is the FIRST filter, for the same reason observers are the second:
+    // handing the room to someone who can't drive it defeats the transfer. An
+    // absent player here is STRUCTURALLY a rehydration ghost — present covers a live
+    // socket OR the reconnect grace, and no other path leaves an absent player in
+    // room.players — so it would inherit the room and never come back to run it.
+    //
+    // Temporally it's fuzzier: in the seconds after a cold start, a teammate who is
+    // about to reconnect reads exactly like a ghost. That is what makes the observer
+    // promotion above MORE likely than its "only when everyone left is an observer"
+    // wording suggests — it now fires whenever everyone PRESENT is an observer — and
+    // that promotion is permanent. Judged the better trade anyway: an admin who can
+    // act now beats holding the room for someone who may not be coming back.
+    //
+    // When nobody is present at all the whole list is the pool: the room is dormant,
+    // and whoever reconnects first is kept as admin by events.ts anyway.
+    //
+    // SECOND HOME FOR THIS POLICY: repairOrphanAdmin() runs the same selection at
+    // boot, to repoint an adminId that a snapshot left dangling. It deliberately
+    // drops the presence filter (the oracle isn't wired during hydrate) but keeps
+    // "first non-observer, else the first player" identical. The two are the only
+    // places that decide who inherits a room — change one and the other has to
+    // follow, or a room's admin depends on whether the server restarted.
     if (wasAdmin) {
-      const next = room.players[0]
+      const present = room.players.filter((p) => this.presence.isPresent(room.id, p.id))
+      const pool = present.length > 0 ? present : room.players
+      const next = pool.find((p) => p.role !== 'observer') ?? pool[0]
       room.adminId = next.id
       next.role = 'admin'
     }
@@ -246,6 +440,37 @@ export class RoomManager {
     // silently re-entering it. Trade-off: after an explicit "leave" and a
     // re-join, that player is still excluded — the UI (slice 2) has to say so.
     //
+    // Their VOTE, on the other hand, goes — the same rule setRoundVoter already
+    // applies when the admin takes someone out of a round: a vote from someone the
+    // round no longer counts skews the reveal. The asymmetry with excludedVoterIds
+    // above is the point: an orphan exclusion is INERT (eligibleVotersOf iterates
+    // room.players, so an id nobody carries never matches), while an orphan vote is
+    // live data. The server never noticed, because every quorum path iterates
+    // room.players; the client is what breaks. It feeds the raw votes map to
+    // useVoteStats, so a leftover vote still lands in the count, the average, the
+    // distribution and — worst — in hasConsensus, where it resurrects the false
+    // consensus that the "at least 2 votes" guard exists to prevent: one present
+    // voter plus one ghost vote reads as agreement, banner and confetti included.
+    //
+    // Accepted cost: "who left" includes someone who only lost the network for 31
+    // seconds and is already coming back — leaveRoom runs when the grace expires,
+    // not when the tab closes. They rejoin with no vote and have to cast again.
+    // Judged better than the alternative, which is the whole room reading a number
+    // from someone who isn't there. The client clears its optimistic vote on this
+    // same transition (RoomView), so the card doesn't lie about it.
+    //
+    // NOT covered here: a rehydration ghost never leaves — no socket, no grace
+    // timer, so no leaveRoom. Its vote therefore survives this path, and that is
+    // fine: sealRound() drops it at the REVEAL, where presence is already wired and
+    // the answer is both knowable and needed. Do not try to close the gap in
+    // hydrate() instead — at boot nobody is present yet, so pruning by presence
+    // there would wipe the votes of a whole team mid-reconnect. See the note on
+    // pruneOrphanVotes, which says the same from the other side.
+    //
+    // Only the round in progress — the seam below is what enforces that, and a
+    // revealed round is settled history (the room already saw that result).
+    this.dropCurrentVote(room, playerId)
+
     // A present voter just left (their grace expired). If the voters who remain
     // present have all voted, the round can now auto-reveal — the departing
     // player was the last one holding it open. No-op when autoReveal is off.
@@ -340,6 +565,36 @@ export class RoomManager {
 
   // --- Voting ---
 
+  // The round that is open for votes right now, or undefined. Two guards, and both
+  // matter: -1 means the room has no round at all (setup, or after a reset), and a
+  // REVEALED round is settled history — the room already saw that result, so nothing
+  // may rewrite it. The `!round` is a runtime guard, not a type one, since
+  // noUncheckedIndexedAccess is off; it only bites on a rehydrated snapshot, the one
+  // path that reaches here without an in-process invariant having held.
+  private currentRoundIfVoting(room: Room): Round | undefined {
+    if (room.currentRoundIndex === -1) return undefined
+    const round = room.rounds[room.currentRoundIndex]
+    return round && round.status === 'voting' ? round : undefined
+  }
+
+  // Single seam for one rule: a vote whose author the round no longer counts must
+  // not reach the reveal. The server itself never trips over such a vote — every
+  // quorum path iterates room.players — but the client feeds the raw votes map to
+  // useVoteStats, so it lands in the count, the average, the distribution and in
+  // hasConsensus, where it can manufacture agreement out of somebody who is gone.
+  //
+  // THREE callers reach this from three different directions, which is exactly why
+  // it is one function: the admin takes someone out of the round (setRoundVoter),
+  // the person leaves the room for good (leaveRoom, after the grace expires), and
+  // the boot finds a snapshot carrying a vote the round does not count
+  // (pruneOrphanVotes, which drops several at once and so guards separately).
+  // Before this was extracted the rule lived duplicated at each site — and the third
+  // one arrived months later, in a PR that had to rediscover the reasoning.
+  private dropCurrentVote(room: Room, playerId: string): void {
+    const round = this.currentRoundIfVoting(room)
+    if (round) delete round.votes[playerId]
+  }
+
   public castVote(roomId: string, playerId: string, value: string | number): Room | null {
     const room = this.rooms.get(roomId)
     if (!room || room.currentRoundIndex === -1) return null
@@ -380,9 +635,8 @@ export class RoomManager {
       round.excludedVoterIds = excluded.filter((id) => id !== playerId)
     } else if (!excluded.includes(playerId)) {
       round.excludedVoterIds = [...excluded, playerId]
-      // Drop any vote they had already cast — leaving it behind would skew the
-      // reveal stats with a vote from someone the round no longer counts.
-      delete round.votes[playerId]
+      // Drop any vote they had already cast — same seam the leave path uses.
+      this.dropCurrentVote(room, playerId)
     }
 
     // Taking the last pending voter out can complete the quorum.
@@ -419,8 +673,39 @@ export class RoomManager {
     // present eligible voters (observers-only, or an admin who excluded
     // everyone) without a single vote.
     if (required.length > 0 && required.every((p) => round.votes[p.id] !== undefined)) {
-      round.status = 'revealed'
+      this.sealRound(room, round)
     }
+  }
+
+  // Closes a round: drops the votes of players who are not present, THEN marks it
+  // revealed. The two steps are one operation on purpose — after `status` flips, the
+  // round is settled history and nothing may touch its votes.
+  //
+  // Who can possibly be absent, seated AND holding a vote at this moment? Only a
+  // rehydration ghost. A live socket is present; someone who just dropped is inside
+  // the grace window, which counts as present; and once the grace expires leaveRoom
+  // runs and takes both the player and their vote. So "absent + seated + voted" is
+  // exactly the ghost, and this prunes it precisely — no live voter can be caught.
+  //
+  // It also settles an incoherence: the quorum above ALREADY ignores absent players
+  // (that is what stops a ghost from stalling the round), while the reveal counted
+  // their votes anyway — the client sums the raw votes map in useVoteStats, so a
+  // ghost inflated the average and could manufacture a consensus among people who
+  // were no longer there. Deciding the round by one set of people and reporting it
+  // over another was the bug; both are now "who is present".
+  //
+  // Trade-off, deliberate: the reveal shows the votes of who is IN the room, not
+  // every vote ever cast for the round. Someone who voted and vanished across a
+  // restart loses their number from the result. Same rule the leave path applies —
+  // and their estimate could not be discussed by a team they are absent from anyway.
+  //
+  // The default PresenceOracle answers "everyone is present", so this is a no-op
+  // wherever presence is not wired (unit tests, NullPersistence boots).
+  private sealRound(room: Room, round: Round): void {
+    for (const playerId of Object.keys(round.votes)) {
+      if (!this.presence.isPresent(room.id, playerId)) delete round.votes[playerId]
+    }
+    round.status = 'revealed'
   }
 
   public revealVotes(roomId: string): Room | null {
@@ -428,7 +713,7 @@ export class RoomManager {
     if (!room || room.currentRoundIndex === -1) return null
 
     const round = room.rounds[room.currentRoundIndex]
-    round.status = 'revealed'
+    this.sealRound(room, round)
 
     this.scheduleSave(roomId)
     return room

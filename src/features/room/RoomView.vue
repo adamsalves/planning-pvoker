@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import IconCrown from '~icons/lucide/crown'
@@ -9,10 +9,11 @@ import IconPencil from '~icons/lucide/pencil'
 import IconVote from '~icons/lucide/vote'
 import IconCheck from '~icons/lucide/check'
 import IconShare from '~icons/lucide/share-2'
+import type { PlayerRole } from '@/types'
 import { useUserStore } from '@/stores/user'
 import { useRoomStore } from '@/stores/room'
 import { useConnectionStore } from '@/stores/connection'
-import { roundVotersOf } from '@/utils/players'
+import { isObserver as isObserverPlayer, roundVotersOf, presentPlayersOf } from '@/utils/players'
 import { revealedRoundsOf } from '@/utils/rounds'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseCard from '@/components/BaseCard.vue'
@@ -57,15 +58,34 @@ const isAdmin = computed(() => {
   const room = roomStore.currentRoom
   return room ? room.adminId === userStore.playerId : userStore.playerRole === 'admin'
 })
-const isObserver = computed(() => userStore.playerRole === 'observer')
+// O usuário local dentro da lista do servidor — a fonte da verdade do papel dele.
+const localPlayer = computed(() => roomStore.players.find((p) => p.id === userStore.playerId))
+
+// Espectador também é derivado do servidor (mesmo princípio do isAdmin acima): o
+// papel do localStorage envelhece. Um observer promovido a admin (o servidor faz
+// isso quando o admin sai) passa a CONTAR no quórum do servidor, mas continuaria
+// espectador no client dele — e a rodada nunca fecharia, esperando um voto que a
+// UI não deixa ele dar. Fallback pro papel local só até o primeiro
+// room_state_updated chegar — a guarda aqui é o jogador ESTAR na lista, e não o
+// `currentRoom` existir como no isAdmin: a diferença é deliberada, porque o papel
+// mora no Player e o adminId mora na Room.
+const isObserver = computed(() =>
+  localPlayer.value ? isObserverPlayer(localPlayer.value) : userStore.playerRole === 'observer',
+)
 
 // Badges de papel e fase: ícone + rótulo saem juntos do mesmo computed (o ícone é o
 // COMPONENTE, renderizado por <component :is>, sem cast). O emoji saiu das strings
 // i18n — o rótulo textual continua sendo o nome acessível do badge.
-const roleBadge = computed(() => {
-  if (isAdmin.value) return { icon: IconCrown, label: t('room.roles.admin') }
-  if (isObserver.value) return { icon: IconEye, label: t('room.roles.observer') }
-  return { icon: IconUser, label: t('room.roles.player') }
+// `variant` é a classe CSS da cor do badge: sai do MESMO computed que o ícone e o
+// rótulo pra não divergir deles (antes vinha do userStore.playerRole, que envelhece
+// — quem era promovido a admin ganhava a coroa com a cor de jogador). Tipado como
+// PlayerRole de propósito: as regras CSS são .badge-role.admin/.observer, então um
+// typo na classe vira erro de compilação em vez de badge sem cor.
+const roleBadge = computed<{ icon: Component; label: string; variant: PlayerRole }>(() => {
+  if (isAdmin.value) return { icon: IconCrown, label: t('room.roles.admin'), variant: 'admin' }
+  if (isObserver.value)
+    return { icon: IconEye, label: t('room.roles.observer'), variant: 'observer' }
+  return { icon: IconUser, label: t('room.roles.player'), variant: 'member' }
 })
 
 const phaseBadge = computed(() => {
@@ -78,6 +98,9 @@ const deckType = computed(() => roomStore.roomConfig?.deckType ?? 'fibonacci')
 const deckLabel = computed(() => t(`decks.${deckType.value}`))
 const currentRound = computed(() => roomStore.currentRound)
 const players = computed(() => roomStore.players)
+// Ausentes segundo o servidor (sem socket e fora da graça) — na prática o fantasma
+// de rehidratação. Entra no cálculo de quem a rodada espera votar.
+const absentPlayerIds = computed(() => roomStore.absentPlayerIds)
 
 // Compartilhar sala (link de convite / Web Share) — lógica em useShareRoom.
 const { shareStatus, shareRoom } = useShareRoom(roomId)
@@ -103,19 +126,43 @@ watch(
   },
 )
 
+// O servidor pode APAGAR um voto já confirmado da rodada em andamento — hoje por
+// dois caminhos: o admin tirar a pessoa da rodada (setRoundVoter) e ela SAIR da
+// sala (leaveRoom, quando a grace expira). O segundo é o traiçoeiro: num blip de
+// rede longo o Socket.IO reconecta sozinho e o rejoin recoloca a pessoa na sala,
+// mas a instância Vue nunca recarregou — sem isto o otimista sobreviveria à poda e
+// a carta seguiria acesa sobre um voto que o servidor não tem mais (com autoReveal,
+// a rodada trava esperando um voto que a pessoa acha que deu).
+//
+// Só a transição "tinha voto confirmado → não tem mais" limpa. Um otimista ainda
+// não confirmado nunca viu serverVote != null, então o clique normal não é afetado.
+watch(serverVote, (vote, previous) => {
+  if (previous !== null && vote === null) optimisticVote.value = null
+})
+
 // Quem o admin tirou DESTA rodada (server: Round.excludedVoterIds). Ausente em
 // rodadas criadas antes da feature — `?? []` = ninguém fora.
 const nonVoterIds = computed(() => currentRound.value?.excludedVoterIds ?? [])
 
-// Quem a rodada espera votar: nem observer nem excluído. É o denominador do
-// VoteReveal e a base do "todos votaram" — NÃO confundir com quem senta à mesa
-// (activePlayersOf), que inclui o excluído.
-const voterCount = computed(() => roundVotersOf(players.value, nonVoterIds.value).length)
+// Quem a rodada espera votar: presente, nem observer, nem excluído. É o
+// denominador do VoteReveal e a base do "todos votaram" — NÃO confundir com quem
+// senta à mesa (activePlayersOf), que inclui o excluído.
+//
+// A presença tem de entrar AQUI, e é o mesmo filtro que o quórum do servidor
+// aplica. Sem ela, um fantasma de rehidratação (sentado, não-observer, não
+// excluído) entra no denominador — e como o sealRound apaga o voto dele, o reveal
+// exibia "1/2 votos" com uma pessoa só na sala. Exatamente "fazer a sala parecer
+// mais cheia do que está", que é o que esta feature existe para impedir.
+const roundVoters = computed(() =>
+  roundVotersOf(presentPlayersOf(players.value, absentPlayerIds.value), nonVoterIds.value),
+)
+
+const voterCount = computed(() => roundVoters.value.length)
 
 const allVotersVoted = computed(() => {
   const round = currentRound.value
   if (!round) return false
-  const voters = roundVotersOf(players.value, nonVoterIds.value)
+  const voters = roundVoters.value
   // Guard length: sala só de observers (ou todos excluídos) NÃO conta como
   // "todos votaram" — [].every() é true e marcaria a rodada como concluída.
   return voters.length > 0 && voters.every((p) => p.id in round.votes)
@@ -300,7 +347,7 @@ function confirmLeave() {
               {{ t('room.title') }} <span class="room-code">{{ roomId }}</span>
             </h1>
             <div class="room-meta">
-              <span class="badge badge-role" :class="userStore.playerRole">
+              <span class="badge badge-role" :class="roleBadge.variant">
                 <component :is="roleBadge.icon" aria-hidden="true" />
                 {{ roleBadge.label }}
               </span>

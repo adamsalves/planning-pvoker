@@ -19,6 +19,7 @@ import { useUserStore } from '@/stores/user'
 import { useConnectionStore } from '@/stores/connection'
 import { JoinAckError } from '@/composables/joinErrors'
 import type { Room } from '@/types'
+import { must } from '@/test-utils/must'
 
 const mockRouterPush = vi.fn()
 const mockRevealVotes = vi.fn()
@@ -434,8 +435,8 @@ describe('RoomView.vue leave confirmation (F3.4 / F3.10)', () => {
     // leave_room avisa o servidor (remoção imediata, sem o grace de 30s) e tem
     // de ir ANTES do disconnect — depois dele o pacote não sai.
     expect(mockLeaveRoom).toHaveBeenCalledWith('abc123')
-    expect(mockLeaveRoom.mock.invocationCallOrder[0]).toBeLessThan(
-      mockDisconnect.mock.invocationCallOrder[0],
+    expect(must(mockLeaveRoom.mock.invocationCallOrder[0], 'leave call order')).toBeLessThan(
+      must(mockDisconnect.mock.invocationCallOrder[0], 'disconnect call order'),
     )
     // F3.10 — token e vínculo com a sala descartados no leave.
     expect(userStore.sessionToken).toBeNull()
@@ -468,15 +469,15 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     const wrapper = mountVotingRoom()
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs).toHaveLength(2)
-    expect(tabs[0].text()).toContain('Votação')
-    expect(tabs[1].text()).toContain('Resumo')
+    expect(must(tabs[0], 'voting tab').text()).toContain('Votação')
+    expect(must(tabs[1], 'summary tab').text()).toContain('Resumo')
     // Só a rodada revelada conta — a rodada em votação não entra no resumo.
-    expect(tabs[1].text()).toContain('(1)')
+    expect(must(tabs[1], 'summary tab').text()).toContain('(1)')
   })
 
   it('defaults to the voting panel and switches to the summary on click', async () => {
     const wrapper = mountVotingRoom()
-    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+    const tab = (i: number) => must(wrapper.findAll('[role="tab"]')[i], `tab ${i}`)
 
     expect(tab(0).attributes('aria-selected')).toBe('true')
     expect(tab(1).attributes('aria-selected')).toBe('false')
@@ -498,10 +499,14 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     const tablist = wrapper.get('[role="tablist"]')
 
     await tablist.trigger('keydown', { key: 'ArrowRight' })
-    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+    expect(
+      must(wrapper.findAll('[role="tab"]')[1], 'summary tab').attributes('aria-selected'),
+    ).toBe('true')
 
     await tablist.trigger('keydown', { key: 'ArrowLeft' })
-    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+    expect(must(wrapper.findAll('[role="tab"]')[0], 'voting tab').attributes('aria-selected')).toBe(
+      'true',
+    )
   })
 
   it('does not render the tablist outside the voting phase', () => {
@@ -512,7 +517,7 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
   it('updates the tab counter live when the current round becomes revealed', async () => {
     const wrapper = mountVotingRoom()
     const roomStore = useRoomStore()
-    const summaryTab = () => wrapper.findAll('[role="tab"]')[1]
+    const summaryTab = () => must(wrapper.findAll('[role="tab"]')[1], 'summary tab')
 
     expect(summaryTab().text()).toContain('(1)')
 
@@ -534,7 +539,7 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
   it('resets to the voting tab when a fresh voting phase starts (session reset)', async () => {
     const wrapper = mountVotingRoom()
     const roomStore = useRoomStore()
-    const tab = (i: number) => wrapper.findAll('[role="tab"]')[i]
+    const tab = (i: number) => must(wrapper.findAll('[role="tab"]')[i], `tab ${i}`)
 
     // Vai pro resumo.
     await tab(1).trigger('click')
@@ -560,7 +565,9 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     roomStore.syncRoom(fresh)
     await nextTick()
 
-    expect(wrapper.findAll('[role="tab"]')[0].attributes('aria-selected')).toBe('true')
+    expect(must(wrapper.findAll('[role="tab"]')[0], 'voting tab').attributes('aria-selected')).toBe(
+      'true',
+    )
   })
 
   it('moves focus to the newly selected tab on Arrow navigation (roving tabindex)', async () => {
@@ -570,7 +577,9 @@ describe('RoomView.vue voting tabs (F6 — live room summary)', () => {
     await tablist.trigger('keydown', { key: 'ArrowRight' })
     await flushPromises() // o .focus() roda num nextTick após trocar a aba
 
-    const [votingTab, summaryTab] = wrapper.findAll('[role="tab"]')
+    const tabs = wrapper.findAll('[role="tab"]')
+    const votingTab = must(tabs[0], 'voting tab')
+    const summaryTab = must(tabs[1], 'summary tab')
     // Roving tabindex: o alvo vira focável (0) e o outro sai da ordem de tab (-1)...
     expect(summaryTab.attributes('tabindex')).toBe('0')
     expect(votingTab.attributes('tabindex')).toBe('-1')
@@ -621,12 +630,15 @@ describe('RoomView.vue role and phase badges (ícones theme-aware)', () => {
   ) {
     setActivePinia(createPinia())
 
+    const role = options.role ?? 'admin'
     const userStore = useUserStore()
-    userStore.setPlayer('Ana', 'player-1', options.role ?? 'admin')
+    userStore.setPlayer('Ana', 'player-1', role)
 
     const room = createRoom()
-    // adminId só bate com o player quando o papel é admin — isAdmin vem do servidor.
-    if (options.role && options.role !== 'admin') room.adminId = 'someone-else'
+    // O papel do badge vem do SERVIDOR (adminId + role na lista de jogadores), não
+    // do localStorage — por isso os dois lados são preparados juntos aqui.
+    room.players = [{ id: 'player-1', name: 'Ana', role }]
+    if (role !== 'admin') room.adminId = 'someone-else'
     if (options.phase) room.phase = options.phase
 
     useRoomStore().syncRoom(room)
@@ -712,6 +724,31 @@ describe('RoomView.vue quem vota na rodada', () => {
     return mount(RoomView, { global: { stubs: childStubs } })
   }
 
+  // O bug que o code review pegou: sem presença no voterCount, o fantasma de
+  // rehidratação (sentado, não-observer, não-excluído) entrava no DENOMINADOR — e
+  // como o sealRound apaga o voto dele no servidor, o reveal mostrava "1/2 votos"
+  // com uma pessoa só na sala. É o mesmo filtro que o quórum do servidor aplica.
+  it('desconta os AUSENTES do voterCount (senão o reveal mente "1/2")', async () => {
+    const room = votingRoom([])
+    room.absentPlayerIds = ['player-2'] // Bob é fantasma; Cida já é observer
+    const wrapper = mountVoting(room)
+    await flushPromises()
+
+    // Sobra só a Ana entre os votantes presentes.
+    expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(1)
+  })
+
+  // O outro lado: com a Ana sozinha e presente, um voto dela FECHA a rodada. Com o
+  // fantasma no cálculo, o "todos votaram" nunca apareceria.
+  it('allVotersVoted ignora o voto que nunca vem de quem está ausente', async () => {
+    const room = votingRoom([], { 'player-1': 5 })
+    room.absentPlayerIds = ['player-2']
+    const wrapper = mountVoting(room)
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('allVotersVoted')).toBe(true)
+  })
+
   it('desconta os excluídos do voterCount (denominador do reveal)', async () => {
     // 3 jogadores, sendo 1 observer → 2 votantes; excluir o Bob deixa 1.
     const wrapper = mountVoting(votingRoom(['player-2']))
@@ -756,12 +793,99 @@ describe('RoomView.vue quem vota na rodada', () => {
 
   it('rodada sem o campo (pré-feature) não exclui ninguém', async () => {
     const room = votingRoom([])
-    delete room.rounds[0]!.excludedVoterIds
+    delete must(room.rounds[0], 'first round').excludedVoterIds
     const wrapper = mountVoting(room)
     await flushPromises()
 
     expect(wrapper.findComponent(RoomVoting).props('nonVoterIds')).toEqual([])
     expect(wrapper.findComponent(RoomVoting).props('voterCount')).toBe(2)
+  })
+})
+
+describe('RoomView.vue papel local × papel do servidor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSocketJoinRoom.mockResolvedValue(undefined)
+  })
+
+  function mountWith(localRole: 'admin' | 'member' | 'observer', room: Room) {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Cida', 'player-3', localRole)
+    useRoomStore().syncRoom(room)
+    return mount(RoomView, { global: { stubs: childStubs } })
+  }
+
+  function votingRoom(players: Room['players'], adminId: string): Room {
+    return {
+      id: 'abc123',
+      adminId,
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players,
+      subjects: ['A'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'A', status: 'voting', votes: {}, excludedVoterIds: [] }],
+      currentRoundIndex: 0,
+    }
+  }
+
+  // Regressão do quórum que nunca fechava: a Cida entrou como espectadora, o admin
+  // saiu e o SERVIDOR a promoveu (roomManager.leaveRoom). O quórum do servidor já
+  // contava com ela, mas o papel do localStorage seguia 'observer' — a UI não dava
+  // o deck pra ela votar, e a rodada ficava esperando um voto impossível.
+  it('segue o papel do servidor quando o local está defasado (observer promovido)', async () => {
+    const wrapper = mountWith(
+      'observer',
+      votingRoom(
+        [
+          { id: 'player-3', name: 'Cida', role: 'admin' },
+          { id: 'player-2', name: 'Bob', role: 'member' },
+        ],
+        'player-3',
+      ),
+    )
+    await flushPromises()
+
+    const voting = wrapper.findComponent(RoomVoting)
+    expect(voting.props('isObserver')).toBe(false)
+    expect(voting.props('isVotingThisRound')).toBe(true)
+    // Ela agora é o denominador junto com o Bob — o mesmo que o servidor espera.
+    expect(voting.props('voterCount')).toBe(2)
+    expect(wrapper.find('.badge-role').classes()).toContain('admin')
+  })
+
+  // O outro lado: papel local otimista não coloca ninguém na rodada.
+  it('trata como espectador quem o servidor lista como observer', async () => {
+    const wrapper = mountWith(
+      'member',
+      votingRoom(
+        [
+          { id: 'player-1', name: 'Ana', role: 'admin' },
+          { id: 'player-3', name: 'Cida', role: 'observer' },
+        ],
+        'player-1',
+      ),
+    )
+    await flushPromises()
+
+    const voting = wrapper.findComponent(RoomVoting)
+    expect(voting.props('isObserver')).toBe(true)
+    expect(voting.props('isVotingThisRound')).toBe(false)
+    expect(voting.props('voterCount')).toBe(1)
+  })
+
+  // Fallback: entre o mount e o primeiro room_state_updated o usuário ainda não
+  // está na lista — aí o papel local é tudo o que existe. Este caso passaria
+  // TAMBÉM com o bug antigo (o papel local dava a mesma resposta): é cobertura do
+  // ramo do fallback, não guarda de regressão — os dois casos acima é que são.
+  it('usa o papel local enquanto o servidor não lista o jogador', async () => {
+    const wrapper = mountWith(
+      'observer',
+      votingRoom([{ id: 'player-1', name: 'Ana', role: 'admin' }], 'player-1'),
+    )
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('isObserver')).toBe(true)
+    expect(wrapper.find('.badge-role').text()).toBe('Espectador')
   })
 })
 
@@ -808,6 +932,36 @@ describe('RoomView.vue voto otimista × exclusão', () => {
     await flushPromises()
 
     expect(wrapper.findComponent(RoomVoting).props('isVotingThisRound')).toBe(false)
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBeNull()
+  })
+
+  // O outro caminho de poda do servidor: sair da sala (grace expirada) apaga o voto
+  // da rodada em andamento. Aqui isVotingThisRound continua TRUE — a pessoa não é
+  // observer nem foi excluída —, então o watch acima não cobre; sem o watch de
+  // serverVote a carta seguiria acesa sobre um voto que o servidor não tem mais.
+  // Cenário real: blip de rede > grace, o socket reconecta e o rejoin recoloca a
+  // pessoa na sala sem nunca recarregar a instância Vue.
+  it('limpa o voto otimista quando o servidor poda o voto de quem saiu e voltou', async () => {
+    setActivePinia(createPinia())
+    useUserStore().setPlayer('Bob', 'player-2', 'member')
+    const roomStore = useRoomStore()
+    roomStore.syncRoom(room([]))
+    const wrapper = mount(RoomView, { global: { stubs: childStubs } })
+    await flushPromises()
+
+    // O otimista PRECISA existir para o cenário valer: é ele que sobreviveria à
+    // poda. Um voto que só veio do servidor some sozinho quando o servidor o apaga.
+    wrapper.findComponent(RoomVoting).vm.$emit('vote', 8)
+    await flushPromises()
+    roomStore.syncRoom(room([], { 'player-2': 8 })) // servidor confirma
+    await flushPromises()
+    expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBe(8)
+
+    // Grace expirou → leaveRoom podou o voto; o rejoin devolve a pessoa à sala.
+    roomStore.syncRoom(room([], {}))
+    await flushPromises()
+
+    expect(wrapper.findComponent(RoomVoting).props('isVotingThisRound')).toBe(true)
     expect(wrapper.findComponent(RoomVoting).props('selectedVote')).toBeNull()
   })
 })

@@ -219,4 +219,37 @@ describe('RoomVoting.vue', () => {
     const espectador = mountVoting({ isObserver: true }, votingRoom('voting'))
     expect(espectador.findComponent(IconHourglass).exists()).toBe(false)
   })
+
+  // COSTURA DE INTEGRAÇÃO store → RoomVoting → filhos. Sem estes, apagar as duas
+  // bindings `:absent-player-ids` deste componente não quebrava teste nenhum — a
+  // feature inteira podia ser desplugada em silêncio (achado do code review).
+  describe('presença chega aos filhos', () => {
+    function roomWithAbsent(): Room {
+      const room = votingRoom('voting')
+      room.players = [
+        { id: 'p1', name: 'Ana', role: 'admin' },
+        { id: 'p2', name: 'Bruno', role: 'member' },
+      ]
+      room.absentPlayerIds = ['p2']
+      return room
+    }
+
+    it('repassa absentPlayerIds do store para a PlayerList', () => {
+      const wrapper = mountVoting({}, roomWithAbsent())
+      expect(wrapper.findComponent(PlayerList).props('absentPlayerIds')).toEqual(['p2'])
+    })
+
+    it('repassa absentPlayerIds do store para a PokerTable', () => {
+      const wrapper = mountVoting({}, roomWithAbsent())
+      expect(wrapper.findComponent(PokerTable).props('absentPlayerIds')).toEqual(['p2'])
+    })
+
+    // Sala de servidor que ainda não manda o campo: os filhos recebem [], não
+    // undefined — é o default deles que sustenta isso, e vale pinar.
+    it('repassa lista vazia quando a sala não traz o campo', () => {
+      const wrapper = mountVoting({}, votingRoom('voting'))
+      expect(wrapper.findComponent(PlayerList).props('absentPlayerIds')).toEqual([])
+      expect(wrapper.findComponent(PokerTable).props('absentPlayerIds')).toEqual([])
+    })
+  })
 })

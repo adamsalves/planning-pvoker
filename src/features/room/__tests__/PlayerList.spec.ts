@@ -6,13 +6,13 @@ import IconCheck from '~icons/lucide/check'
 import IconHourglass from '~icons/lucide/hourglass'
 import PlayerList from '../PlayerList.vue'
 import type { Player } from '@/types'
+import { must } from '@/test-utils/must'
 
 describe('PlayerList.vue', () => {
-  const mockPlayers: Player[] = [
-    { id: '1', name: 'Admin', role: 'admin' },
-    { id: '2', name: 'Member', role: 'member' },
-    { id: '3', name: 'Observer', role: 'observer' },
-  ]
+  const admin: Player = { id: '1', name: 'Admin', role: 'admin' }
+  const member: Player = { id: '2', name: 'Member', role: 'member' }
+  const observer: Player = { id: '3', name: 'Observer', role: 'observer' }
+  const mockPlayers: Player[] = [admin, member, observer]
 
   it('separates active players and observers', () => {
     const wrapper = mount(PlayerList, {
@@ -37,7 +37,7 @@ describe('PlayerList.vue', () => {
   it('shows pending badge during voting without vote', () => {
     const wrapper = mount(PlayerList, {
       props: {
-        players: [mockPlayers[1]!],
+        players: [member],
         votes: {},
         status: 'voting',
       },
@@ -52,7 +52,7 @@ describe('PlayerList.vue', () => {
   it('shows voted badge during voting with voted', () => {
     const wrapper = mount(PlayerList, {
       props: {
-        players: [mockPlayers[1]!],
+        players: [member],
         votes: { '2': 8 }, // Player 2 voted 8
         status: 'voting',
       },
@@ -68,7 +68,7 @@ describe('PlayerList.vue', () => {
   it('shows vote value when revealed', () => {
     const wrapper = mount(PlayerList, {
       props: {
-        players: [mockPlayers[1]!],
+        players: [member],
         votes: { '2': 5 },
         status: 'revealed',
       },
@@ -80,7 +80,7 @@ describe('PlayerList.vue', () => {
 
   it('marks the admin crown as decorative with a sr-only alternative', () => {
     const wrapper = mount(PlayerList, {
-      props: { players: [mockPlayers[0]!], votes: {}, status: 'waiting' },
+      props: { players: [admin], votes: {}, status: 'waiting' },
     })
 
     expect(wrapper.find('.admin-badge').attributes('aria-hidden')).toBe('true')
@@ -89,7 +89,7 @@ describe('PlayerList.vue', () => {
 
   it('marks status icons as decorative with sr-only alternatives', () => {
     const wrapper = mount(PlayerList, {
-      props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+      props: { players: [member], votes: {}, status: 'voting' },
     })
 
     expect(wrapper.find('.pending-badge [aria-hidden="true"]').exists()).toBe(true)
@@ -98,7 +98,7 @@ describe('PlayerList.vue', () => {
 
   it('marks the observer eye icon as decorative with a sr-only alternative', () => {
     const wrapper = mount(PlayerList, {
-      props: { players: [mockPlayers[2]!], votes: {}, status: 'waiting' },
+      props: { players: [observer], votes: {}, status: 'waiting' },
     })
 
     expect(wrapper.find('.observer-badge').attributes('aria-hidden')).toBe('true')
@@ -133,13 +133,13 @@ describe('PlayerList.vue', () => {
 
       const toggles = wrapper.findAll('.voter-toggle')
       // Admin ('1') vota → ligado; Member ('2') excluído → desligado.
-      expect(toggles[0]!.attributes('aria-checked')).toBe('true')
-      expect(toggles[1]!.attributes('aria-checked')).toBe('false')
+      expect(must(toggles[0], 'voter toggle 0 (Admin)').attributes('aria-checked')).toBe('true')
+      expect(must(toggles[1], 'voter toggle 1 (Member)').attributes('aria-checked')).toBe('false')
 
       // Tirar quem vota pede voting=false; devolver quem está fora pede true.
-      await toggles[0]!.trigger('click')
+      await must(toggles[0], 'voter toggle 0 (Admin)').trigger('click')
       expect(wrapper.emitted('toggle-voter')?.[0]).toEqual(['1', false])
-      await toggles[1]!.trigger('click')
+      await must(toggles[1], 'voter toggle 1 (Member)').trigger('click')
       expect(wrapper.emitted('toggle-voter')?.[1]).toEqual(['2', true])
     })
 
@@ -149,7 +149,7 @@ describe('PlayerList.vue', () => {
     it('não dessincroniza quando o servidor não aplica o toggle', async () => {
       const wrapper = mount(PlayerList, {
         props: {
-          players: [mockPlayers[0]!],
+          players: [admin],
           votes: {},
           status: 'voting',
           nonVoterIds: [],
@@ -173,7 +173,7 @@ describe('PlayerList.vue', () => {
     it('repinta a linha quando a exclusão muda DEPOIS do mount', async () => {
       const wrapper = mount(PlayerList, {
         props: {
-          players: [mockPlayers[1]!],
+          players: [member],
           votes: {},
           status: 'voting',
           nonVoterIds: [],
@@ -194,7 +194,7 @@ describe('PlayerList.vue', () => {
     it('retraduz o nome acessível do toggle ao trocar de idioma', async () => {
       const wrapper = mount(PlayerList, {
         props: {
-          players: [mockPlayers[1]!],
+          players: [member],
           votes: {},
           status: 'voting',
           votersEditable: true,
@@ -209,7 +209,7 @@ describe('PlayerList.vue', () => {
 
     it('mostra/esconde o toggle quando votersEditable muda DEPOIS do mount', async () => {
       const wrapper = mount(PlayerList, {
-        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+        props: { players: [member], votes: {}, status: 'voting' },
       })
       expect(wrapper.find('.voter-toggle').exists()).toBe(false)
 
@@ -221,7 +221,7 @@ describe('PlayerList.vue', () => {
     // da rodada — e o title sozinho não serve, porque touch não tem hover.
     it('explica o toggle com hint visível e title, só quando editável', async () => {
       const wrapper = mount(PlayerList, {
-        props: { players: [mockPlayers[1]!], votes: {}, status: 'voting' },
+        props: { players: [member], votes: {}, status: 'voting' },
       })
       expect(wrapper.find('.voters-hint').exists()).toBe(false)
 
@@ -233,7 +233,7 @@ describe('PlayerList.vue', () => {
     it('mostra "não vota" no lugar de pendente, sem sair da seção de jogadores', () => {
       const wrapper = mount(PlayerList, {
         props: {
-          players: [mockPlayers[1]!],
+          players: [member],
           votes: {},
           status: 'voting',
           nonVoterIds: ['2'],
@@ -304,6 +304,71 @@ describe('PlayerList.vue', () => {
 
       await wrapper.setProps({ players: [{ id: '1', name: 'Ana', role: 'member', tag: 'qa' }] })
       expect(wrapper.find('.player-tag-badge').text()).toContain('QA')
+    })
+  })
+
+  // Fantasma de rehidratação: continua SENTADO (o servidor não o remove), mas o
+  // broadcast o marca ausente. A lista mostra, a contagem não conta.
+  describe('jogador ausente', () => {
+    const props = {
+      players: mockPlayers,
+      votes: {},
+      status: 'voting' as const,
+      absentPlayerIds: ['2'],
+    }
+
+    it('continua listado, ao contrário do espectador', () => {
+      const wrapper = mount(PlayerList, { props })
+
+      // Escopado à seção de ativos: a de espectadores usa a mesma classe de item.
+      const activeItems = wrapper.findAll('.player-section:not(.observers) .player-item')
+
+      expect(wrapper.text()).toContain('Member')
+      expect(activeItems).toHaveLength(2) // Admin + Member, o ausente entre eles
+      expect(wrapper.findAll('.absent-item')).toHaveLength(1)
+    })
+
+    // O ponto da feature: a sala não pode parecer mais cheia do que está. Com 2
+    // ativos e 1 ausente o título diz 1 — e a lista segue com as duas linhas.
+    it('sai da CONTAGEM do título sem sair da lista', () => {
+      const wrapper = mount(PlayerList, { props })
+
+      expect(wrapper.text()).toContain('Jogadores (1)')
+      expect(wrapper.text()).not.toContain('Jogadores (2)')
+    })
+
+    // Precedência: "ausente" tem de vencer "aguardando voto", senão a UI anuncia
+    // que se espera o voto de quem não está na sala — a mentira que isto corrige.
+    it('anuncia "ausente" em vez de "aguardando voto"', () => {
+      const wrapper = mount(PlayerList, { props })
+      const absent = wrapper.get('.absent-item')
+
+      expect(absent.find('.absent-badge').exists()).toBe(true)
+      expect(absent.find('.pending-badge').exists()).toBe(false)
+      expect(absent.get('.absent-badge').find('.sr-only').text()).toBe('Ausente')
+    })
+
+    // Sem a prop, ninguém é ausente — cobre o servidor antigo durante um deploy e
+    // toda fixture que não conhece o campo.
+    it('não marca ninguém quando a prop não vem (default)', () => {
+      const wrapper = mount(PlayerList, {
+        props: { players: mockPlayers, votes: {}, status: 'voting' as const },
+      })
+
+      expect(wrapper.findAll('.absent-item')).toHaveLength(0)
+      expect(wrapper.text()).toContain('Jogadores (2)')
+    })
+
+    // v-memo: isPlayerAbsent TEM de estar nas deps. Quem reconecta depois do mount
+    // precisa deixar de aparecer apagado sem esperar outro motivo de repaint.
+    it('repinta a linha quando a ausência muda DEPOIS do mount', async () => {
+      const wrapper = mount(PlayerList, { props })
+      expect(wrapper.findAll('.absent-item')).toHaveLength(1)
+
+      await wrapper.setProps({ absentPlayerIds: [] })
+
+      expect(wrapper.findAll('.absent-item')).toHaveLength(0)
+      expect(wrapper.text()).toContain('Jogadores (2)')
     })
   })
 })

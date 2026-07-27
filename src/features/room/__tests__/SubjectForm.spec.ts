@@ -10,11 +10,12 @@ import SubjectForm from '../SubjectForm.vue'
 import BaseButton from '@/components/BaseButton.vue'
 import BaseInput from '@/components/BaseInput.vue'
 import { i18n } from '@/i18n'
+import { must } from '@/test-utils/must'
 
 describe('SubjectForm.vue', () => {
   const defaultProps = {
     subjects: [],
-    playerCount: 3,
+    activePlayerCount: 3,
   }
 
   it('renders input and add button', () => {
@@ -49,7 +50,7 @@ describe('SubjectForm.vue', () => {
 
   it('usa singular no backlog com 1 subject', () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: ['Login'], playerCount: 3 },
+      props: { subjects: ['Login'], activePlayerCount: 3 },
     })
 
     expect(wrapper.text()).toContain('Backlog (1 subject)')
@@ -73,7 +74,7 @@ describe('SubjectForm.vue', () => {
 
   it('displays backlog list when subjects exist', () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: ['Login', 'Signup', 'Dashboard'], playerCount: 3 },
+      props: { subjects: ['Login', 'Signup', 'Dashboard'], activePlayerCount: 3 },
     })
 
     expect(wrapper.text()).toContain('Backlog (3 subjects)')
@@ -84,11 +85,11 @@ describe('SubjectForm.vue', () => {
 
   it('emits "remove" when remove button is clicked', async () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: ['Login', 'Signup'], playerCount: 3 },
+      props: { subjects: ['Login', 'Signup'], activePlayerCount: 3 },
     })
 
     const removeButtons = wrapper.findAll('.remove-btn')
-    await removeButtons[1].trigger('click')
+    await must(removeButtons[1], 'remove button 1 (Signup)').trigger('click')
 
     expect(wrapper.emitted()).toHaveProperty('remove')
     expect(wrapper.emitted('remove')?.[0]).toEqual([1])
@@ -96,17 +97,21 @@ describe('SubjectForm.vue', () => {
 
   it('exposes a specific aria-label per backlog item on the remove button', () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: ['Login', 'Signup'], playerCount: 3 },
+      props: { subjects: ['Login', 'Signup'], activePlayerCount: 3 },
     })
 
     const buttons = wrapper.findAll('.remove-btn')
-    expect(buttons[0].attributes('aria-label')).toBe('Remover Login')
-    expect(buttons[1].attributes('aria-label')).toBe('Remover Signup')
+    expect(must(buttons[0], 'remove button 0 (Login)').attributes('aria-label')).toBe(
+      'Remover Login',
+    )
+    expect(must(buttons[1], 'remove button 1 (Signup)').attributes('aria-label')).toBe(
+      'Remover Signup',
+    )
   })
 
   it('disables start button when no subjects', () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: [], playerCount: 3 },
+      props: { subjects: [], activePlayerCount: 3 },
     })
 
     const buttons = wrapper.findAllComponents(BaseButton)
@@ -116,7 +121,7 @@ describe('SubjectForm.vue', () => {
 
   it('disables start button when not enough players', () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: ['Login'], playerCount: 1 },
+      props: { subjects: ['Login'], activePlayerCount: 1 },
     })
 
     const buttons = wrapper.findAllComponents(BaseButton)
@@ -125,19 +130,19 @@ describe('SubjectForm.vue', () => {
   })
 
   it('explica por que "Iniciar" está desabilitado: falta subject (pré-requisito)', () => {
-    const wrapper = mount(SubjectForm, { props: { subjects: [], playerCount: 3 } })
+    const wrapper = mount(SubjectForm, { props: { subjects: [], activePlayerCount: 3 } })
     expect(wrapper.find('.start-hint').text()).toContain(
       'Adicione ao menos um subject para iniciar',
     )
   })
 
   it('explica por que "Iniciar" está desabilitado: faltam jogadores', () => {
-    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 1 } })
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], activePlayerCount: 1 } })
     expect(wrapper.find('.start-hint').text()).toContain('Aguardando mais jogadores')
   })
 
   it('esconde o hint quando a sessão já pode iniciar', () => {
-    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 2 } })
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], activePlayerCount: 2 } })
     expect(wrapper.find('.start-hint').exists()).toBe(false)
   })
 
@@ -157,19 +162,19 @@ describe('SubjectForm.vue', () => {
   // Cada motivo do hint tem o seu ícone (antes eram os emojis 📝/⏳ na string i18n):
   // o <component :is> tem de trocar junto com o texto.
   it('usa o ícone do motivo no hint: falta subject', () => {
-    const wrapper = mount(SubjectForm, { props: { subjects: [], playerCount: 3 } })
+    const wrapper = mount(SubjectForm, { props: { subjects: [], activePlayerCount: 3 } })
     expect(wrapper.find('.start-hint').findComponent(IconPencil).exists()).toBe(true)
     expect(wrapper.find('.start-hint').findComponent(IconHourglass).exists()).toBe(false)
   })
 
   it('usa o ícone do motivo no hint: faltam jogadores', () => {
-    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 1 } })
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], activePlayerCount: 1 } })
     expect(wrapper.find('.start-hint').findComponent(IconHourglass).exists()).toBe(true)
     expect(wrapper.find('.start-hint').findComponent(IconPencil).exists()).toBe(false)
   })
 
   it('mantém o nome acessível do botão de remover ao trocar ✕ por ícone', () => {
-    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], playerCount: 2 } })
+    const wrapper = mount(SubjectForm, { props: { subjects: ['Login'], activePlayerCount: 2 } })
 
     const removeBtn = wrapper.find('.remove-btn')
     expect(removeBtn.findComponent(IconX).exists()).toBe(true)
@@ -178,7 +183,7 @@ describe('SubjectForm.vue', () => {
 
   it('emits "start" when start button is clicked', async () => {
     const wrapper = mount(SubjectForm, {
-      props: { subjects: ['Login'], playerCount: 2 },
+      props: { subjects: ['Login'], activePlayerCount: 2 },
     })
 
     const buttons = wrapper.findAllComponents(BaseButton)

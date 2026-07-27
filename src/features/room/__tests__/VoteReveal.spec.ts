@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import IconPartyPopper from '~icons/lucide/party-popper'
 import VoteReveal from '../VoteReveal.vue'
 import confetti from 'canvas-confetti'
+import { must } from '@/test-utils/must'
 
 // Mocking canvas-confetti
 vi.mock('canvas-confetti', () => ({
@@ -42,7 +43,7 @@ describe('VoteReveal.vue', () => {
 
     // Sem denominador: o total atual de jogadores não vale para rodadas passadas
     // (quem votou pode ter saído — "2/1" mentiria).
-    const voteStat = wrapper.findAll('.stat-card').at(-1)!
+    const voteStat = must(wrapper.findAll('.stat-card').at(-1), 'last stat card')
     expect(voteStat.text()).toContain('Votos')
     expect(voteStat.find('.stat-value').text()).toBe('2')
   })
@@ -60,11 +61,11 @@ describe('VoteReveal.vue', () => {
     expect(rows).toHaveLength(3) // unique values: '8', '5', '1'
 
     // The most frequent '8' (count 3) should be first
-    expect(rows[0]!.find('.bar-label').text()).toBe('8')
-    expect(rows[0]!.find('.bar-count').text()).toBe('3')
+    expect(must(rows[0], 'bar row 0').find('.bar-label').text()).toBe('8')
+    expect(must(rows[0], 'bar row 0').find('.bar-count').text()).toBe('3')
 
     // '5' and '1' have count 1 each
-    expect(rows[1]!.find('.bar-count').text()).toBe('1')
+    expect(must(rows[1], 'bar row 1').find('.bar-count').text()).toBe('1')
   })
 
   it('ignores non-numeric votes for stats but includes in distribution', () => {

@@ -1,27 +1,35 @@
 <script setup lang="ts">
 import { computed, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Player } from '@/types'
-import { activePlayersOf } from '@/utils/players'
+import type { Player, UiRoundStatus } from '@/types'
+import { activePlayersOf, presentPlayersOf } from '@/utils/players'
 import PokerCard from './PokerCard.vue'
 
 interface Props {
   players: Player[]
   votes: Record<string, string | number>
-  status: 'waiting' | 'voting' | 'revealed'
+  status: UiRoundStatus
   // Tirados pelo admin DESTA rodada. Continuam sentados de propósito (some da
   // mesa só quem é espectador da SALA) — mudam apenas de estado visual.
   nonVoterIds?: string[]
+  // Sentados que não estão presentes (fantasma de rehidratação). Aqui, ao
+  // contrário da PlayerList, eles NÃO recebem assento: a mesa é uma metáfora de
+  // quem está em volta dela agora, e um lugar ocupado por quem não está distorce
+  // o círculo inteiro — os ângulos são distribuídos sobre o total.
+  absentPlayerIds?: string[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   nonVoterIds: () => [],
+  absentPlayerIds: () => [],
 })
 
 const { t } = useI18n()
 
-// Apenas mostramos jogadores ativos na mesa (espectadores não "sentam")
-const activePlayers = computed(() => activePlayersOf(props.players))
+// Quem senta: ativo (não espectador) E presente.
+const activePlayers = computed(() =>
+  presentPlayersOf(activePlayersOf(props.players), props.absentPlayerIds),
+)
 
 function hasVoted(playerId: string) {
   return playerId in props.votes

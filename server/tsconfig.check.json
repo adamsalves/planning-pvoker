@@ -1,0 +1,16 @@
+{
+  // Type-check ONLY: cobre `test/` além de `src/`, o que o tsconfig.json não faz.
+  //
+  // Por que dois arquivos: o tsconfig.json é o de BUILD (`npm run build` → tsc), com
+  // `rootDir: ./src` e emissão para `dist/`. Incluir os testes lá os faria ir para o
+  // bundle de produção. Mas deixá-los de fora significava que NADA type-checava os
+  // `*.spec.ts` — o vitest transpila via esbuild sem checar tipos —, e código de teste
+  // seguia para a main sem nenhum compilador ter olhado. Este arquivo fecha esse vão
+  // sem tocar no que é emitido: `noEmit` + `include` dos dois diretórios.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

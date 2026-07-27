@@ -5,9 +5,10 @@ import IconHourglass from '~icons/lucide/hourglass'
 import IconArrowRight from '~icons/lucide/arrow-right'
 import IconCheck from '~icons/lucide/check'
 import BaseButton from '@/components/BaseButton.vue'
+import type { UiRoundStatus } from '@/types'
 
 interface Props {
-  status: 'waiting' | 'voting' | 'revealed'
+  status: UiRoundStatus
   anyVoted: boolean
   allVoted: boolean
   isLastSubject: boolean
