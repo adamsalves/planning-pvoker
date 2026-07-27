@@ -1,116 +1,159 @@
 # 🃏 Vue Planning Poker
 
-Uma aplicação de Planning Poker moderna, ágil e em tempo real construída com Vue 3, Vite, Pinia, TypeScript, Node.js e Socket.IO.
+Planning Poker em tempo real para estimativa ágil: uma sala, um baralho, e o time votando junto. Vue 3 + TypeScript no cliente, Express 5 + Socket.IO no servidor.
+
+**Produção:** [planningpvoker.netlify.app](https://planningpvoker.netlify.app) · backend em [planning-pvoker.onrender.com](https://planning-pvoker.onrender.com)
 
 ## ✨ Funcionalidades
 
-- **Real-time:** Conectividade de baixa latência com WebSockets (Socket.IO) para múltiplos usuários simultâneos na mesma sala.
-- **Mesa Interativa:** Visualização oval da mesa de poker com posicionamento radial dos jogadores e animações 3D de cartas.
-- **Tipos de Baralho Customizáveis:** Crie rodadas usando as sequências _Fibonacci_, _T-Shirt_ (PP, P, M, G, GG, XGG) ou _Sequencial_.
-- **Papéis Dedicados:** Jogue como _Scrum Master (Admin)_, _Membro_ ativo ou _Espectador_ passivo.
-- **Auto-Reveal:** Opção de revelar os votos automaticamente quando todos os jogadores votarem.
-- **Estatísticas ao Vivo:** Média, mínimo, máximo e distribuição de votos exibidos após revelação, com confetti quando há consenso 🎉
-- **Acessibilidade (A11y):** Navegação completa por teclado, atributos _WAI-ARIA_ dinâmicos (`aria-busy`, `aria-describedby`, `aria-pressed`, `aria-invalid`).
-- **Performance:** _Lazy Loading_ de todas as rotas, `v-memo` para listas de alta frequência e `shallowRef` para estados complexos.
+- **Tempo real** — Socket.IO mantém a sala sincronizada entre todos os participantes; o servidor é a fonte da verdade e transmite o estado inteiro a cada mudança.
+- **Mesa interativa** — visualização oval com posicionamento radial dos jogadores e animação 3D no flip das cartas.
+- **Três baralhos** — _Fibonacci_, _T-Shirt_ (PP → XGG) e _Sequencial_, escolhidos na criação da sala. ☕ está em todos, para "não dá pra estimar".
+- **Papéis** — _Admin_ (quem cria a sala) conduz a sessão; _Jogador_ vota; _Espectador_ acompanha sem entrar no quórum.
+- **Quem vota nesta rodada** — a admin pode tirar alguém de uma rodada específica sem transformá-lo em espectador. A pessoa continua sentada à mesa, só não é esperada.
+- **Área do jogador** — tag opcional e auto-declarada na entrada (dev, design, QA, produto, outro). Puramente informativa: não afeta voto nem quórum.
+- **Auto-reveal** — opção de revelar automaticamente quando todos os votantes **presentes** tiverem votado.
+- **Estatísticas** — média, mínimo, máximo e distribuição depois do reveal, com confetti quando há consenso real (2+ votos iguais).
+- **Resumo ao vivo** — aba de resumo dentro da sala com o histórico das rodadas já reveladas.
+- **Reconexão resiliente** — um refresh ou queda de rede não tira você da sala: há uma janela de graça, e a sessão é provada por um token privado (não pelo `playerId`, que trafega no broadcast).
+- **Persistência opcional** — com Redis configurado, as salas sobrevivem a um redeploy ou cold start do servidor. Sem ele, o app roda 100% em memória.
+- **Tema e idioma** — claro/escuro/automático e pt-BR/en, ambos persistidos.
+- **Acessibilidade** — navegação por teclado, `WAI-ARIA` nos controles (tablist com roving tabindex, `role="switch"`, `aria-busy`, `aria-describedby`, `aria-pressed`), e ícones decorativos fora da árvore de acessibilidade.
 
-## 📁 Estrutura do Projeto
+## 📁 Estrutura
 
 ```text
-├── server/                  → Backend Node.js (Express 5 + Socket.IO)
-│   └── src/
-│       ├── index.ts         → Servidor HTTP + Socket.IO
-│       ├── events.ts        → Handlers dos eventos WebSocket
-│       ├── roomManager.ts   → Gerenciamento de salas em memória
-│       └── types.ts         → Tipos compartilhados
-└── src/                     → Frontend Vue 3
-    ├── assets/              → CSS global e design tokens
-    ├── components/          → Componentes atômicos (BaseButton, BaseCard, BaseInput, BaseModal)
-    ├── composables/         → Lógica reutilizável (useRoom, useSocket)
+├── server/                      → Backend (Express 5 + Socket.IO)
+│   ├── src/
+│   │   ├── index.ts             → HTTP + Socket.IO, CORS, /health
+│   │   ├── events.ts            → Handlers dos eventos, presença e janela de graça
+│   │   ├── roomManager.ts       → Estado das salas (autoritativo, em memória)
+│   │   ├── persistence.ts       → Snapshots write-through no Redis (opcional)
+│   │   ├── validation.ts        → Schemas zod das bordas do socket
+│   │   ├── errorCodes.ts        → Códigos de erro do contrato de rede
+│   │   ├── crashGuards.ts       → Guardas de processo (boot e runtime)
+│   │   ├── logger.ts            → Log com nível por ambiente
+│   │   └── types.ts             → Tipos do domínio + contrato de rede
+│   └── test/                    → Suíte do servidor (Vitest)
+└── src/                         → Frontend (Vue 3)
+    ├── assets/                  → CSS global e design tokens
+    ├── components/              → Componentes atômicos (BaseButton, BaseCard, BaseInput, BaseModal)
+    ├── composables/             → useRoom, useSocket, useVoteStats, useShareRoom, joinErrors
     ├── features/
-    │   ├── home/            → Tela inicial (criar/entrar na sala)
-    │   ├── room/            → Sala de votação
-    │   └── not-found/       → Página 404
-    ├── layouts/             → Layout principal (Navbar + RouterView animado)
-    ├── router/              → Configuração de rotas (100% lazy-loaded)
-    ├── stores/              → Stores Pinia (room, user, connection, theme, locale)
-    └── types/               → Interfaces TypeScript do domínio
+    │   ├── home/                → Criar/entrar na sala
+    │   ├── room/                → Sala de votação (mesa, lista, controles, resumo)
+    │   └── not-found/           → 404
+    ├── i18n/                    → Catálogos pt-BR/en, tipados por chave
+    ├── layouts/                 → Navbar + RouterView animado
+    ├── router/                  → Rotas (100% lazy-loaded)
+    ├── stores/                  → Pinia: room, user, connection, theme, locale
+    ├── test-utils/              → Helpers só de teste (proibidos em produção via lint)
+    ├── types/                   → Tipos do domínio + guardas de deriva contra o servidor
+    └── utils/                   → players, rounds, logger
 ```
 
-## 🚀 Rodando o Projeto Localmente
+## 🚀 Rodando localmente
 
-O repositório é composto de **duas aplicações** que precisam rodar em paralelo.
-
-Para publicação em produção com frontend no Netlify e backend Socket.IO no Render, consulte [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md).
-
-### Backend (Node.js)
-
-O servidor atua em memória, mantendo salas e conexões. Não há persistência em banco de dados.
-
-```bash
-cd server/
-npm install
-npm run dev        # Express + Socket.IO na porta 3001
-```
-
-### Frontend (Vue App)
+São **duas aplicações**. O jeito mais curto é subir as duas de uma vez:
 
 ```bash
 npm install
-npm run dev        # Vite dev server
+npm --prefix server install
+npm run dev:all          # Vite (5173) + Express/Socket.IO (3001) em paralelo
 ```
 
-> O frontend conecta automaticamente ao backend via `VITE_WS_URL` (padrão: `http://localhost:3001`).
+Ou separadamente:
 
----
+```bash
+npm --prefix server run dev    # backend na 3001
+npm run dev                    # frontend na 5173
+```
+
+O frontend conecta via `VITE_WS_URL` (padrão `http://localhost:3001`). Copie `.env.example` para `.env` se precisar mudar.
+
+### Persistência (opcional)
+
+Sem configuração o servidor roda em memória — as salas somem se o processo reiniciar. Para mantê-las, defina as duas variáveis do [Upstash Redis](https://upstash.com/) no ambiente do servidor:
+
+```bash
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+```
+
+Com elas presentes o servidor grava snapshots write-through e reidrata as salas no boot. O log do boot diz qual modo está ativo.
+
+Para o deploy em produção (Netlify + Render), veja [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md).
 
 ## 🧪 Testes
 
-### Unitários (Vitest)
-
-Cobrindo stores (Pinia), composables (`useRoom`, `useSocket`) e componentes de room.
-
-```bash
-npm run test:unit       # Modo watch
-npm run test:coverage   # Relatório de cobertura (v8)
-```
-
-### End-to-End (Playwright)
-
-Simulação ponta-a-ponta entre um Admin e um Participante em duas abas independentes.
+| Suíte                     | Comando                    | O que cobre                                                                              |
+| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| Unit/componente (cliente) | `npm run test:unit`        | stores, composables, utils, componentes da sala e da home, guardas de deriva de contrato |
+| Servidor                  | `npm --prefix server test` | `RoomManager`, eventos de socket ponta a ponta, persistência, guardas de processo        |
+| E2E                       | `npm run test:e2e`         | fluxo completo entre duas abas (admin + participante)                                    |
+| Cobertura                 | `npm run test:coverage`    | relatório v8 do cliente                                                                  |
 
 ```bash
-npx playwright install chromium   # Primeira vez
-npm run test:e2e
+npx playwright install chromium   # só na primeira vez
 ```
 
-> ⚠️ O e2e também roda no `npm run validate`, que é o hook de **pre-push** (Husky). Ou seja, o `npx playwright install chromium` acima é pré-requisito para dar `git push` — sem os browsers, o pre-push falha. O CI **não** roda o e2e (executa type-check/lint/unit/build separadamente), então isso não afeta o pipeline.
+> ⚠️ O e2e entra no `npm run validate`, que é o hook de **pre-push** (Husky) — sem os browsers do Playwright instalados, o `git push` falha. O CI **não** roda e2e: ele roda type-check, lint, unit e knip no cliente, e build, type-check e testes no servidor.
 
----
+### Verificação completa
+
+```bash
+npm run validate    # oxlint · eslint · knip · type-check · unit · server (build+type-check+test) · e2e
+```
 
 ## 🛠️ Stack
 
-| Categoria      | Tecnologia                 | Papel                                     |
-| -------------- | -------------------------- | ----------------------------------------- |
-| **Framework**  | Vue 3 (Composition API)    | `<script setup>` + TypeScript 5.9         |
-| **Build**      | Vite 7                     | Dev server + bundler                      |
-| **Estado**     | Pinia 3 + Persisted State  | Estado global + persistência localStorage |
-| **Roteamento** | Vue Router 5               | SPA com lazy loading                      |
-| **Real-time**  | Socket.IO                  | Comunicação bidirecional cliente-servidor |
-| **Validação**  | VeeValidate + Zod          | Formulários type-safe                     |
-| **Servidor**   | Express 5 + Socket.IO      | Backend em memória (Node.js)              |
-| **Testes**     | Vitest + Playwright        | Unitários + E2E                           |
-| **Linting**    | ESLint + oxlint + Prettier | Qualidade e formatação                    |
-| **CSS**        | Vanilla CSS                | Design tokens + custom properties         |
+| Categoria        | Tecnologia                            | Papel                                          |
+| ---------------- | ------------------------------------- | ---------------------------------------------- |
+| **Framework**    | Vue 3 (Composition API)               | `<script setup>` + TypeScript 5.9              |
+| **Build**        | Vite 7                                | Dev server + bundler                           |
+| **Estado**       | Pinia 3 + persistedstate              | Estado global + localStorage                   |
+| **Roteamento**   | Vue Router 5                          | SPA com lazy loading                           |
+| **Tempo real**   | Socket.IO 4                           | Cliente e servidor                             |
+| **Validação**    | VeeValidate + Zod                     | Formulários e bordas do socket                 |
+| **i18n**         | vue-i18n 11                           | pt-BR/en, catálogo tipado por chave            |
+| **Ícones**       | unplugin-icons + Lucide               | SVG inline em build-time, recolorem com o tema |
+| **Servidor**     | Express 5 + Socket.IO                 | Node.js                                        |
+| **Persistência** | Upstash Redis (opcional)              | Snapshots write-through                        |
+| **Testes**       | Vitest + @vue/test-utils + Playwright | Unit/componente + e2e                          |
+| **Qualidade**    | ESLint + oxlint + Prettier + knip     | Lint, formatação e código morto                |
+| **CSS**          | Vanilla CSS                           | Design tokens + custom properties              |
 
-## 📜 Scripts Disponíveis
+## 📜 Scripts
 
-| Comando                 | Descrição                         |
-| ----------------------- | --------------------------------- |
-| `npm run dev`           | Inicia o Vite dev server          |
-| `npm run build`         | Build de produção com type-check  |
-| `npm run lint`          | Roda oxlint + ESLint com auto-fix |
-| `npm run format`        | Formata código com Prettier       |
-| `npm run test:unit`     | Testes unitários (Vitest watch)   |
-| `npm run test:coverage` | Cobertura de testes (v8)          |
-| `npm run test:e2e`      | Testes E2E (Playwright)           |
-| `npm run type-check`    | Verificação de tipos (vue-tsc)    |
+| Comando                 | Descrição                                       |
+| ----------------------- | ----------------------------------------------- |
+| `npm run dev`           | Vite dev server                                 |
+| `npm run dev:all`       | Frontend + backend em paralelo                  |
+| `npm run build`         | Build de produção (roda type-check junto)       |
+| `npm run preview`       | Serve o build local                             |
+| `npm run type-check`    | `vue-tsc --build` (cobre `src/` **e** os specs) |
+| `npm run lint`          | oxlint + ESLint com auto-fix                    |
+| `npm run format`        | Prettier em `src/`                              |
+| `npm run knip`          | Código morto e exports não usados               |
+| `npm run test:unit`     | Vitest em watch                                 |
+| `npm run test:coverage` | Cobertura v8                                    |
+| `npm run test:e2e`      | Playwright                                      |
+| `npm run validate`      | Tudo acima, na ordem do pre-push                |
+
+Scripts do servidor rodam com `npm --prefix server run <script>`: `dev`, `build`, `start`, `type-check`, `test`.
+
+## 📐 Convenções
+
+- **Sem type assertions.** `as` (fora de `as const`) e non-null `!` são proibidos e barrados no ESLint. Use type guards, validação zod ou narrowing por fluxo de controle.
+- **Conventional Commits** — é o que gera versão e changelog. Ver [RELEASE.md](./RELEASE.md).
+- **Branches saem da `develop`**; `main` é produção.
+- O `CHANGELOG.md` é **gerado** pelo release-please — não edite à mão.
+
+## 📚 Documentação
+
+| Arquivo                                    | Conteúdo                                                |
+| ------------------------------------------ | ------------------------------------------------------- |
+| [RELEASE.md](./RELEASE.md)                 | Versionamento, branching, release e rollback            |
+| [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md) | Como o deploy está montado (Netlify + Render + Upstash) |
+| [LEARNING_GUIDE.md](./LEARNING_GUIDE.md)   | Diário de aprendizado Vue 3, fase a fase                |
+| [AGENTS.md](./AGENTS.md)                   | Comandos e convenções para agentes automatizados        |
