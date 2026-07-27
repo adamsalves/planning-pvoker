@@ -5,6 +5,27 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O formato se
 [SemVer](https://semver.org/lang/pt-BR/). A partir da v1.0.0, as entradas abaixo
 desta são geradas automaticamente pelo [release-please](./RELEASE.md).
 
+## [1.5.0](https://github.com/adamsalves/planning-pvoker/compare/v1.4.0...v1.5.0) (2026-07-27)
+
+
+### Features
+
+* mostra o jogador ausente como ausente, em vez de como se estivesse lá ([#83](https://github.com/adamsalves/planning-pvoker/issues/83)) ([a0c3146](https://github.com/adamsalves/planning-pvoker/commit/a0c314637793ec52884947f7cde5fe4c6278983d))
+
+
+### Bug Fixes
+
+* **room:** papel do jogador e gate de início saem da fonte da verdade ([#69](https://github.com/adamsalves/planning-pvoker/issues/69)) ([2ae685a](https://github.com/adamsalves/planning-pvoker/commit/2ae685a6f4ccaabfa59c969651ab2670ce5475fc))
+* **server:** descarta o voto de quem sai da rodada em andamento ([#73](https://github.com/adamsalves/planning-pvoker/issues/73)) ([015b150](https://github.com/adamsalves/planning-pvoker/commit/015b150a6bd68a6a0eef4026bc5fbc1129cb7297))
+* **server:** descarta o voto de quem volta à sala como espectador ([#79](https://github.com/adamsalves/planning-pvoker/issues/79)) ([b8b14b1](https://github.com/adamsalves/planning-pvoker/commit/b8b14b1f75a3630056982c3f2d6e171a1372292c))
+* **server:** descarta snapshot cujo adminId não é um jogador da sala ([#72](https://github.com/adamsalves/planning-pvoker/issues/72)) ([215ff20](https://github.com/adamsalves/planning-pvoker/commit/215ff20bd5e39f575c3b63514868d5f04464b9b7))
+* **server:** descarta snapshot inconsistente e não passa o comando a jogador ausente ([#71](https://github.com/adamsalves/planning-pvoker/issues/71)) ([a49a781](https://github.com/adamsalves/planning-pvoker/commit/a49a781ef0e91d1e6aedbe5e1ba3f2599908145c))
+* **server:** descarta voto legado que a rodada não conta no boot ([#75](https://github.com/adamsalves/planning-pvoker/issues/75)) ([89514f3](https://github.com/adamsalves/planning-pvoker/commit/89514f3273d1fc1997a495b9b94afdfa9f22fac2))
+* **server:** fecha a rodada descartando o voto de quem não está presente ([#80](https://github.com/adamsalves/planning-pvoker/issues/80)) ([3d13905](https://github.com/adamsalves/planning-pvoker/commit/3d13905c3e3ba21c86d61a28dc22f7eee822a8a2))
+* **server:** repara o adminId órfão no boot em vez de descartar a sala ([#82](https://github.com/adamsalves/planning-pvoker/issues/82)) ([cb4af14](https://github.com/adamsalves/planning-pvoker/commit/cb4af14c3bd9bd85d95193ce073c8625e51ed68f))
+* **server:** transferência de admin não promove espectador a votante ([#70](https://github.com/adamsalves/planning-pvoker/issues/70)) ([f115277](https://github.com/adamsalves/planning-pvoker/commit/f115277dffc62c3a14c8736a710bea98f7541213))
+* **types:** remove o status de rodada 'waiting' que o servidor nunca emite ([#74](https://github.com/adamsalves/planning-pvoker/issues/74)) ([ed172ec](https://github.com/adamsalves/planning-pvoker/commit/ed172eca293c2db436feb558aa9c9513336fcb72))
+
 ## [1.4.0](https://github.com/adamsalves/planning-pvoker/compare/v1.3.0...v1.4.0) (2026-07-25)
 
 
