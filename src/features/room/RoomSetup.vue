@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPencil from '~icons/lucide/pencil'
 import { useRoomStore } from '@/stores/room'
-import { activePlayersOf, presentPlayersOf } from '@/utils/players'
+import { activePlayersOf } from '@/utils/players'
 import BaseCard from '@/components/BaseCard.vue'
 import SubjectForm from './SubjectForm.vue'
 import PlayerList from './PlayerList.vue'
@@ -25,12 +25,19 @@ const roomStore = useRoomStore()
 // Quem senta à mesa — espectador não conta pro gate de iniciar a sessão. Sala com
 // 1 jogador + 1 espectador é uma sessão de 1 votante, não de 2.
 //
-// Ausente também não conta, pelo mesmo motivo: um fantasma de rehidratação não vai
-// votar, e deixá-lo no gate destrava uma sessão que na prática tem menos gente do
-// que o gate exige. Quem consegue clicar em "iniciar" está presente por definição.
-const activePlayerCount = computed(
-  () => presentPlayersOf(activePlayersOf(roomStore.players), roomStore.absentPlayerIds).length,
-)
+// Presença NÃO entra aqui, e é uma escolha, não esquecimento. Filtrar ausentes
+// tornaria o gate mais honesto no papel e criaria um BECO SEM SAÍDA na prática:
+// um fantasma de rehidratação nunca sai sozinho (sem socket → sem disconnect →
+// sem grace → sem leaveRoom), o produto não tem "expulsar", e uma sala que
+// reiniciou durante o setup com só uma pessoa de volta ficaria travada em
+// "aguardando jogadores" até o TTL de 24h. Sair e voltar piora: com ninguém
+// presente o handover do leaveRoom devolve a sala a um fantasma.
+//
+// Aqui o gate é só um empurrão contra iniciar sozinho, e destravá-lo cedo demais
+// não quebra nada — o quórum do reveal É presença-aware no servidor, então uma
+// sessão iniciada com fantasmas na conta revela normalmente quando quem está
+// presente vota. Contar sentados é o lado seguro do erro.
+const activePlayerCount = computed(() => activePlayersOf(roomStore.players).length)
 </script>
 
 <template>

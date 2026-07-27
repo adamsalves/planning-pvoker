@@ -53,6 +53,13 @@ const presentActiveCount = computed(
   () => presentPlayersOf(activePlayers.value, props.absentPlayerIds).length,
 )
 
+// Mesma regra para os espectadores. Ter só a de jogadores criava assimetria: o
+// member ausente saía da conta e ficava apagado, o observer ausente contava cheio
+// e nem sinalizava — e a sala parecia mais cheia pelo lado que ninguém olha.
+const presentObserverCount = computed(
+  () => presentPlayersOf(observers.value, props.absentPlayerIds).length,
+)
+
 function isPlayerAbsent(playerId: string): boolean {
   return props.absentPlayerIds.includes(playerId)
 }
@@ -183,10 +190,15 @@ function isNonVoter(playerId: string): boolean {
     <!-- Observers -->
     <div v-if="observers.length > 0" class="player-section observers">
       <h4 class="section-title">
-        {{ t('room.players.observersTitle', { count: observers.length }) }}
+        {{ t('room.players.observersTitle', { count: presentObserverCount }) }}
       </h4>
       <ul class="player-list">
-        <li v-for="player in observers" :key="player.id" class="player-item observer-item">
+        <li
+          v-for="player in observers"
+          :key="player.id"
+          class="player-item observer-item"
+          :class="{ 'absent-item': isPlayerAbsent(player.id) }"
+        >
           <div class="player-info">
             <span class="player-avatar observer-avatar">{{
               player.name.charAt(0).toUpperCase()
@@ -197,8 +209,11 @@ function isNonVoter(playerId: string): boolean {
               >{{ t(`tags.${player.tag}`) }}
             </span>
           </div>
-          <IconEye class="observer-badge" aria-hidden="true" />
-          <span class="sr-only">{{ t('room.players.observerSr') }}</span>
+          <IconUnplug v-if="isPlayerAbsent(player.id)" class="absent-badge" aria-hidden="true" />
+          <IconEye v-else class="observer-badge" aria-hidden="true" />
+          <span class="sr-only">{{
+            isPlayerAbsent(player.id) ? t('room.players.absent') : t('room.players.observerSr')
+          }}</span>
         </li>
       </ul>
     </div>

@@ -88,8 +88,16 @@ export interface Room {
 // the moment the process dies. Persisting it would rehydrate a lie.
 //
 // So the wire type is the stored one PLUS a per-broadcast projection, built fresh in
-// notifyRoomUpdate. Keeping it a separate interface is what stops `absentPlayerIds`
-// from ever reaching saveRoom: nothing that holds a `Room` can produce this.
+// notifyRoomUpdate.
+//
+// What the separate interface does and does NOT do: it DOCUMENTS that presence is
+// wire-only, and keeps `Room` — the type persistence writes — honest about its own
+// fields. It does not ENFORCE anything. `RoomBroadcast extends Room` is a subtype,
+// so `saveRoom(broadcast)` compiles fine; the type system will not catch a leak.
+// What actually keeps the field out of Redis is (1) notifyRoomUpdate building a new
+// object with a spread instead of assigning onto the stored room, and (2) the
+// runtime test in events.spec that asserts no saved room ever carries it. If you
+// change either, the guard is gone — the type will not tell you.
 //
 // Who is in here: a seated player with no live socket and no pending grace timer.
 // In practice that is exactly a rehydration ghost — a live socket counts as present,

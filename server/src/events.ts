@@ -50,8 +50,9 @@ export function setupSocketEvents(io: AppServer, roomManager: RoomManager) {
   }
   roomManager.setPresence({ isPresent })
 
-  // The ONE place room state reaches clients (13 call sites, no other emitter), which
-  // is why the presence projection belongs here and nowhere else.
+  // The ONE place room state reaches clients (11 call sites, and the only `.emit` of
+  // room state in this file), which is why the presence projection belongs here and
+  // nowhere else.
   //
   // The spread is load-bearing, not style: it builds a NEW object per broadcast, so
   // `absentPlayerIds` never lands on the stored room and can never reach saveRoom.
