@@ -1,8 +1,8 @@
 # Estratégia de Release
 
-Processo de versionamento, release e deploy do Planning Poker. Para o **setup de
-infra** (como Netlify e Render foram configurados na 1ª vez), veja
-[`DEPLOYMENT_PLAN.md`](./DEPLOYMENT_PLAN.md).
+Processo de versionamento, release e deploy do Planning Poker. Para **como a infra
+está montada** (Netlify, Render, Upstash e as variáveis de ambiente de cada um),
+veja [`DEPLOYMENT_PLAN.md`](./DEPLOYMENT_PLAN.md).
 
 ## Princípios
 
@@ -27,6 +27,15 @@ feat|fix|chore/*  →  PR  →  develop  →  PR de release  →  main (produç�
 - **Squash-merge** nos PRs de feature → `develop` (1 Conventional Commit por PR). Evita
   changelog duplicado: o release-please parseia tanto o commit da branch quanto o título do PR
   embutido no merge commit — com squash sobra só uma entrada por feature.
+
+> **PRs empilhados** (um PR cuja base é a branch de outro): re-aponte a base para
+> `develop` **antes** de apagar a branch intermediária. Apagá-la primeiro **fecha** o
+> PR dependente, e aí ele trava — não se reabre um PR cuja base sumiu, nem se troca a
+> base de um PR fechado (a saída é recriar o ref com `gh api -X POST .../git/refs`).
+> Depois do re-apontamento, o CI só volta a rodar num evento de `synchronize` ou
+> `reopened`: re-apontar sozinho não dispara nada. E como a base foi mergeada por
+> **squash**, o histórico do PR de cima diverge — traga a `develop` de volta com um
+> merge antes de mergear o segundo.
 
 ## Versionamento (SemVer)
 
@@ -88,9 +97,10 @@ commits — por isso a disciplina de Conventional Commits importa.
 Variáveis de ambiente (definidas nos painéis, **não** no repo):
 
 - **Netlify:** `VITE_WS_URL` = URL do backend no Render (ex.: `https://planning-pvoker.onrender.com`).
-- **Render:** origens de CORS (`CLIENT_ORIGIN`/`CORS_ORIGIN`), `RECONNECT_GRACE_MS`
-  (opcional) e — quando a persistência (Redis) entrar — `UPSTASH_REDIS_REST_URL` /
-  `UPSTASH_REDIS_REST_TOKEN`. O `PORT` é provido pelo Render.
+- **Render:** origens de CORS (`CLIENT_ORIGIN`/`CLIENT_ORIGINS`/`CORS_ORIGIN`),
+  `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (persistência, ativa desde a
+  v1.3.0), e os opcionais `RECONNECT_GRACE_MS` e `ROOM_TTL_SECONDS`. O `PORT` é
+  provido pelo Render. Tabela completa no `DEPLOYMENT_PLAN.md`.
 
 ## Rollback
 
@@ -110,7 +120,8 @@ Gera um **PATCH** (ex.: 1.2.3 → 1.2.4). Sempre trazer o fix de volta para a
 
 ## Checklist pré-release
 
-- [ ] `npm run validate` verde (lint + type-check + testes cliente/servidor + build).
+- [ ] `npm run validate` verde (oxlint · eslint · knip · type-check · unit do cliente ·
+      build/type-check/testes do servidor · e2e).
 - [ ] Smoke manual de produção (criar sala, votar, revelar, sincronizar em 2 abas;
       `/health` do backend respondendo).
 - [ ] CI verde no PR de release.
