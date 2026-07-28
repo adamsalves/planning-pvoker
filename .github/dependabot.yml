@@ -1,0 +1,83 @@
+version: 2
+
+# NOTA: nenhum bloco define `target-branch`. Isso é intencional.
+# O Dependabot só aplica esta configuração aos *security updates* (agrupamento,
+# prefixo de commit, limites) quando `target-branch` está ausente — e security
+# updates sempre miram a branch default do repositório, independentemente do que
+# for configurado aqui. Como o fluxo do projeto é feature -> develop -> main
+# (ver RELEASE.md), PRs do Dependabot nascem em `main` e precisam ser refeitos
+# na `develop` à mão — a menos que a branch default do repositório mude para
+# `develop`, o que faria todos eles já nascerem no lugar certo.
+
+updates:
+  # Cliente (Vue + Vite) — raiz do repositório
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      # Toolchain de lint/tipos: sobe junto ou não sobe, senão gera conflito de peer deps
+      client-linting:
+        patterns:
+          - eslint
+          - '@eslint/*'
+          - 'eslint-*'
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'
+          - oxlint
+          - prettier
+      client-testing:
+        patterns:
+          - vitest
+          - '@vitest/*'
+          - '@vue/test-utils'
+          - '@playwright/test'
+          - jsdom
+      client-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Servidor (Express + Socket.IO) — deployado isolado no Render
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      server-testing:
+        patterns:
+          - vitest
+          - '@vitest/*'
+          - tsx
+          - ts-node
+      server-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Actions dos workflows de CI e release
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - '*'
