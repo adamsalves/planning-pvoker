@@ -23,14 +23,23 @@ updates:
       prefix-development: chore
       include: scope
     groups:
-      # Toolchain de lint/tipos: sobe junto ou não sobe, senão gera conflito de peer deps
+      # Toolchain de lint: sobe junto ou não sobe. `eslint-plugin-oxlint` declara
+      # peer `oxlint@~<mesma minor>` a partir da 1.76, então separar os dois
+      # quebra o `npm ci` com ERESOLVE — foi o que derrubou o PR #100.
+      #
+      # Os nomes vão LITERAIS de propósito. Na 1ª execução desta config os
+      # patterns com wildcard não capturaram nada: o grupo saiu com exatamente
+      # `eslint`, `oxlint` e `prettier` (os literais), enquanto
+      # `eslint-plugin-oxlint`, `eslint-plugin-vue` e `eslint-config-prettier`
+      # — diretas e casando `eslint-*` — caíram no grupo minor/patch. Não
+      # determinei a causa; listar cada pacote não depende dela.
       client-linting:
         patterns:
           - eslint
-          - '@eslint/*'
-          - 'eslint-*'
-          - 'typescript-eslint'
-          - '@typescript-eslint/*'
+          - eslint-config-prettier
+          - eslint-plugin-oxlint
+          - eslint-plugin-vue
+          - '@vue/eslint-config-typescript'
           - oxlint
           - prettier
       client-testing:
@@ -40,7 +49,18 @@ updates:
           - '@vue/test-utils'
           - '@playwright/test'
           - jsdom
+      # Segunda camada: mesmo que o grupo acima falhe em capturar algo, o
+      # toolchain de lint não pode ser absorvido aqui — senão volta a se
+      # separar do par que precisa acompanhar.
       client-minor-patch:
+        exclude-patterns:
+          - eslint
+          - eslint-config-prettier
+          - eslint-plugin-oxlint
+          - eslint-plugin-vue
+          - '@vue/eslint-config-typescript'
+          - oxlint
+          - prettier
         update-types:
           - minor
           - patch
@@ -58,13 +78,19 @@ updates:
       prefix-development: chore
       include: scope
     groups:
+      # Só o que o servidor realmente tem: nem `tsx` nem pacotes `@vitest/*`
+      # são dependências diretas daqui (o runner é `ts-node` + `nodemon`).
       server-testing:
         patterns:
           - vitest
-          - '@vitest/*'
-          - tsx
           - ts-node
+          - nodemon
+      # `typescript` fica FORA de qualquer grupo de propósito: é o compilador que
+      # gera o `dist/` publicado no Render, então um major dele merece PR próprio
+      # e revisão do JS emitido (foi o que fizemos no #96).
       server-minor-patch:
+        exclude-patterns:
+          - typescript
         update-types:
           - minor
           - patch
