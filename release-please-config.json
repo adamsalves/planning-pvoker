@@ -4,7 +4,15 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "extra-files": [{ "type": "json", "path": "server/package.json", "jsonpath": "$.version" }]
+      "extra-files": [
+        { "type": "json", "path": "server/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "server/package-lock.json", "jsonpath": "$.version" },
+        {
+          "type": "json",
+          "path": "server/package-lock.json",
+          "jsonpath": "$.packages[\"\"].version"
+        }
+      ]
     }
   }
 }
