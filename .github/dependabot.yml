@@ -16,7 +16,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    # 8 e não 5: o bloco do cliente encostou em 5/5 no 1º ciclo (#95, #99, #100,
+    # #101, #102) e o novo exclude do `typescript` acrescenta 1 PR ao do
+    # servidor. Com o teto encostado, o PR individual que conserta um par pode
+    # simplesmente não ser criado.
+    open-pull-requests-limit: 8
     versioning-strategy: increase-if-necessary
     commit-message:
       prefix: chore
@@ -27,12 +31,28 @@ updates:
       # peer `oxlint@~<mesma minor>` a partir da 1.76, então separar os dois
       # quebra o `npm ci` com ERESOLVE — foi o que derrubou o PR #100.
       #
-      # Os nomes vão LITERAIS de propósito. Na 1ª execução desta config os
-      # patterns com wildcard não capturaram nada: o grupo saiu com exatamente
-      # `eslint`, `oxlint` e `prettier` (os literais), enquanto
-      # `eslint-plugin-oxlint`, `eslint-plugin-vue` e `eslint-config-prettier`
-      # — diretas e casando `eslint-*` — caíram no grupo minor/patch. Não
-      # determinei a causa; listar cada pacote não depende dela.
+      # Os nomes vão LITERAIS. Na 1ª execução desta config os patterns com
+      # wildcard não capturaram nada: o grupo saiu com exatamente `eslint`,
+      # `oxlint` e `prettier` (os literais), enquanto `eslint-plugin-oxlint`,
+      # `eslint-plugin-vue` e `@vue/eslint-config-typescript` — diretas e
+      # casando `eslint-*` — caíram no grupo minor/patch. A falha foi
+      # SISTEMÁTICA, não específica daqui: no mesmo ciclo o `client-testing`
+      # também saiu só com seus literais e deixou `@vitest/coverage-v8` vazar.
+      # Não determinei a causa; listar cada pacote não depende dela.
+      #
+      # Os wildcards ficam AO LADO dos literais, não no lugar deles: `patterns`
+      # é união, então casar dois patterns do mesmo grupo é idempotente. Hoje
+      # eles são no-op; se voltarem a funcionar, capturam o `eslint-plugin-*`
+      # que for adicionado sem que ninguém lembre de editar este arquivo.
+      #
+      # `typescript` NÃO entra aqui, mas guarda um acoplamento a registrar:
+      # `typescript-eslint` (transitiva, dep de `@vue/eslint-config-typescript`)
+      # declara `peer typescript ">=4.8.4 <6.1.0"` — TETO, não piso. O servidor
+      # já está em TS 7 (#96); quando a oferta chegar ao cliente (hoje ~5.9.3),
+      # subir o compilador sozinho pode não resolver, e a saída seria subir
+      # `@vue/eslint-config-typescript` no MESMO PR. Não determinei se alguma
+      # 8.x relaxa esse teto — por isso fica como invariante registrada, e não
+      # como acoplamento imposto no agrupamento.
       client-linting:
         patterns:
           - eslint
@@ -42,16 +62,28 @@ updates:
           - '@vue/eslint-config-typescript'
           - oxlint
           - prettier
+          - 'eslint-*'
+          - '@eslint/*'
+      # Mesma razão do grupo acima, com acoplamento AINDA MAIS estrito:
+      # `@vitest/coverage-v8` e `vitest` declaram peer um do outro em versão
+      # EXATA (não `~`, como o oxlint). Na 1ª execução o coverage-v8 caiu no
+      # `client-minor-patch` (#100) enquanto o `vitest` subia aqui (#99) — só
+      # não deu ERESOLVE porque ambos estão em `^4.x` e o bump coube no caret,
+      # resolvido só no lockfile. Num major não cabe, e aí o par quebra igual.
       client-testing:
         patterns:
           - vitest
-          - '@vitest/*'
+          - '@vitest/coverage-v8'
           - '@vue/test-utils'
           - '@playwright/test'
           - jsdom
-      # Segunda camada: mesmo que o grupo acima falhe em capturar algo, o
-      # toolchain de lint não pode ser absorvido aqui — senão volta a se
-      # separar do par que precisa acompanhar.
+          - '@vitest/*'
+      # Segunda camada, com escopo honesto: se um dos grupos acima falhar em
+      # capturar algo, este `exclude-patterns` NÃO mantém o par junto — o
+      # pacote vira PR individual, tão separado quanto estaria aqui. O que ele
+      # protege é a integridade do grupo genérico: no #100 um par de lint
+      # quebrado derrubou 12 atualizações inocentes junto, e foi preciso
+      # recriar todas no #104.
       client-minor-patch:
         exclude-patterns:
           - eslint
@@ -61,6 +93,11 @@ updates:
           - '@vue/eslint-config-typescript'
           - oxlint
           - prettier
+          - 'eslint-*'
+          - '@eslint/*'
+          - vitest
+          - '@vitest/coverage-v8'
+          - '@vitest/*'
         update-types:
           - minor
           - patch
@@ -71,7 +108,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    # 8 e não 5: o bloco do cliente encostou em 5/5 no 1º ciclo (#95, #99, #100,
+    # #101, #102) e o novo exclude do `typescript` acrescenta 1 PR ao do
+    # servidor. Com o teto encostado, o PR individual que conserta um par pode
+    # simplesmente não ser criado.
+    open-pull-requests-limit: 8
     versioning-strategy: increase-if-necessary
     commit-message:
       prefix: chore
@@ -79,15 +120,20 @@ updates:
       include: scope
     groups:
       # Só o que o servidor realmente tem: nem `tsx` nem pacotes `@vitest/*`
-      # são dependências diretas daqui (o runner é `ts-node` + `nodemon`).
-      server-testing:
+      # são dependências diretas daqui. `tooling` e não `testing` porque o
+      # grupo passou a cobrir também o runner de dev (`nodemon --exec ts-node`),
+      # que não é ferramenta de teste.
+      server-tooling:
         patterns:
           - vitest
           - ts-node
           - nodemon
-      # `typescript` fica FORA de qualquer grupo de propósito: é o compilador que
-      # gera o `dist/` publicado no Render, então um major dele merece PR próprio
-      # e revisão do JS emitido (foi o que fizemos no #96).
+      # `typescript` sai TAMBÉM dos minor/patch. Majors já saíam sozinhos: este
+      # grupo é `minor`+`patch`, e o #96 subiu 5.9.3 -> 7.0.2 em PR individual
+      # com a config anterior, que não tinha exclude nenhum. O que este exclude
+      # acrescenta é isolar também os minor/patch do compilador que gera o
+      # `dist/` publicado no Render, para conferir o JS emitido a cada bump.
+      # Custo: +1 PR por ciclo deste bloco.
       server-minor-patch:
         exclude-patterns:
           - typescript
