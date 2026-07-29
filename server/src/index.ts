@@ -117,6 +117,10 @@ async function start() {
 
   // Graceful shutdown (e.g. SIGTERM on container redeploy): clear pending grace
   // timers and close connections so the process can exit cleanly.
+  // This also runs on EVERY dev reload: `tsx watch` SIGTERMs the child on each
+  // save and SIGKILLs it 5s later. Measured at ~0.2s even with a live websocket,
+  // because io.close() destroys the engine sockets before httpServer.close()
+  // calls back — keep that order, or dev restarts start hitting the force-kill.
   const shutdown = (signal: string) => {
     logger.info(`👋 ${signal} received — shutting down`)
     disposeSocketEvents()

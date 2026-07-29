@@ -119,15 +119,14 @@ updates:
       prefix-development: chore
       include: scope
     groups:
-      # Só o que o servidor realmente tem: nem `tsx` nem pacotes `@vitest/*`
-      # são dependências diretas daqui. `tooling` e não `testing` porque o
-      # grupo passou a cobrir também o runner de dev (`nodemon --exec ts-node`),
-      # que não é ferramenta de teste.
+      # Só o que o servidor realmente tem: não há pacotes `@vitest/*` aqui.
+      # `tooling` e não `testing` porque o grupo cobre também o runner de dev
+      # (`tsx watch`), que não é ferramenta de teste.
+      # `ts-node`/`nodemon` saíram no #114 (incompatíveis com TypeScript 7).
       server-tooling:
         patterns:
           - vitest
-          - ts-node
-          - nodemon
+          - tsx
       # `typescript` sai TAMBÉM dos minor/patch. Majors já saíam sozinhos: este
       # grupo é `minor`+`patch`, e o #96 subiu 5.9.3 -> 7.0.2 em PR individual
       # com a config anterior, que não tinha exclude nenhum. O que este exclude

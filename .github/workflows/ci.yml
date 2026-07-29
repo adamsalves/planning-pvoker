@@ -59,6 +59,25 @@ jobs:
       - name: Test (vitest)
         run: npm test
         working-directory: server
+      # O `npm run dev` não é coberto por nenhum passo acima: build e type-check
+      # usam `tsc`, os testes usam `vitest`. Foi por isso que o #96 (TypeScript 7)
+      # quebrou o runner sem ninguém ver — o `ts-node` só falhava em runtime, e o
+      # peer dele não tinha teto, então nem o `npm ci` reclamou. Este passo fecha
+      # esse vão pelo caminho real: sobe o servidor e espera ele responder.
+      - name: Smoke do runner de dev
+        working-directory: server
+        run: |
+          npm run dev > dev.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/health > /dev/null; then
+              echo "runner subiu em ~${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::o runner de dev não respondeu em /health em 30s"
+          cat dev.log
+          exit 1
 
   knip:
     name: Dead code (knip)
