@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "type-check": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
@@ -25,9 +25,8 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.0",
-    "nodemon": "^3.1.14",
     "socket.io-client": "^4.8.3",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.23.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9"
   }

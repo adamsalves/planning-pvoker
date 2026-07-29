@@ -29,16 +29,21 @@ export default defineConfig({
     },
   ],
 
+  // `reuseExistingServer` fica ligado só FORA do CI. Em dev é conveniência: quem
+  // já está com `npm run dev:all` rodando não paga o boot duas vezes. No CI é
+  // risco — qualquer processo ocupando a 5173 ou a 3001 satisfaz o webServer, e
+  // a suíte passa sem nunca ter subido o código sob teste. Um e2e que aprova o
+  // que não executou é pior do que e2e nenhum.
   webServer: [
     {
       command: 'npm run dev',
       port: 5173,
-      reuseExistingServer: true,
+      reuseExistingServer: !process.env.CI,
     },
     {
       command: 'npm run dev --prefix server',
       port: 3001,
-      reuseExistingServer: true,
+      reuseExistingServer: !process.env.CI,
     },
   ],
 })
