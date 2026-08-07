@@ -5,6 +5,13 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O formato se
 [SemVer](https://semver.org/lang/pt-BR/). A partir da v1.0.0, as entradas abaixo
 desta são geradas automaticamente pelo [release-please](./RELEASE.md).
 
+## [1.5.1](https://github.com/adamsalves/planning-pvoker/compare/v1.5.0...v1.5.1) (2026-08-07)
+
+
+### Miscellaneous Chores
+
+* promove v1.5.1 para produção ([#125](https://github.com/adamsalves/planning-pvoker/issues/125)) ([fc979b6](https://github.com/adamsalves/planning-pvoker/commit/fc979b65e69247fe32ec656732db48935dcda702))
+
 ## [1.5.0](https://github.com/adamsalves/planning-pvoker/compare/v1.4.0...v1.5.0) (2026-07-27)
 
 
