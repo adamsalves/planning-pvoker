@@ -2,7 +2,17 @@
   "name": "planning-pvoker",
   "version": "1.5.0",
   "private": true,
+  "description": "Planning Poker em tempo real para estimativa ágil (Vue 3 + Socket.IO)",
   "license": "MIT",
+  "author": "Adams Alves (https://github.com/adamsalves)",
+  "homepage": "https://planningpvoker.netlify.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamsalves/planning-pvoker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adamsalves/planning-pvoker/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
