@@ -2,6 +2,7 @@
   "name": "planning-pvoker",
   "version": "1.5.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -152,6 +152,48 @@ Scripts do servidor rodam com `npm --prefix server run <script>`: `dev`, `build`
 - **Branches saem da `develop`**; `main` é produção.
 - O `CHANGELOG.md` é **gerado** pelo release-please — não edite à mão.
 
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas — issues, correções e ideias. O fluxo é curto:
+
+**1. Prepare o ambiente.** Siga [Rodando localmente](#-rodando-localmente) e instale os browsers do Playwright, porque o e2e roda no pre-push:
+
+```bash
+npx playwright install chromium
+```
+
+**2. Saia da `develop`.** Ela é a branch de integração; `main` é produção e só recebe PR de release.
+
+```bash
+git switch develop && git pull
+git switch -c feat/minha-mudanca
+```
+
+**3. Commite no padrão [Conventional Commits](https://www.conventionalcommits.org/).** Não é preferência de estilo: é o que o release-please lê para decidir a versão e escrever o `CHANGELOG.md`. Use `feat:` para funcionalidade, `fix:` para correção, `docs:`/`chore:`/`test:`/`refactor:` para o resto, e o escopo quando ajudar (`feat(server): ...`).
+
+Os hooks do Husky cuidam da qualidade sozinhos:
+
+| Hook         | O que roda         | Efeito                                            |
+| ------------ | ------------------ | ------------------------------------------------- |
+| `pre-commit` | `lint-staged`      | oxlint, ESLint e Prettier com auto-fix nos staged |
+| `pre-push`   | `npm run validate` | a verificação completa, e2e incluso               |
+
+Se quiser antecipar o que o pre-push vai cobrar:
+
+```bash
+npm run validate
+```
+
+**4. Abra o PR para a `develop`.** Descreva o _porquê_ da mudança, não só o _o quê_. O merge é **squash**, então o título do PR vira a entrada do changelog — escreva-o como Conventional Commit. Para entrar, o PR precisa de **CI verde e review**.
+
+O CI tem três jobs (`client`, `server`, `knip`) e **não roda e2e** — essa parte fica com o seu pre-push, então não pule o `validate` local.
+
+**5. Cubra a mudança com teste.** Comportamento novo pede teste novo; correção de bug pede teste que falhe antes do fix. Onde cada suíte mora está em [Testes](#-testes).
+
+Antes de mexer no código, vale ler [Convenções](#-convenções) — especialmente a proibição de `as` e `!`, que o ESLint barra e vai reprovar o CI.
+
+Mudanças de comportamento do produto ou do contrato de rede merecem uma conversa antes: abra uma issue descrevendo o caso de uso e a gente decide o desenho junto.
+
 ## 📚 Documentação
 
 | Arquivo                                    | Conteúdo                                                |
@@ -160,3 +202,7 @@ Scripts do servidor rodam com `npm --prefix server run <script>`: `dev`, `build`
 | [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md) | Como o deploy está montado (Netlify + Render + Upstash) |
 | [LEARNING_GUIDE.md](./LEARNING_GUIDE.md)   | Diário de aprendizado Vue 3, fase a fase                |
 | [AGENTS.md](./AGENTS.md)                   | Comandos e convenções para agentes automatizados        |
+
+## 📄 Licença
+
+[MIT](./LICENSE) © Adams Alves
