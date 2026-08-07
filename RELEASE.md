@@ -22,7 +22,9 @@ feat|fix|chore/*  →  PR  →  develop  →  PR de release  →  main (produç�
 - Branches de trabalho saem da `develop` (ver convenção do projeto).
 - Todo PR para `develop` exige **CI verde** + review.
 - `develop` é a branch de integração (staging).
-- `main` é produção: só recebe via **PR de release** a partir da `develop`.
+- `main` é produção: recebe via **PR de release** a partir da `develop`. A única
+  exceção é `hotfix/*`, que sai da `main` e volta direto para ela — ver
+  [Hotfix](#hotfix-urgência-em-produção).
 - Nunca commitar direto em `develop` ou `main`.
 - **Squash-merge** nos PRs de feature → `develop` (1 Conventional Commit por PR). Evita
   changelog duplicado: o release-please parseia tanto o commit da branch quanto o título do PR
