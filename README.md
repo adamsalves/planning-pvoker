@@ -100,7 +100,7 @@ Para o deploy em produção (Netlify + Render), veja [DEPLOYMENT_PLAN.md](./DEPL
 npx playwright install chromium   # só na primeira vez
 ```
 
-> ⚠️ O e2e entra no `npm run validate`, que é o hook de **pre-push** (Husky) — sem os browsers do Playwright instalados, o `git push` falha. O CI **não** roda e2e. Ele tem três jobs: `client` (type-check, oxlint, eslint, unit), `server` (build, type-check, testes) e `knip`, que instala os dois workspaces e checa código morto nos dois.
+> ⚠️ O e2e entra no `npm run validate`, que é o hook de **pre-push** (Husky) — sem os browsers do Playwright instalados, o `git push` falha. O CI **não** roda e2e: essa cobertura depende inteiramente do pre-push local.
 
 ### Verificação completa
 
@@ -152,6 +152,48 @@ Scripts do servidor rodam com `npm --prefix server run <script>`: `dev`, `build`
 - **Branches saem da `develop`**; `main` é produção.
 - O `CHANGELOG.md` é **gerado** pelo release-please — não edite à mão.
 
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas — issues, correções e ideias. O fluxo é curto:
+
+**1. Prepare o ambiente.** Siga [Rodando localmente](#-rodando-localmente) e instale os browsers do Playwright, porque o e2e roda no pre-push:
+
+```bash
+npx playwright install chromium
+```
+
+**2. Saia da `develop`.** Ela é a branch de integração; `main` é produção e só recebe PR de release — a única exceção é `hotfix/*`, que sai da `main` e volta para ela (ver [RELEASE.md](./RELEASE.md)).
+
+```bash
+git switch develop && git pull
+git switch -c feat/minha-mudanca
+```
+
+**3. Commite no padrão [Conventional Commits](https://www.conventionalcommits.org/).** Não é preferência de estilo: é o que o release-please lê para decidir a versão e escrever o `CHANGELOG.md`. Use `feat:` para funcionalidade, `fix:` para correção, `docs:`/`chore:`/`test:`/`refactor:` para o resto, e o escopo quando ajudar (`feat(server): ...`).
+
+Os hooks do Husky cuidam da qualidade sozinhos:
+
+| Hook         | O que roda         | Efeito                                                                          |
+| ------------ | ------------------ | ------------------------------------------------------------------------------- |
+| `pre-commit` | `lint-staged`      | oxlint, ESLint e Prettier nos `.ts`/`.vue` staged; só Prettier nos `.md`/`.css` |
+| `pre-push`   | `npm run validate` | a verificação completa, e2e incluso                                             |
+
+Se quiser antecipar o que o pre-push vai cobrar:
+
+```bash
+npm run validate
+```
+
+**4. Abra o PR para a `develop`.** Descreva o _porquê_ da mudança, não só o _o quê_. O merge é **squash**, então o título do PR é o commit que sobra no histórico — escreva-o como Conventional Commit. Ele vira entrada do `CHANGELOG.md` quando o tipo é `feat`, `fix`, `perf` ou `revert`; `docs`, `chore`, `test` e `refactor` ficam ocultos (a menos que carreguem breaking change). Para entrar, o PR precisa de **CI verde e review**.
+
+O CI tem três jobs: `client`, `server` e `knip` — este último instala os dois workspaces e checa código morto nos dois. Nenhum deles cobre o e2e (ver [Testes](#-testes)), então não pule o `validate` local.
+
+**5. Cubra a mudança com teste.** Comportamento novo pede teste novo; correção de bug pede teste que falhe antes do fix. Onde cada suíte mora está em [Testes](#-testes).
+
+Antes de mexer no código, vale ler [Convenções](#-convenções) — especialmente a proibição de `as` e `!`, que o ESLint barra e vai reprovar o CI.
+
+Mudanças de comportamento do produto ou do contrato de rede merecem uma conversa antes: abra uma issue descrevendo o caso de uso e a gente decide o desenho junto.
+
 ## 📚 Documentação
 
 | Arquivo                                    | Conteúdo                                                |
@@ -160,3 +202,7 @@ Scripts do servidor rodam com `npm --prefix server run <script>`: `dev`, `build`
 | [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md) | Como o deploy está montado (Netlify + Render + Upstash) |
 | [LEARNING_GUIDE.md](./LEARNING_GUIDE.md)   | Diário de aprendizado Vue 3, fase a fase                |
 | [AGENTS.md](./AGENTS.md)                   | Comandos e convenções para agentes automatizados        |
+
+## 📄 Licença
+
+[MIT](./LICENSE) © Adams Alves
