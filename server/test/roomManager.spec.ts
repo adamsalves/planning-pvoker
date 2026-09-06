@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { RoomManager } from '../src/roomManager'
 import { logger } from '../src/logger'
 import type { Player, RoomConfig, Room, Round } from '../src/types'
+import { CELEBRATIONS } from '../src/types'
 import type { RoomPersistence, PersistenceSnapshot } from '../src/persistence'
 
 // Frozen because createRoom keeps it BY REFERENCE as room.config: a stray write
@@ -713,6 +714,83 @@ describe('revealVotes / resetSession', () => {
 
     const room = rm.revealVotes('r1')
     expect(room?.rounds[0].votes).toEqual({ a1: 5, m1: 8 })
+  })
+})
+
+describe('consensus celebration (drawn at the reveal seam)', () => {
+  // Congela o sorteio para saber QUAL variante sai — sem isso só dá para
+  // afirmar "alguma saiu", que é o tipo de teste que não pega regressão.
+  function freezeRandom(value: number) {
+    return vi.spyOn(Math, 'random').mockReturnValue(value)
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('leaves celebration unset while the round is still voting', () => {
+    rm.createRoom('r1', admin, config)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    expect(rm.getRoom('r1')?.rounds[0].celebration).toBeUndefined()
+  })
+
+  it('draws a celebration from the vocabulary at revealVotes', () => {
+    rm.createRoom('r1', admin, config)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+
+    const room = rm.revealVotes('r1')
+    expect(CELEBRATIONS).toContain(room?.rounds[0].celebration)
+  })
+
+  // O autoReveal passa pelo MESMO seam — se o sorteio não estivesse em
+  // sealRound, o caminho mais comum de reveal (quórum completo) ficaria sem
+  // celebração para sempre.
+  it('draws a celebration on the autoReveal path too', () => {
+    rm.createRoom('r1', admin, { ...config, autoReveal: true })
+    rm.joinRoom('r1', member)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+    const room = rm.castVote('r1', 'm1', 5)
+
+    expect(room?.rounds[0].status).toBe('revealed')
+    expect(CELEBRATIONS).toContain(room?.rounds[0].celebration)
+  })
+
+  // Exclusão da anterior, determinística: com Math.random congelado em 0, os
+  // dois sorteios caem no índice 0 dos candidatos. Sem a exclusão a rodada 2
+  // repetiria 'classic' (o índice 0 do pool cheio, sorteio da rodada 1); COM a
+  // exclusão o índice 0 passa a ser 'fireworks'. Se o filtro sair de
+  // pickCelebration, este teste falha.
+  it('never repeats the celebration of the previous round', () => {
+    freezeRandom(0)
+    rm.createRoom('r1', admin, config)
+    rm.addSubjects('r1', ['A', 'B'])
+    rm.startSession('r1')
+    const first = rm.revealVotes('r1')
+    expect(first?.rounds[0].celebration).toBe('classic')
+
+    rm.nextRound('r1')
+    const second = rm.revealVotes('r1')
+    expect(second?.rounds[1].celebration).toBe('fireworks')
+  })
+
+  // A rodada 1 sorteia do pool CHEIO: qualquer índice tem que cair numa
+  // variante válida (protege contra off-by-one no truncamento do Math.random).
+  it('draws from the full pool for the very first round', () => {
+    for (const value of [0, 0.5, 0.999999]) {
+      const spy = freezeRandom(value)
+      const rm2 = new RoomManager()
+      rm2.createRoom('r1', admin, config)
+      rm2.addSubjects('r1', ['A'])
+      rm2.startSession('r1')
+      const room = rm2.revealVotes('r1')
+      expect(CELEBRATIONS).toContain(room?.rounds[0].celebration)
+      spy.mockRestore()
+    }
   })
 })
 

@@ -1,4 +1,4 @@
-import { Room, Player, RoomConfig, Round } from './types'
+import { Room, Player, RoomConfig, Round, Celebration, CELEBRATIONS } from './types'
 import { NullPersistence, type RoomPersistence } from './persistence'
 import { logger } from './logger'
 
@@ -701,11 +701,27 @@ export class RoomManager {
   //
   // The default PresenceOracle answers "everyone is present", so this is a no-op
   // wherever presence is not wired (unit tests, NullPersistence boots).
+  //
+  // This is ALSO the single point where the consensus celebration is drawn: both
+  // reveal paths (manual revealVotes and maybeAutoReveal) pass through here, so
+  // neither can skip the draw. Drawn, not stored at round creation, because the
+  // variant only matters once the round is actually revealed.
   private sealRound(room: Room, round: Round): void {
     for (const playerId of Object.keys(round.votes)) {
       if (!this.presence.isPresent(room.id, playerId)) delete round.votes[playerId]
     }
+    round.celebration = this.pickCelebration(room)
     round.status = 'revealed'
+  }
+
+  // Picks the celebration for the round being revealed, excluding the one drawn
+  // for the round immediately before so back-to-back reveals never repeat. The
+  // rounds history IS the memory on purpose — no new field on Room, and
+  // resetSession clears rounds, so a fresh session starts unrestricted.
+  private pickCelebration(room: Room): Celebration {
+    const previous = room.rounds[room.currentRoundIndex - 1]?.celebration
+    const candidates = CELEBRATIONS.filter((c) => c !== previous)
+    return candidates[Math.floor(Math.random() * candidates.length)]
   }
 
   public revealVotes(roomId: string): Room | null {
