@@ -200,4 +200,70 @@ describe('VoteReveal.vue', () => {
     const divergente = mount(VoteReveal, { props: { votes: { p1: 13, p2: 8 }, playerCount: 2 } })
     expect(divergente.findComponent(IconPartyPopper).exists()).toBe(false)
   })
+
+  it('a sorteada chega ao stage: fireworks dispara confetti e troca a frase do banner', () => {
+    vi.mocked(confetti).mockClear()
+
+    const wrapper = mount(VoteReveal, {
+      props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebration: 'fireworks' },
+    })
+
+    expect(confetti).toHaveBeenCalled()
+    // 'fireworks' é o índice 1 → segunda mensagem. O banner e a animação derivam
+    // do MESMO id (decisão do plano), então um descolar do outro quebra aqui.
+    expect(wrapper.text()).toContain('Unânime!')
+    expect(wrapper.text()).not.toContain('Consenso!')
+  })
+
+  it('rodada sem sorteio mantém o comportamento clássico — texto e confetti', () => {
+    vi.mocked(confetti).mockClear()
+
+    const wrapper = mount(VoteReveal, {
+      props: { votes: { p1: 5, p2: 5 }, playerCount: 2 },
+    })
+
+    expect(wrapper.text()).toContain('Consenso!')
+    expect(confetti).toHaveBeenCalled()
+  })
+
+  it('sprite ainda não implementada (janela entre PR B e C) celebra com o fallback clássico', () => {
+    vi.mocked(confetti).mockClear()
+
+    mount(VoteReveal, {
+      props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebration: 'dolphin' },
+    })
+
+    expect(confetti).toHaveBeenCalled()
+  })
+
+  it('celebrate=false não monta stage mesmo com celebração sorteada (recaps)', () => {
+    vi.mocked(confetti).mockClear()
+
+    mount(VoteReveal, {
+      props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebrate: false, celebration: 'stars' },
+    })
+
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it('prefers-reduced-motion desliga a sorteada também — só o banner fica', () => {
+    vi.mocked(confetti).mockClear()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: true,
+        media: '(prefers-reduced-motion: reduce)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
+
+    const wrapper = mount(VoteReveal, {
+      props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebration: 'fireworks' },
+    })
+
+    expect(confetti).not.toHaveBeenCalled()
+    // A mensagem derivada continua no banner: conteúdo, não animação.
+    expect(wrapper.text()).toContain('Unânime!')
+  })
 })
