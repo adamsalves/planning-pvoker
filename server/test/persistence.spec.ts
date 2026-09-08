@@ -266,6 +266,64 @@ describe('RedisPersistence', () => {
     expect(snap.rooms[0].players[0].tag).toBeUndefined()
   })
 
+  // Mesma régua de excludedVoterIds/tag: sobreviver ao save→load é o contrato do
+  // campo — a variante sorteada precisa chegar igual após um redeploy, senão o
+  // cliente que reidrata a sala revelada trocaria de animação.
+  it('round-trips a celebration through save and load', async () => {
+    const room = sampleRoom('ROOM1')
+    room.rounds[0].celebration = 'fireworks'
+    await persistence.saveRoom(room)
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms[0].rounds[0].celebration).toBe('fireworks')
+  })
+
+  // Guarda o `.optional()` de celebration: um snapshot gravado antes da feature
+  // não tem o campo, e se o schema passasse a exigi-lo o safeParse falharia e o
+  // loadAll DESCARTARIA a sala — todas as salas vivas morreriam no deploy.
+  it('loadAll accepts a pre-feature round with no celebration', async () => {
+    await redis.sadd('rooms:index', 'OLDCEL')
+    redis.strings.set('room:OLDCEL', {
+      id: 'OLDCEL',
+      adminId: 'p1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [{ id: 'p1', name: 'Ana', role: 'admin' }],
+      subjects: ['S1'],
+      phase: 'voting',
+      rounds: [{ id: 'r1', subject: 'S1', status: 'revealed', votes: { p1: 5 } }],
+      currentRoundIndex: 0,
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['OLDCEL'])
+    expect(snap.rooms[0].rounds[0].celebration).toBeUndefined()
+  })
+
+  // Guarda o `.catch(undefined)` de celebration, como o da tag: é enum de PRODUTO
+  // sujeito a renome/remoção, e um valor que saiu da lista tem que degradar para
+  // "sem celebração" (o cliente cai no 'classic'), não derrubar a sala inteira.
+  // Falha se alguém trocar .catch por um .optional() puro.
+  it('loadAll degrades an unknown celebration to undefined but keeps the room', async () => {
+    await redis.sadd('rooms:index', 'DRIFTCEL')
+    redis.strings.set('room:DRIFTCEL', {
+      id: 'DRIFTCEL',
+      adminId: 'p1',
+      config: { deckType: 'fibonacci', autoReveal: false },
+      players: [{ id: 'p1', name: 'Ana', role: 'admin' }],
+      subjects: ['S1'],
+      phase: 'voting',
+      // fora de CELEBRATIONS (variante que um deploy futuro removeu)
+      rounds: [
+        { id: 'r1', subject: 'S1', status: 'revealed', votes: { p1: 5 }, celebration: 'lasers' },
+      ],
+      currentRoundIndex: 0,
+    })
+
+    const snap = await persistence.loadAll()
+    expect(snap.rooms.map((r) => r.id)).toEqual(['DRIFTCEL'])
+    expect(snap.rooms[0].rounds[0].celebration).toBeUndefined()
+  })
+
   it('loadAll drops a malformed snapshot instead of throwing', async () => {
     await redis.sadd('rooms:index', 'BAD')
     redis.strings.set('room:BAD', { id: 'BAD', not: 'a room' })

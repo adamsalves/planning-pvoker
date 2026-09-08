@@ -57,6 +57,18 @@ describe('RoomSummary.vue (live room summary)', () => {
     expect(must(cards[0], 'first VoteReveal card').props('votes')).toEqual({ p1: 5, p2: 5 })
   })
 
+  // Paridade de frase: o banner do recap é derivado da celebração sorteada, a
+  // mesma fonte do painel ao vivo (os dois ficam em tela juntos via v-show).
+  // Se o prop não for encaminhado, o recap regresa para 'classic' e as duas
+  // frases divergem na mesma rodada.
+  it('forwards the drawn celebration to the recap VoteReveal (banner parity with live panel)', () => {
+    const drawn = round('a', 'Login', 'revealed', { p1: 5, p2: 5 })
+    drawn.celebration = 'fireworks'
+    const wrapper = mountSummary([drawn])
+    const card = must(wrapper.findAllComponents(VoteReveal)[0], 'recap VoteReveal')
+    expect(card.props('celebration')).toBe('fireworks')
+  })
+
   it('numbers rounds by their real position, not the filtered subset', () => {
     const wrapper = mountSummary([
       round('a', 'Login', 'revealed', { p1: 5 }),

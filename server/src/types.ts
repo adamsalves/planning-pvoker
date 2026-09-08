@@ -44,6 +44,29 @@ export const PLAYER_TAGS = ['dev', 'design', 'qa', 'product', 'other'] as const
 /** @public */
 export type PlayerTag = (typeof PLAYER_TAGS)[number]
 
+// Celebração sorteada no reveal de consenso (sealRound). O servidor escolhe UMA
+// e a inclui no broadcast para TODOS verem a mesma; 'classic' é a animação de
+// hoje (fallback do cliente quando o campo não vem — snapshot pré-feature ou
+// servidor sem a feature). Espelhada em src/types/index.ts e coberta pelo guarda
+// de deriva em src/types/__tests__.
+//
+// As sete são todas de confetti. Houve mais quatro ('dolphin', 'rocket', 'cards',
+// 'balloons'), personagens em SVG atravessando a tela, retiradas antes de chegar
+// a produção — o resultado visual foi reprovado. Um id que saiu daqui e sobrou
+// num snapshot já é tratado: `celebration` cai para undefined no zod da
+// persistência e o cliente degrada para 'classic'.
+export const CELEBRATIONS = [
+  'classic',
+  'fireworks',
+  'rain',
+  'cannons',
+  'blast',
+  'stars',
+  'suits',
+] as const
+/** @public */
+export type Celebration = (typeof CELEBRATIONS)[number]
+
 export interface Player {
   id: string
   name: string
@@ -69,6 +92,10 @@ export interface Round {
   // votando, e `[]` significa "todos votam" em vez de "ninguém vota". Opcional
   // porque rodadas persistidas antes da feature não têm o campo (= ninguém fora).
   excludedVoterIds?: string[]
+  // Sorteada pelo servidor no reveal (RoomManager.sealRound). Opcional porque
+  // rodadas persistidas antes da feature não têm o campo, e também é assim que
+  // o cliente distingue "servidor ainda sem a feature" (fallback 'classic').
+  celebration?: Celebration
 }
 
 export interface Room {
