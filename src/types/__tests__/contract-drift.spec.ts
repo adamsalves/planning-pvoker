@@ -45,7 +45,11 @@ const VOCABULARIES: ReadonlyArray<{
 describe('contract vocabulary drift guard (client × server)', () => {
   for (const { name, client, server: serverValues } of VOCABULARIES) {
     // Sorted: the two sides may legitimately list in different orders — only
-    // MEMBERSHIP is the contract. Nothing on either side indexes these by position.
+    // MEMBERSHIP is the contract. The guard stays order-free on purpose: nothing
+    // on the SERVER reads these by position. One exception on the CLIENT:
+    // 'celebrations' feeds a position-derived banner phrase
+    // (features/room/celebrations/registry.ts), and that order is pinned there
+    // (classic at index 0, new ids only ever appended) — not by this guard.
     it(`agrees on ${name}`, () => {
       expect([...client].sort()).toEqual([...serverValues].sort())
     })

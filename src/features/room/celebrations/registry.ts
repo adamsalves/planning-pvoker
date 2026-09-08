@@ -135,11 +135,21 @@ const implementations: Partial<Record<Celebration, CelebrationImplementation>> =
   suits: SUITS,
 }
 
+function isKnownCelebration(value: string): value is Celebration {
+  return CELEBRATIONS.some((known) => known === value)
+}
+
+// Os dois resolvedores aceitam `Celebration | string` (e `undefined`) porque a
+// borda aqui é o broadcast da rede, que não passa por zod: um servidor futuro
+// pode sortear um 12º id que este vocabulário ainda não conhece (a janela
+// "server antes do cliente" do plano). Os call-sites tipados seguem passando
+// Celebration — o alargamento é só para a entrada de rede ser honestamente
+// tratável, e testável, sem cast.
 export function resolvedImplementation(
-  celebration: Celebration | undefined,
+  celebration: Celebration | string | undefined,
 ): CelebrationImplementation {
-  const implementation = celebration === undefined ? undefined : implementations[celebration]
-  return implementation ?? CLASSIC
+  if (celebration === undefined || !isKnownCelebration(celebration)) return CLASSIC
+  return implementations[celebration] ?? CLASSIC
 }
 
 // Frases do banner derivadas do ÍNDICE da celebração (decisão do plano: sem um
@@ -148,6 +158,10 @@ export function resolvedImplementation(
 // registry.spec fixa a paridade, porque t() de chave inexistente não reclama.
 export const CONSENSUS_MESSAGES = 4
 
-export function bannerMessageKey(celebration: Celebration): string {
-  return `room.reveal.messages.${CELEBRATIONS.indexOf(celebration) % CONSENSUS_MESSAGES}`
+export function bannerMessageKey(celebration: Celebration | string): string {
+  // Id desconhecido (mesmo cenário da janela server→cliente) degrada junto com
+  // a animação: mensagem do classic, em vez de renderizar a chave crua
+  // 'room.reveal.messages.-1' no banner.
+  const index = isKnownCelebration(celebration) ? CELEBRATIONS.indexOf(celebration) : -1
+  return `room.reveal.messages.${index < 0 ? 0 : index % CONSENSUS_MESSAGES}`
 }

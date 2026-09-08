@@ -51,12 +51,29 @@ describe('celebration registry', () => {
   it('rounds without a celebration (pre-feature server) also degrade to classic', () => {
     expect(resolvedImplementation(undefined)).toBe(resolvedImplementation('classic'))
   })
+
+  // A janela "servidor novo, cliente velho": se um 12º id cruzar a rede antes
+  // do vocabulário do cliente acompanhar, animação E texto degradam juntos —
+  // nenhum dos dois pode vazar estado desconhecido.
+  it('an id this client does not know degrades to classic animation AND message 0', () => {
+    expect(resolvedImplementation('lasers')).toBe(resolvedImplementation('classic'))
+    expect(bannerMessageKey('lasers')).toBe('room.reveal.messages.0')
+  })
 })
 
 describe('banner message derived from the celebration id', () => {
   it('classic keeps the historic phrase at index 0', () => {
     expect(bannerMessageKey('classic')).toBe('room.reveal.messages.0')
     expect(i18n.global.t('room.reveal.messages.0', 'pt-BR')).toBe('Consenso!')
+  })
+
+  // A derivação lê POSIÇÃO: diferente dos outros vocabulários (onde só
+  // MEMBRO importa), reordenar CELEBRATIONS remapeia frases. O clássico tem
+  // que ficar no índice 0 — é a frase/visual históricos e o fallback de todo
+  // desconhecido. Os demais podem crescer só pelo fim.
+  it('pins the order the derivation depends on: classic is index 0', () => {
+    expect(CELEBRATIONS[0]).toBe('classic')
+    expect(CELEBRATIONS.indexOf('classic')).toBe(0)
   })
 
   // O derivador usa t() de chave inexistente sem reclamar (fallback vira a

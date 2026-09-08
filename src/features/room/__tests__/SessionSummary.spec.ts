@@ -48,6 +48,19 @@ describe('SessionSummary.vue', () => {
     expect(reveal.props('playerCount')).toBeUndefined()
   })
 
+  // A frase do banner é derivada da celebração sorteada — o recap precisa
+  // receber o mesmo id do painel ao vivo ou as duas telas divergem na mesma
+  // rodada (celebrate=false silencia a animação, não o texto).
+  it('cada recap recebe a celebração sorteada da rodada', () => {
+    const first: Round = { ...must(rounds[0], 'first round'), celebration: 'fireworks' }
+    const wrapper = mount(SessionSummary, {
+      props: { rounds: [first, must(rounds[1], 'second round')] },
+    })
+    const recaps = wrapper.findAllComponents(VoteReveal)
+    expect(must(recaps[0], 'first recap').props('celebration')).toBe('fireworks')
+    expect(must(recaps[1], 'second recap').props('celebration')).toBeUndefined()
+  })
+
   it('emite newSession e leave nos respectivos botões', async () => {
     const wrapper = mount(SessionSummary, { props: { rounds } })
     const buttons = wrapper.findAllComponents(BaseButton)
