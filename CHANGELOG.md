@@ -5,6 +5,14 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O formato se
 [SemVer](https://semver.org/lang/pt-BR/). A partir da v1.0.0, as entradas abaixo
 desta são geradas automaticamente pelo [release-please](./RELEASE.md).
 
+## [1.6.0](https://github.com/adamsalves/planning-pvoker/compare/v1.5.1...v1.6.0) (2026-09-08)
+
+
+### Features
+
+* **client:** celebrações de confetti sorteadas + banner variável ([#156](https://github.com/adamsalves/planning-pvoker/issues/156)) ([6d88771](https://github.com/adamsalves/planning-pvoker/commit/6d88771e7e42cae6f5a4e856897463d7e23664aa))
+* **server:** sorteia a celebração de consenso no reveal ([#152](https://github.com/adamsalves/planning-pvoker/issues/152)) ([a039a2b](https://github.com/adamsalves/planning-pvoker/commit/a039a2b8853aedb061f00c5ea5cfca1433a42a38))
+
 ## [1.5.1](https://github.com/adamsalves/planning-pvoker/compare/v1.5.0...v1.5.1) (2026-08-07)
 
 
