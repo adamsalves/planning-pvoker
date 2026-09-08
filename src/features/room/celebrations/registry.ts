@@ -7,15 +7,29 @@ interface ConfettiImplementation {
   run: () => void
 }
 
-// Forma dos sprites (B1–B4): um emoji atravessando a tela, estilo Slack.
-// `path` escolhe a trajetória CSS (ver CelebrationStage); `durationMs` entra
-// como --sprite-duration. 'arc' = pulos em ondas (dolphin), 'straight' =
-// varredura diagonal (rocket, cards), 'rise' = sobe do rodapé (balloons).
+// Um momento de confetti disparado pelo CelebrationStage em um ponto da
+// trajetória da sprite (trilha do foguete, respingo do golfinho, pop dos
+// balões). É o casamento dos dois mecanismos: DOM para o personagem, canvas
+// para o espetáculo em volta dele.
+interface CelebrationAccent {
+  atMs: number
+  fire: () => void
+}
+
+// Sprites: personagem gigante varrendo a tela com scrim próprio e acentos
+// coreografados. `art` escolhe o desenho SVG (SpriteArt) — arte vetorial com
+// PARTES animadas (chama, barbatana, balanço), não um emoji estático; `path`
+// é a coreografia do deslocamento; `sizeVmin` é o tamanho do personagem;
+// `scrim` é o cenário atrás. Nada aqui é contrato de rede: o sorteio só
+// entrega o id.
 export interface SpriteImplementation {
   kind: 'sprite'
-  emoji: string
-  path: 'arc' | 'straight' | 'rise'
+  art: 'dolphin' | 'rocket' | 'cards' | 'balloons'
+  path: 'arc' | 'rise' | 'launch' | 'flip'
+  sizeVmin: number
   durationMs: number
+  scrim?: 'dark' | 'sea' | 'felt' | 'sky'
+  accents: CelebrationAccent[]
 }
 
 export type CelebrationImplementation = ConfettiImplementation | SpriteImplementation
@@ -51,18 +65,40 @@ const FIREWORKS: ConfettiImplementation = {
   },
 }
 
-// startVelocity 0 + gravidade fraca: as partículas não "explodem", chovem.
+// startVelocity 0 + gravidade fraca fazia a leva NASCER acima da tela e
+// morrer antes de aparecer — "chuva que não se via". A receita agora dispara
+// três frentes já na borda superior, com velocidade de queda real e vida
+// longa o bastante para atravessar a viewport.
 const RAIN: ConfettiImplementation = {
   kind: 'confetti',
   run: () => {
-    confetti({
-      particleCount: 80,
-      spread: 360,
-      startVelocity: 0,
-      ticks: 220,
-      gravity: 0.35,
-      origin: { y: -0.2 },
-    })
+    for (const x of [0.16, 0.5, 0.84]) {
+      confetti({
+        particleCount: 95,
+        spread: 120,
+        startVelocity: 18,
+        gravity: 0.9,
+        ticks: 320,
+        scalar: 1.05,
+        origin: { x, y: -0.1 },
+      })
+    }
+    // Segunda leva, defasada, com drift: sustenta a chuva em vez de ser uma
+    // rajada única — e a variância de x tira o efeito de "três jatos iguais".
+    setTimeout(() => {
+      for (const x of [0.32, 0.68]) {
+        confetti({
+          particleCount: 80,
+          spread: 130,
+          startVelocity: 16,
+          gravity: 0.9,
+          ticks: 320,
+          scalar: 1.05,
+          drift: 0.8,
+          origin: { x, y: -0.1 },
+        })
+      }
+    }, 450)
   },
 }
 
@@ -121,30 +157,159 @@ const SUITS: ConfettiImplementation = {
   },
 }
 
-// As 4 sprites (B1–B4 do plano). Emoji cru, não ícone Lucide: a paleta
-// monocromática currentColor mataria a piada (golfinho em contorno cinza não
-// celebra nada — coerente com a convenção de ícones, que reserva emoji para
-// quando a cor É a mensagem). Dependem da fonte do SO, então cada OS desenha o
-// seu; é variedade aceitável, não bug (risco 3 do plano).
-const DOLPHIN: SpriteImplementation = { kind: 'sprite', emoji: '🐬', path: 'arc', durationMs: 2200 }
+// As 4 sprites, em modo espetáculo: personagem gigante, cenário (scrim) e
+// trilha de confetti coreografada nos momentos-chave da trajetória. Emoji cru
+// por decisão do plano — Lucide monocromático não celebra nada. Dependem da
+// fonte do SO; cada OS desenha o seu (risco 3 aceito).
+const FIRE = ['#F97316', '#FBBF24', '#FDE68A']
+const OCEAN = ['#38BDF8', '#0EA5E9', '#E0F2FE']
+const POKER = ['#DC2626', '#111827', '#F8FAFC']
+const PARTY = ['#EF4444', '#FCA5A5', '#B91C1C']
+
+function burst(
+  atMs: number,
+  origin: { x: number; y: number },
+  colors: string[],
+  opts: {
+    count?: number
+    spread?: number
+    startVelocity?: number
+    angle?: number
+    gravity?: number
+    scalar?: number
+  } = {},
+): CelebrationAccent {
+  return {
+    atMs,
+    fire: () =>
+      confetti({
+        particleCount: opts.count ?? 24,
+        spread: opts.spread ?? 55,
+        startVelocity: opts.startVelocity ?? 26,
+        angle: opts.angle ?? 90,
+        gravity: opts.gravity ?? 1,
+        scalar: opts.scalar ?? 1.1,
+        origin,
+        colors,
+      }),
+  }
+}
+
+const DOLPHIN: SpriteImplementation = {
+  kind: 'sprite',
+  art: 'dolphin',
+  path: 'arc',
+  sizeVmin: 28,
+  durationMs: 2800,
+  scrim: 'sea',
+  // O respingo tem que cair onde o golfinho ENCOSTA na água: os keyframes de
+  // sprite-arc voltam à linha d'água em 47% e 88% da duração (mais a saída, no
+  // começo). Acento em cima do ápice é espuma no ar.
+  accents: [
+    burst(190, { x: 0.05, y: 0.62 }, OCEAN, { count: 14 }),
+    burst(1320, { x: 0.48, y: 0.62 }, OCEAN, { count: 24, scalar: 1.15 }),
+    burst(2470, { x: 0.84, y: 0.62 }, OCEAN, { count: 32, scalar: 1.25 }),
+  ],
+}
+
 const ROCKET: SpriteImplementation = {
   kind: 'sprite',
-  emoji: '🚀',
-  path: 'straight',
-  durationMs: 1600,
+  art: 'rocket',
+  path: 'launch',
+  sizeVmin: 34,
+  durationMs: 2600,
+  scrim: 'dark',
+  // A trilha segue a diagonal de sprite-launch (canto de baixo à esquerda →
+  // canto de cima à direita), medida numa tela deitada de proporção comum: as
+  // origens do canvas-confetti são fração da viewport, não do sprite, então
+  // mudar a trajetória obriga a re-marcar cada acento.
+  accents: [
+    burst(560, { x: 0.25, y: 0.82 }, FIRE, {
+      count: 12,
+      spread: 40,
+      startVelocity: 12,
+      scalar: 0.8,
+    }),
+    burst(1000, { x: 0.34, y: 0.66 }, FIRE, {
+      count: 14,
+      spread: 40,
+      startVelocity: 12,
+      scalar: 0.9,
+    }),
+    burst(1440, { x: 0.44, y: 0.51 }, FIRE, { count: 16, spread: 40, startVelocity: 12 }),
+    burst(1900, { x: 0.55, y: 0.31 }, FIRE, {
+      count: 16,
+      spread: 40,
+      startVelocity: 12,
+      scalar: 1.05,
+    }),
+    // O boom no ápice une as duas linguagens favoritas da casa: explosão +
+    // estrelas douradas (a variante stars, elogiada na revisão).
+    {
+      atMs: 2250,
+      fire: () => {
+        confetti({
+          particleCount: 140,
+          spread: 360,
+          startVelocity: 45,
+          origin: { x: 0.64, y: 0.16 },
+          colors: FIRE,
+        })
+        confetti({
+          particleCount: 60,
+          spread: 110,
+          origin: { x: 0.64, y: 0.16 },
+          colors: ['#FFD166', '#FFF3B0'],
+          shapes: ['star'],
+          scalar: 1.6,
+        })
+      },
+    },
+  ],
 }
-// O "desfile" são as próprias cartas: uma sequência que atravessa junta.
+
+// O flip no centro é o clímax; a chuva de naipes cai quando a carta "abre".
 const CARDS: SpriteImplementation = {
   kind: 'sprite',
-  emoji: '🎴 🃏 🎴 🃏 🎴',
-  path: 'straight',
-  durationMs: 2800,
+  art: 'cards',
+  path: 'flip',
+  sizeVmin: 58,
+  durationMs: 3400,
+  scrim: 'felt',
+  accents: [
+    burst(1150, { x: 0.5, y: 0.3 }, POKER, {
+      count: 50,
+      spread: 150,
+      startVelocity: 14,
+      scalar: 1.3,
+    }),
+    // Em 2450ms o leque já saiu pela direita (sprite-flip começa a varredura em
+    // 38%): a segunda chuva acompanha a partida, não o vazio.
+    burst(1800, { x: 0.62, y: 0.34 }, POKER, {
+      count: 40,
+      spread: 170,
+      startVelocity: 12,
+      scalar: 1.2,
+    }),
+  ],
 }
+
+// Cada pop acontece com o trio AINDA visível na subida — se o acento atrasar
+// demais, vira confetti órfão sem balão em cena. E o x segue os TRÊS balões
+// dentro do sprite (que ocupa ~25% da largura a partir de left: 22%), não a
+// largura da tela.
 const BALLOONS: SpriteImplementation = {
   kind: 'sprite',
-  emoji: '🎈 🎈 🎈',
+  art: 'balloons',
   path: 'rise',
-  durationMs: 3200,
+  sizeVmin: 44,
+  durationMs: 2900,
+  scrim: 'sky',
+  accents: [
+    burst(1250, { x: 0.27, y: 0.4 }, PARTY, { count: 34 }),
+    burst(1500, { x: 0.35, y: 0.27 }, PARTY, { count: 34 }),
+    burst(1750, { x: 0.43, y: 0.15 }, PARTY, { count: 34 }),
+  ],
 }
 
 // A ordem importa do lado do cliente (a frase do banner lê posição — ver

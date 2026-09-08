@@ -44,26 +44,29 @@ describe('celebration registry', () => {
     }
   })
 
-  it.each(SPRITE_IDS)('"%s" resolves to a self-describing sprite, not confetti', (celebration) => {
+  it.each(SPRITE_IDS)('"%s" resolves to a choreographed sprite, not confetti', (celebration) => {
     const impl = resolvedImplementation(celebration)
     expect(impl.kind).toBe('sprite')
-    // Os três campos que o CelebrationStage consome: sem emoji/path/duration
-    // o sprite nasce invisível e o teste teria que denunciar.
+    // Os campos que o CelebrationStage/SpriteArt consomem: um vazio e o
+    // personagem nasce invisível; um acento fora da timeline dispara confetti
+    // fantasma.
     if (impl.kind === 'sprite') {
-      expect(impl.emoji.trim()).not.toBe('')
-      expect(['arc', 'straight', 'rise']).toContain(impl.path)
+      expect(impl.art).toBe(celebration)
+      expect(['arc', 'rise', 'launch', 'flip']).toContain(impl.path)
+      expect(impl.sizeVmin).toBeGreaterThanOrEqual(12)
       expect(impl.durationMs).toBeGreaterThan(0)
+      expect(impl.accents.length).toBeGreaterThan(0)
+      expect(impl.accents.every((a) => a.atMs > 0 && a.atMs <= impl.durationMs + 900)).toBe(true)
     }
     expect(impl).not.toBe(resolvedImplementation('classic'))
   })
 
-  it('sprite does NOT call canvas-confetti (the two mechanisms stay disjoint)', () => {
+  // O resolve em si tem que ser puro: confetti só entra pela .run() do confetti
+  // ou pelos accents agendados no stage — nunca na resolução.
+  it('resolving never fires confetti by itself', () => {
     vi.mocked(confetti).mockClear()
     for (const id of SPRITE_IDS) {
-      const impl = resolvedImplementation(id)
-      // Sprite roda como DOM; se um dia quem chamar .run() aqui, este é o
-      // sítio que pega o mecanismo errado.
-      expect(impl.kind).toBe('sprite')
+      expect(resolvedImplementation(id).kind).toBe('sprite')
     }
     expect(confetti).not.toHaveBeenCalled()
   })

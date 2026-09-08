@@ -238,10 +238,15 @@ describe('VoteReveal.vue', () => {
     await nextTick()
 
     expect(wrapper.find('.celebration-stage').exists()).toBe(true)
-    expect(wrapper.find('.celebration-sprite').text()).toBe('🐬')
+    // arte em SVG (SpriteArt), não emoji estático
+    expect(wrapper.find('.celebration-sprite svg.sprite-art--dolphin').exists()).toBe(true)
+    expect(wrapper.find('.celebration-scrim').exists()).toBe(true)
     expect(confetti).not.toHaveBeenCalled()
     // dolphin é índice 7 → 7 % 4 = 3 → quarta frase.
     expect(wrapper.text()).toContain('Fechou!')
+    // unmount limpa os accents agendados (timers REAIS aqui) — sem isso eles
+    // disparariam confetti dentro dos próximos testes do arquivo
+    wrapper.unmount()
   })
 
   it('celebrate=false não monta stage mesmo com celebração sorteada (recaps)', () => {
