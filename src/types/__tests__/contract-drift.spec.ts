@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS, ROOM_PHASES, ROUND_STATUSES } from '@/types'
+import {
+  CELEBRATIONS,
+  DECK_TYPES,
+  PLAYER_ROLES,
+  PLAYER_TAGS,
+  ROOM_PHASES,
+  ROUND_STATUSES,
+} from '@/types'
 // Cross-package import on purpose — same contract as deck-drift.spec.ts, which
 // guards the per-deck VOTE VALUES. This one guards the VOCABULARY: the sets of
 // literals that travel over the socket and get re-declared on both sides.
@@ -12,7 +19,7 @@ import { DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS, ROOM_PHASES, ROUND_STATUSES } fr
 // dependency-free module instead of adding one here.
 import * as server from '../../../server/src/types'
 
-// Why this exists: these five vocabularies are declared twice with nothing
+// Why this exists: these six vocabularies are declared twice with nothing
 // enforcing agreement, and the drift is not hypothetical. The client carried a
 // RoundStatus of 'waiting' that the server never emitted, in any commit — a
 // phantom third state that survived until someone went looking. A type union
@@ -32,6 +39,7 @@ const VOCABULARIES: ReadonlyArray<{
   { name: 'room phases', client: ROOM_PHASES, server: server.ROOM_PHASES },
   { name: 'round statuses', client: ROUND_STATUSES, server: server.ROUND_STATUSES },
   { name: 'player tags', client: PLAYER_TAGS, server: server.PLAYER_TAGS },
+  { name: 'celebrations', client: CELEBRATIONS, server: server.CELEBRATIONS },
 ]
 
 describe('contract vocabulary drift guard (client × server)', () => {
@@ -46,7 +54,7 @@ describe('contract vocabulary drift guard (client × server)', () => {
   // The list above is the whole point, so a vocabulary silently dropped from it
   // would disable a guard without failing anything. Pin the count.
   it('guards every vocabulary the two sides share', () => {
-    expect(VOCABULARIES).toHaveLength(5)
+    expect(VOCABULARIES).toHaveLength(6)
   })
 
   // WHAT THIS GUARD DOES NOT COVER, so nobody reads it as broader than it is: only

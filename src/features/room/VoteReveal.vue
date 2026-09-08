@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { watch, onMounted, ref } from 'vue'
+import { computed, watch, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import confetti from 'canvas-confetti'
 import IconPartyPopper from '~icons/lucide/party-popper'
+import type { Celebration } from '@/types'
+import type { SpriteImplementation } from './celebrations/registry'
 import { prefersReducedMotion } from '@/composables/matchMedia'
 import { useVoteStats } from '@/composables/useVoteStats'
+import { bannerMessageKey, resolvedImplementation } from './celebrations/registry'
+import CelebrationStage from './celebrations/CelebrationStage.vue'
 
 interface Props {
   votes: Record<string, string | number>
   // Apenas jogadores ativos AGORA (sem observers). Omitir em recaps de rodadas
   // passadas: quem votou pode já ter saído e o denominador atual mentiria ("2/1").
   playerCount?: number
-  celebrate?: boolean // dispara confetti no consenso (default true); desligado no resumo
+  celebrate?: boolean // dispara a celebração no consenso (default true); desligado no resumo
+  // Sorteada pelo servidor. Omitida (rounds antigas, servidor pré-feature ou
+  // recap sem campo) → 'classic', que é a animação que sempre existiu.
+  celebration?: Celebration
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -20,57 +26,55 @@ const props = withDefaults(defineProps<Props>(), {
 
 const { t } = useI18n()
 
-const hasConfettiPlayed = ref(false)
+const resolvedCelebration = computed<Celebration>(() => props.celebration ?? 'classic')
+const bannerMessage = computed(() => t(bannerMessageKey(resolvedCelebration.value)))
+
+// Os dois tipos do registry se separam aqui: confetti é só JS (a lib monta o
+// próprio canvas em tela cheia) e roda no gatilho, síncrono como sempre foi;
+// sprite é DOM, e o stage abaixo assume quando a implementação sorteada for uma.
+const spriteImplementation = computed<SpriteImplementation | undefined>(() => {
+  const impl = resolvedImplementation(resolvedCelebration.value)
+  return impl.kind === 'sprite' ? impl : undefined
+})
+
+const hasCelebrated = ref(false)
+// true a partir do gatilho — é o que monta o stage. Fica falso em recap
+// (celebrate=false) e em prefers-reduced-motion, mesmo com sorteio sprite.
+const celebrating = ref(false)
 
 // Estatísticas dos votos — fonte única (useVoteStats).
 const { average, min, max, hasConsensus, consensusValue, distribution, maxCount, count } =
   useVoteStats(() => props.votes)
 
-// Confetti quando há consenso
-function fireConfetti() {
-  confetti({
-    particleCount: 100,
-    spread: 70,
-    origin: { y: 0.6 },
-  })
-  setTimeout(() => {
-    confetti({
-      particleCount: 50,
-      angle: 60,
-      spread: 55,
-      origin: { x: 0 },
-    })
-    confetti({
-      particleCount: 50,
-      angle: 120,
-      spread: 55,
-      origin: { x: 1 },
-    })
-  }, 250)
+function startCelebration() {
+  if (hasCelebrated.value || prefersReducedMotion()) return
+  hasCelebrated.value = true
+  celebrating.value = true
+  const impl = resolvedImplementation(resolvedCelebration.value)
+  if (impl.kind === 'confetti') impl.run()
 }
 
-// Disparar confetti na primeira renderização se houver consenso
+// Disparar na primeira renderização se houver consenso
 onMounted(() => {
-  if (props.celebrate && hasConsensus.value && !hasConfettiPlayed.value) {
-    hasConfettiPlayed.value = true
-    if (!prefersReducedMotion()) fireConfetti()
-  }
+  if (props.celebrate && hasConsensus.value) startCelebration()
 })
 
 watch(hasConsensus, (newVal) => {
-  if (props.celebrate && newVal && !hasConfettiPlayed.value) {
-    hasConfettiPlayed.value = true
-    if (!prefersReducedMotion()) fireConfetti()
-  }
+  if (props.celebrate && newVal) startCelebration()
 })
 </script>
 
 <template>
   <div class="vote-reveal animate-slide-up">
+    <CelebrationStage
+      v-if="celebrating && spriteImplementation"
+      :implementation="spriteImplementation"
+    />
+
     <!-- Consensus Banner -->
     <div v-if="hasConsensus" class="consensus-banner">
       <IconPartyPopper class="consensus-icon" aria-hidden="true" />
-      <strong>{{ t('room.reveal.consensus') }}</strong> {{ t('room.reveal.allVoted') }}
+      <strong>{{ bannerMessage }}</strong> {{ t('room.reveal.allVoted') }}
       <span class="consensus-value">{{ consensusValue }}</span>
     </div>
 

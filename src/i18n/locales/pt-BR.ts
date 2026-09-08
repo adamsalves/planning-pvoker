@@ -166,9 +166,17 @@ export const ptBR = {
       notVotingSub: 'A pessoa admin tirou você desta rodada. Aguarde o resultado.',
     },
     reveal: {
-      consensus: 'Consenso!',
       allVoted: 'Todos votaram',
       distribution: 'Distribuição',
+      // Frases do banner sorteadas por índice da celebração (registry.ts).
+      // A 0 é a frase clássica: 'classic' e rodadas sem sorteio (servidor
+      // pré-feature) apontam para ela — o texto que sempre esteve na tela.
+      messages: {
+        0: 'Consenso!',
+        1: 'Unânime!',
+        2: 'Na mosca!',
+        3: 'Fechou!',
+      },
     },
     controls: {
       reveal: 'Revelar Votos',

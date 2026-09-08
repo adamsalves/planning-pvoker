@@ -103,7 +103,11 @@ const anyVoted = computed(() => Object.keys(currentRound.value?.votes ?? {}).len
 
       <!-- Resultado (após revelar) -->
       <BaseCard v-if="currentRound?.status === 'revealed'" class="section-card">
-        <VoteReveal :votes="currentRound.votes" :player-count="voterCount" />
+        <VoteReveal
+          :votes="currentRound.votes"
+          :player-count="voterCount"
+          :celebration="currentRound.celebration"
+        />
       </BaseCard>
 
       <!-- Controles do admin -->
