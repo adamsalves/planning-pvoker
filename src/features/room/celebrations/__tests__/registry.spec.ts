@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti'
 import { CELEBRATIONS } from '@/types'
 import type { Celebration } from '@/types'
 import { i18n } from '@/i18n'
+import { must } from '@/test-utils/must'
 import { CONSENSUS_MESSAGES, bannerMessageKey, resolvedImplementation } from '../registry'
 
 // O registry é a única consumidora de canvas-confetti daqui; mockado, os run()
@@ -14,50 +15,95 @@ vi.mock('canvas-confetti', () => ({
   }),
 }))
 
-// Os 7 confetti existem desde o PR B; as 4 sprites são do PR C e HOJE devem
-// degradar — se alguém mover a implementação de C para antes da hora, os
-// testes delas mudam junto, e o PR C reescreve as expectativas.
-const CONFETTI_IDS = ['classic', 'fireworks', 'rain', 'cannons', 'blast', 'stars', 'suits'] as const
-const SPRITE_IDS = ['dolphin', 'rocket', 'cards', 'balloons'] as const
-
 describe('celebration registry', () => {
-  it.each([...CELEBRATIONS])('"%s" resolves to a known kind', (celebration) => {
-    expect(['confetti', 'sprite']).toContain(resolvedImplementation(celebration).kind)
-  })
-
-  it('covers the whole vocabulary — registry and contract can never disagree by omission', () => {
-    expect([...CONFETTI_IDS, ...SPRITE_IDS].sort()).toEqual([...CELEBRATIONS].sort())
-  })
-
-  it.each(CONFETTI_IDS)('"%s" runs confetti with its own implementation', (celebration) => {
+  // Table-driven sobre o VOCABULÁRIO, não sobre uma lista mantida à mão: um id
+  // novo em CELEBRATIONS entra aqui sozinho. A asserção de IDENTIDADE é o que
+  // pega a omissão — sem entrada no mapa, a resolução devolve o objeto do
+  // classic, e é exatamente esse silêncio que o teste quebra.
+  it.each([...CELEBRATIONS])('"%s" resolves to an implementation of its own', (celebration) => {
     const impl = resolvedImplementation(celebration)
-    expect(impl.kind).toBe('confetti')
-    // Identidade ≠ classic para todo id não-classic: entry removida do map
-    // silenciosamente viria esta mesma objeto (o fallback) e o teste cai.
+
+    vi.mocked(confetti).mockClear()
+    expect(() => impl.run()).not.toThrow()
+    expect(confetti).toHaveBeenCalled()
+
     if (celebration !== 'classic') {
       expect(impl).not.toBe(resolvedImplementation('classic'))
     }
-    if (impl.kind === 'confetti') {
+  })
+
+  // A identidade acima só compara com o classic: `blast: STARS` no mapa (cabo
+  // trocado, não omissão) passa por ela. Distinção par a par fecha esse flanco.
+  it('no two celebrations share an implementation', () => {
+    const distinct = new Set(CELEBRATIONS.map((id) => resolvedImplementation(id)))
+    expect(distinct.size).toBe(CELEBRATIONS.length)
+  })
+
+  // A regressão que este teste existe para impedir, e que a suíte inteira
+  // deixava passar: a receita antiga do 'rain' nascia acima da borda de cima
+  // SEM velocidade própria e com o `angle` default, que na canvas-confetti
+  // aponta para CIMA (`y += sin(-angle) * velocity`). A leva subia para fora da
+  // tela e só a gravidade a trazia de volta, já quase transparente — chuva que
+  // não se via. São as TRÊS grandezas juntas que fazem a chuva aparecer, então
+  // o teste prende as três; qualquer uma sozinha volta a passar com a receita
+  // quebrada. O segundo disparo é defasado, daí o timer falso.
+  it('rain falls: born above the top edge, with speed of its own, pointing down', () => {
+    vi.useFakeTimers()
+    try {
       vi.mocked(confetti).mockClear()
-      expect(() => impl.run()).not.toThrow()
-      expect(confetti).toHaveBeenCalled()
+      resolvedImplementation('rain').run()
+      vi.advanceTimersByTime(500)
+
+      const calls = vi.mocked(confetti).mock.calls
+      expect(calls.length).toBeGreaterThan(1)
+      for (const [options] of calls) {
+        const opts = must(options, 'as opções do confetti do rain')
+        expect(must(opts.origin, 'origin').y).toBeLessThan(0)
+        expect(must(opts.startVelocity, 'startVelocity')).toBeGreaterThan(0)
+        // sin(-angle) > 0 é literalmente a conta que a lib faz para o eixo y,
+        // e y cresce para BAIXO no canvas.
+        const angle = must(opts.angle, 'angle')
+        expect(Math.sin((-angle * Math.PI) / 180)).toBeGreaterThan(0)
+      }
+    } finally {
+      vi.useRealTimers()
     }
   })
 
-  it.each(SPRITE_IDS)('"%s" degrades to classic until PR C implements it', (celebration) => {
-    expect(resolvedImplementation(celebration)).toBe(resolvedImplementation('classic'))
+  // O canvas da canvas-confetti é global e sobrevive ao desmonte de quem
+  // disparou. Cancelar tem que MATAR a leva agendada, não só parar de olhar
+  // para ela: por isso a asserção é "nada mais sai depois", com o relógio
+  // adiantado além da janela da receita mais longa.
+  it.each([...CELEBRATIONS])('"%s" hands back the cancellation of its own volleys', (id) => {
+    vi.useFakeTimers()
+    try {
+      const cancel = resolvedImplementation(id).run()
+      expect(typeof cancel).toBe('function')
+
+      vi.mocked(confetti).mockClear()
+      cancel()
+      vi.advanceTimersByTime(5_000)
+
+      expect(confetti).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rounds without a celebration (pre-feature server) also degrade to classic', () => {
     expect(resolvedImplementation(undefined)).toBe(resolvedImplementation('classic'))
   })
 
-  // A janela "servidor novo, cliente velho": se um 12º id cruzar a rede antes
-  // do vocabulário do cliente acompanhar, animação E texto degradam juntos —
-  // nenhum dos dois pode vazar estado desconhecido.
+  // Um id que este cliente não conhece cruza a rede nos DOIS sentidos: servidor
+  // mais novo com uma variante que ainda não chegou aqui, ou servidor mais velho
+  // com uma que já saiu daqui (foi o caso das quatro sprites retiradas).
+  // Animação E texto degradam juntos — nenhum dos dois pode vazar estado
+  // desconhecido.
   it('an id this client does not know degrades to classic animation AND message 0', () => {
     expect(resolvedImplementation('lasers')).toBe(resolvedImplementation('classic'))
     expect(bannerMessageKey('lasers')).toBe('room.reveal.messages.0')
+    expect(resolvedImplementation('dolphin')).toBe(resolvedImplementation('classic'))
+    expect(bannerMessageKey('dolphin')).toBe('room.reveal.messages.0')
   })
 })
 
