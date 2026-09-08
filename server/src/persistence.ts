@@ -1,6 +1,13 @@
 import { Redis } from '@upstash/redis'
 import { z } from 'zod'
-import { DECK_TYPES, PLAYER_ROLES, PLAYER_TAGS, ROOM_PHASES, ROUND_STATUSES } from './types'
+import {
+  CELEBRATIONS,
+  DECK_TYPES,
+  PLAYER_ROLES,
+  PLAYER_TAGS,
+  ROOM_PHASES,
+  ROUND_STATUSES,
+} from './types'
 import type { Room } from './types'
 import { logger } from './logger'
 
@@ -71,6 +78,11 @@ const roomShapeSchema = z.object({
       // campo, e um required aqui faria o safeParse falhar — o que em loadAll
       // significa DESCARTAR a sala. Todas as salas vivas morreriam no deploy.
       excludedVoterIds: z.array(z.string()).optional(),
+      // OPCIONAL pelo mesmo motivo, e com .catch como o tag: é enum de PRODUTO —
+      // se a lista de variantes mudar (renomear/remover), um valor desconhecido
+      // degrada para "sem celebração" (o cliente cai no 'classic') em vez de
+      // derrubar toda sala viva no deploy que mudou a lista.
+      celebration: z.enum(CELEBRATIONS).optional().catch(undefined),
     }),
   ),
   currentRoundIndex: z.number().int(),
