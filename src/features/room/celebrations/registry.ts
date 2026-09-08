@@ -9,24 +9,37 @@ import type { Celebration } from '@/types'
 // Se um dia voltar um mecanismo de DOM, isto volta a ser união discriminada; um
 // `kind` que nada discrimina só custa ruído nos call-sites.
 export interface CelebrationImplementation {
-  run: () => void
+  // Dispara o efeito e devolve o cancelamento das levas defasadas DELE. Três
+  // receitas encadeiam levas com setTimeout, e o canvas da lib é global: sem
+  // isso, avançar a rodada dentro da janela (450 ms no rain, ~900 ms no
+  // fireworks) deixa a leva pendente estourar por cima da tela seguinte —
+  // confetti fantasma de uma celebração que já acabou. Quem dispara é quem
+  // cancela; o VoteReveal chama no unmount.
+  run: () => () => void
 }
+
+// Receita de leva única: nada fica agendado, nada há para cancelar.
+const NOTHING_PENDING = () => {}
 
 // Reproduz exatamente a animação anterior à feature: burst central + 2 canhões
 // laterais. É também o fallback de TODA resolução que não acha implementação.
 const CLASSIC: CelebrationImplementation = {
   run: () => {
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } })
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } })
       confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } })
     }, 250)
+    return () => clearTimeout(timer)
   },
 }
 
 const FIREWORKS: CelebrationImplementation = {
   run: () => {
     const end = Date.now() + 800
+    // A cadeia troca de handle a cada leva, então o cancelamento tem que ler a
+    // ÚLTIMA agendada — guardar o primeiro setTimeout deixaria o resto vivo.
+    let timer: ReturnType<typeof setTimeout> | undefined
     const volley = () => {
       confetti({
         particleCount: 25,
@@ -35,9 +48,10 @@ const FIREWORKS: CelebrationImplementation = {
         ticks: 90,
         origin: { x: Math.random(), y: Math.random() * 0.4 },
       })
-      if (Date.now() < end) setTimeout(volley, 150)
+      if (Date.now() < end) timer = setTimeout(volley, 150)
     }
     volley()
+    return () => clearTimeout(timer)
   },
 }
 
@@ -56,7 +70,7 @@ const RAIN: CelebrationImplementation = {
   run: () => {
     for (const x of [0.16, 0.5, 0.84]) {
       confetti({
-        particleCount: 95,
+        particleCount: 60,
         spread: 120,
         angle: -90,
         startVelocity: 18,
@@ -68,10 +82,10 @@ const RAIN: CelebrationImplementation = {
     }
     // Segunda leva, defasada, com drift: sustenta a chuva em vez de ser uma
     // rajada única — e a variância de x tira o efeito de "três jatos iguais".
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       for (const x of [0.32, 0.68]) {
         confetti({
-          particleCount: 80,
+          particleCount: 55,
           spread: 130,
           angle: -90,
           startVelocity: 16,
@@ -83,6 +97,7 @@ const RAIN: CelebrationImplementation = {
         })
       }
     }, 450)
+    return () => clearTimeout(timer)
   },
 }
 
@@ -91,12 +106,14 @@ const CANNONS: CelebrationImplementation = {
   run: () => {
     confetti({ particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.7 } })
     confetti({ particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.7 } })
+    return NOTHING_PENDING
   },
 }
 
 const BLAST: CelebrationImplementation = {
   run: () => {
     confetti({ particleCount: 220, spread: 120, startVelocity: 45, origin: { y: 0.55 } })
+    return NOTHING_PENDING
   },
 }
 
@@ -110,6 +127,7 @@ const STARS: CelebrationImplementation = {
       shapes: ['star'],
       scalar: 1.4,
     })
+    return NOTHING_PENDING
   },
 }
 
@@ -134,6 +152,7 @@ const SUITS: CelebrationImplementation = {
       scalar: 1.6,
       shapes: [suitShape('♠', '#111827'), suitShape('♣', '#111827')],
     })
+    return NOTHING_PENDING
   },
 }
 

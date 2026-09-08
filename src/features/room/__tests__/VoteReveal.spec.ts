@@ -236,6 +236,26 @@ describe('VoteReveal.vue', () => {
     expect(confetti).not.toHaveBeenCalled()
   })
 
+  // Avançar a rodada no meio da celebração: o v-if do RoomVoting desmonta este
+  // componente, mas o canvas da lib é global. Sem o cancelamento no unmount, a
+  // leva defasada do 'rain' (450ms) estoura por cima da tela seguinte.
+  it('desmontar no meio da celebração não deixa leva pendente estourar depois', () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mount(VoteReveal, {
+        props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebration: 'rain' },
+      })
+
+      vi.mocked(confetti).mockClear()
+      wrapper.unmount()
+      vi.advanceTimersByTime(5_000)
+
+      expect(confetti).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('prefers-reduced-motion desliga a sorteada também — só o banner fica', () => {
     vi.mocked(confetti).mockClear()
     vi.stubGlobal(

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, onMounted, ref } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPartyPopper from '~icons/lucide/party-popper'
 import type { Celebration } from '@/types'
@@ -28,6 +28,10 @@ const resolvedCelebration = computed<Celebration>(() => props.celebration ?? 'cl
 const bannerMessage = computed(() => t(bannerMessageKey(resolvedCelebration.value)))
 
 const hasCelebrated = ref(false)
+// Cancelamento das levas defasadas da celebração em curso (ver o contrato de
+// CelebrationImplementation). Fica fora do reactive de propósito: é um handle
+// de efeito, ninguém renderiza a partir dele.
+let cancelCelebration: (() => void) | undefined
 
 // Estatísticas dos votos — fonte única (useVoteStats).
 const { average, min, max, hasConsensus, consensusValue, distribution, maxCount, count } =
@@ -38,7 +42,7 @@ const { average, min, max, hasConsensus, consensusValue, distribution, maxCount,
 function startCelebration() {
   if (hasCelebrated.value || prefersReducedMotion()) return
   hasCelebrated.value = true
-  resolvedImplementation(resolvedCelebration.value).run()
+  cancelCelebration = resolvedImplementation(resolvedCelebration.value).run()
 }
 
 // Disparar na primeira renderização se houver consenso
@@ -48,6 +52,13 @@ onMounted(() => {
 
 watch(hasConsensus, (newVal) => {
   if (props.celebrate && newVal) startCelebration()
+})
+
+// Avançar a rodada desmonta este componente (v-if no RoomVoting), mas o canvas
+// da lib é global e sobrevive: sem cancelar, a leva ainda agendada estoura por
+// cima da tela seguinte.
+onBeforeUnmount(() => {
+  cancelCelebration?.()
 })
 </script>
 

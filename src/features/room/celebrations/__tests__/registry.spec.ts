@@ -70,6 +70,26 @@ describe('celebration registry', () => {
     }
   })
 
+  // O canvas da canvas-confetti é global e sobrevive ao desmonte de quem
+  // disparou. Cancelar tem que MATAR a leva agendada, não só parar de olhar
+  // para ela: por isso a asserção é "nada mais sai depois", com o relógio
+  // adiantado além da janela da receita mais longa.
+  it.each([...CELEBRATIONS])('"%s" hands back the cancellation of its own volleys', (id) => {
+    vi.useFakeTimers()
+    try {
+      const cancel = resolvedImplementation(id).run()
+      expect(typeof cancel).toBe('function')
+
+      vi.mocked(confetti).mockClear()
+      cancel()
+      vi.advanceTimersByTime(5_000)
+
+      expect(confetti).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('rounds without a celebration (pre-feature server) also degrade to classic', () => {
     expect(resolvedImplementation(undefined)).toBe(resolvedImplementation('classic'))
   })
