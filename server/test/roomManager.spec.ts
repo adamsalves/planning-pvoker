@@ -778,6 +778,28 @@ describe('consensus celebration (drawn at the reveal seam)', () => {
     expect(second?.rounds[1].celebration).toBe('fireworks')
   })
 
+  // Um reveal redundante (botão em dobra, ou manual correndo contra o
+  // autoReveal) cai em sealRound com a rodada já revelada. Sem o early-return
+  // de idempotência, o segundo passe sorteia DE NOVO — com o random mudado
+  // entre os passes, a variante trocaria no meio da celebração. O índice 0
+  // não serve de pegadinha: a exclusão da anterior ali lê rounds[-1] (sem
+  // anterior), então só um mock diferente por passe discrimina o re-draw.
+  it('a redundant reveal does not re-draw the celebration', () => {
+    rm.createRoom('r1', admin, config)
+    rm.addSubjects('r1', ['A'])
+    rm.startSession('r1')
+    rm.castVote('r1', 'a1', 5)
+
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    const first = rm.revealVotes('r1')
+    expect(first?.rounds[0].celebration).toBe('classic')
+
+    spy.mockReturnValue(0.5) // outro sorteio daria 'stars' no pool cheio
+    const again = rm.revealVotes('r1')
+    expect(again?.rounds[0].celebration).toBe('classic')
+    expect(again?.rounds[0].votes).toEqual({ a1: 5 })
+  })
+
   // A rodada 1 sorteia do pool CHEIO: qualquer índice tem que cair numa
   // variante válida (protege contra off-by-one no truncamento do Math.random).
   it('draws from the full pool for the very first round', () => {

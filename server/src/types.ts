@@ -47,8 +47,8 @@ export type PlayerTag = (typeof PLAYER_TAGS)[number]
 // Celebração sorteada no reveal de consenso (sealRound). O servidor escolhe UMA
 // e a inclui no broadcast para TODOS verem a mesma; 'classic' é a animação de
 // hoje (fallback do cliente quando o campo não vem — snapshot pré-feature ou
-// servidor sem a feature). O espelho mora em src/types/index.ts; o guarda de
-// deriva em src/types/__tests__ cobre os dois.
+// servidor sem a feature). O espelho em src/types/index.ts chega no PR B desta
+// feature, e é lá que a entrada entra no guarda de deriva de src/types/__tests__.
 export const CELEBRATIONS = [
   'classic',
   'fireworks',

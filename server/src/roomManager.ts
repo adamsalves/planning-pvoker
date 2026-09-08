@@ -706,7 +706,15 @@ export class RoomManager {
   // reveal paths (manual revealVotes and maybeAutoReveal) pass through here, so
   // neither can skip the draw. Drawn, not stored at round creation, because the
   // variant only matters once the round is actually revealed.
+  //
+  // Idempotent on purpose: revealVotes has no status guard of its own (a
+  // double-clicked button, or a manual reveal racing the autoReveal quorum, lands
+  // here a second time on an already-revealed round). Without this early return
+  // the redundant pass would silently RE-DRAW the celebration — every client
+  // mid-animation swapping to a new variant — and re-prune the votes, breaking
+  // the "settled history" rule stated above. The first seal's outcome is final.
   private sealRound(room: Room, round: Round): void {
+    if (round.status === 'revealed') return
     for (const playerId of Object.keys(round.votes)) {
       if (!this.presence.isPresent(room.id, playerId)) delete round.votes[playerId]
     }
