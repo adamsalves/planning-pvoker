@@ -794,7 +794,7 @@ describe('consensus celebration (drawn at the reveal seam)', () => {
     const first = rm.revealVotes('r1')
     expect(first?.rounds[0].celebration).toBe('classic')
 
-    spy.mockReturnValue(0.5) // outro sorteio daria 'stars' no pool cheio
+    spy.mockReturnValue(0.5) // outro sorteio daria 'cannons' no pool cheio
     const again = rm.revealVotes('r1')
     expect(again?.rounds[0].celebration).toBe('classic')
     expect(again?.rounds[0].votes).toEqual({ a1: 5 })

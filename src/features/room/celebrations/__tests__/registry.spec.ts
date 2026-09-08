@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti'
 import { CELEBRATIONS } from '@/types'
 import type { Celebration } from '@/types'
 import { i18n } from '@/i18n'
+import { must } from '@/test-utils/must'
 import { CONSENSUS_MESSAGES, bannerMessageKey, resolvedImplementation } from '../registry'
 
 // O registry é a única consumidora de canvas-confetti daqui; mockado, os run()
@@ -28,6 +29,44 @@ describe('celebration registry', () => {
 
     if (celebration !== 'classic') {
       expect(impl).not.toBe(resolvedImplementation('classic'))
+    }
+  })
+
+  // A identidade acima só compara com o classic: `blast: STARS` no mapa (cabo
+  // trocado, não omissão) passa por ela. Distinção par a par fecha esse flanco.
+  it('no two celebrations share an implementation', () => {
+    const distinct = new Set(CELEBRATIONS.map((id) => resolvedImplementation(id)))
+    expect(distinct.size).toBe(CELEBRATIONS.length)
+  })
+
+  // A regressão que este teste existe para impedir, e que a suíte inteira
+  // deixava passar: a receita antiga do 'rain' nascia acima da borda de cima
+  // SEM velocidade própria e com o `angle` default, que na canvas-confetti
+  // aponta para CIMA (`y += sin(-angle) * velocity`). A leva subia para fora da
+  // tela e só a gravidade a trazia de volta, já quase transparente — chuva que
+  // não se via. São as TRÊS grandezas juntas que fazem a chuva aparecer, então
+  // o teste prende as três; qualquer uma sozinha volta a passar com a receita
+  // quebrada. O segundo disparo é defasado, daí o timer falso.
+  it('rain falls: born above the top edge, with speed of its own, pointing down', () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(confetti).mockClear()
+      resolvedImplementation('rain').run()
+      vi.advanceTimersByTime(500)
+
+      const calls = vi.mocked(confetti).mock.calls
+      expect(calls.length).toBeGreaterThan(1)
+      for (const [options] of calls) {
+        const opts = must(options, 'as opções do confetti do rain')
+        expect(must(opts.origin, 'origin').y).toBeLessThan(0)
+        expect(must(opts.startVelocity, 'startVelocity')).toBeGreaterThan(0)
+        // sin(-angle) > 0 é literalmente a conta que a lib faz para o eixo y,
+        // e y cresce para BAIXO no canvas.
+        const angle = must(opts.angle, 'angle')
+        expect(Math.sin((-angle * Math.PI) / 180)).toBeGreaterThan(0)
+      }
+    } finally {
+      vi.useRealTimers()
     }
   })
 

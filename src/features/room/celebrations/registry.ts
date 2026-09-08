@@ -4,8 +4,8 @@ import type { Celebration } from '@/types'
 
 // Toda celebração é uma receita de canvas-confetti: a lib monta o próprio canvas
 // em tela cheia e o efeito é o `run()`. Não há discriminante porque não há um
-// segundo mecanismo — houve um (personagens em SVG atravessando a tela, com
-// scrim e coreografia própria) e ele foi retirado antes de chegar a produção.
+// segundo mecanismo — houve um (um personagem em DOM atravessando a tela, com
+// trajetória em keyframes) e ele foi retirado antes de chegar a produção.
 // Se um dia voltar um mecanismo de DOM, isto volta a ser união discriminada; um
 // `kind` que nada discrimina só custa ruído nos call-sites.
 export interface CelebrationImplementation {
@@ -45,12 +45,20 @@ const FIREWORKS: CelebrationImplementation = {
 // antes de aparecer — "chuva que não se via". A receita dispara três frentes já
 // na borda superior, com velocidade de queda real e vida longa o bastante para
 // atravessar a viewport.
+//
+// O `angle` negativo não é decoração: o default da canvas-confetti é 90, que na
+// conta dela (`y += sin(-angle) * velocity`) empurra a partícula para CIMA.
+// Nascendo em y negativo e sendo lançada para cima, um terço da vida era gasto
+// ainda fora da tela e a leva entrava já apagada — o fade é linear no tick.
+// Medido nas fórmulas da lib em 1920×1080: 70% da vida visível e opacidade 0,70
+// na entrada com o default, contra 97% e 0,97 apontando para baixo.
 const RAIN: CelebrationImplementation = {
   run: () => {
     for (const x of [0.16, 0.5, 0.84]) {
       confetti({
         particleCount: 95,
         spread: 120,
+        angle: -90,
         startVelocity: 18,
         gravity: 0.9,
         ticks: 320,
@@ -65,6 +73,7 @@ const RAIN: CelebrationImplementation = {
         confetti({
           particleCount: 80,
           spread: 130,
+          angle: -90,
           startVelocity: 16,
           gravity: 0.9,
           ticks: 320,
@@ -128,9 +137,12 @@ const SUITS: CelebrationImplementation = {
   },
 }
 
-// O vocabulário inteiro tem entrada aqui. `Partial` fica de propósito: é o que
-// mantém a resolução abaixo obrigada a tratar a ausência, e a ausência acontece
-// de verdade na janela entre o deploy do servidor e o do cliente.
+// O vocabulário inteiro tem entrada aqui. `Partial` fica de propósito, mas NÃO
+// é ele que cobre a janela de deploy: um id que este cliente não conhece nem
+// chega a indexar este mapa, porque `isKnownCelebration` barra antes. O `??`
+// abaixo cobre outra coisa — um id ENTRAR em CELEBRATIONS sem entrada aqui, que
+// é erro de quem edita, não de deploy. Quem impede esse ramo de virar rotina é
+// o it.each de identidade no registry.spec.
 const implementations: Partial<Record<Celebration, CelebrationImplementation>> = {
   classic: CLASSIC,
   fireworks: FIREWORKS,
