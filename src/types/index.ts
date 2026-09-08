@@ -12,11 +12,30 @@ export const JOINABLE_ROLES = ['member', 'observer'] as const
 // catálogo i18n `tags.*` a traduz. Espelha PLAYER_TAGS em server/src/types.ts.
 export const PLAYER_TAGS = ['dev', 'design', 'qa', 'product', 'other'] as const
 
+// Celebração sorteada pelo servidor no reveal de consenso (sealRound). Espelha
+// CELEBRATIONS em server/src/types.ts — coberto pelo guarda de deriva. O cliente
+// sorteia nada: recebe o id, resolve no registry local, e cai em 'classic' para
+// variantes que ainda não têm implementação aqui (ou quando o campo não vem).
+export const CELEBRATIONS = [
+  'classic',
+  'fireworks',
+  'rain',
+  'cannons',
+  'blast',
+  'stars',
+  'suits',
+  'dolphin',
+  'rocket',
+  'cards',
+  'balloons',
+] as const
+
 // Tipos derivados das constantes — sempre sincronizados
 export type DeckType = (typeof DECK_TYPES)[number]
 export type PlayerRole = (typeof PLAYER_ROLES)[number]
 export type JoinableRole = (typeof JOINABLE_ROLES)[number]
 export type PlayerTag = (typeof PLAYER_TAGS)[number]
+export type Celebration = (typeof CELEBRATIONS)[number]
 
 // Estes dois espelham o CONTRATO DE REDE — o servidor é quem produz os valores
 // (`Round['status']` e `Room['phase']` em server/src/types.ts, validados no
@@ -75,6 +94,10 @@ export interface Round {
   // entra votando, e `[]` significa "todos votam". Opcional porque rodadas
   // criadas antes da feature não têm o campo. Espelha server/src/types.ts.
   excludedVoterIds?: string[]
+  // Sorteada pelo servidor no reveal. Opcional: ausente em rodadas pré-feature
+  // OU de servidor ainda sem a feature — o cliente trata como 'classic'.
+  // Espelha server/src/types.ts.
+  celebration?: Celebration
 }
 
 export interface RoomConfig {

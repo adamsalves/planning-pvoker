@@ -44,7 +44,7 @@ const { t } = useI18n()
         </template>
         <!-- Sem player-count: recap histórico — o total atual de jogadores não
              corresponde a quem votou na rodada (ex.: alguém saiu depois de votar). -->
-        <VoteReveal :votes="round.votes" :celebrate="false" />
+        <VoteReveal :votes="round.votes" :celebrate="false" :celebration="round.celebration" />
       </BaseCard>
     </div>
 

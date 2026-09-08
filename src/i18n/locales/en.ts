@@ -165,9 +165,15 @@ export const en: MessageSchema = {
       notVotingSub: 'The admin left you out of this round. Hang tight for the result.',
     },
     reveal: {
-      consensus: 'Consensus!',
       allVoted: 'Everyone voted',
       distribution: 'Distribution',
+      // Espelha as chaves numeradas de pt-BR (MessageSchema cobra paridade).
+      messages: {
+        0: 'Consensus!',
+        1: 'Unanimous!',
+        2: 'Right on!',
+        3: 'Locked in!',
+      },
     },
     controls: {
       reveal: 'Reveal Votes',

@@ -35,7 +35,7 @@ const revealedRounds = computed(() => revealedRoundsOf(roomStore.currentRoom))
         <!-- celebrate=false: sem confetti no resumo. player-count omitido: recap de
              rodada passada — quem votou pode ter saído e o denominador atual
              mentiria (ex.: "2/1"). Espelha o SessionSummary da fase concluída. -->
-        <VoteReveal :votes="round.votes" :celebrate="false" />
+        <VoteReveal :votes="round.votes" :celebrate="false" :celebration="round.celebration" />
       </BaseCard>
     </div>
   </div>
