@@ -7,14 +7,14 @@ interface ConfettiImplementation {
   run: () => void
 }
 
-// Forma consumida pelo PR C (sprites atravessando a tela, estilo Slack). A
-// união já nasce discriminada porque os 4 ids de sprite existem no contrato de
-// rede HOJE — o que falta é a implementação, e até ela chegar a resolução
-// abaixo devolve 'classic' para eles (ver o teste que fixa essa degradação).
+// Forma dos sprites (B1–B4): um emoji atravessando a tela, estilo Slack.
+// `path` escolhe a trajetória CSS (ver CelebrationStage); `durationMs` entra
+// como --sprite-duration. 'arc' = pulos em ondas (dolphin), 'straight' =
+// varredura diagonal (rocket, cards), 'rise' = sobe do rodapé (balloons).
 export interface SpriteImplementation {
   kind: 'sprite'
   emoji: string
-  path: 'arc' | 'straight'
+  path: 'arc' | 'straight' | 'rise'
   durationMs: number
 }
 
@@ -121,18 +121,49 @@ const SUITS: ConfettiImplementation = {
   },
 }
 
-// Faltam de propósito as 4 sprites: entram no PR C. A janela entre o deploy do
-// servidor (sorteia as 11) e o do cliente com C tem que degradar para classic,
-// nunca quebrar — por isso a resolução abaixo nunca devolve undefined.
+// As 4 sprites (B1–B4 do plano). Emoji cru, não ícone Lucide: a paleta
+// monocromática currentColor mataria a piada (golfinho em contorno cinza não
+// celebra nada — coerente com a convenção de ícones, que reserva emoji para
+// quando a cor É a mensagem). Dependem da fonte do SO, então cada OS desenha o
+// seu; é variedade aceitável, não bug (risco 3 do plano).
+const DOLPHIN: SpriteImplementation = { kind: 'sprite', emoji: '🐬', path: 'arc', durationMs: 2200 }
+const ROCKET: SpriteImplementation = {
+  kind: 'sprite',
+  emoji: '🚀',
+  path: 'straight',
+  durationMs: 1600,
+}
+// O "desfile" são as próprias cartas: uma sequência que atravessa junta.
+const CARDS: SpriteImplementation = {
+  kind: 'sprite',
+  emoji: '🎴 🃏 🎴 🃏 🎴',
+  path: 'straight',
+  durationMs: 2800,
+}
+const BALLOONS: SpriteImplementation = {
+  kind: 'sprite',
+  emoji: '🎈 🎈 🎈',
+  path: 'rise',
+  durationMs: 3200,
+}
+
+// A ordem importa do lado do cliente (a frase do banner lê posição — ver
+// contract-drift.spec): os quatro sprites ocupam os índices 7–10 e novos ids
+// só entram DEPOIS deles. resolvedImplementation nunca devolve undefined
+// mesmo para um 12º id que um servidor futuro sorteie antes deste cliente
+// acompanhar (a janela "server antes do cliente" do plano): cai em classic.
 const implementations: Partial<Record<Celebration, CelebrationImplementation>> = {
   classic: CLASSIC,
-
   fireworks: FIREWORKS,
   rain: RAIN,
   cannons: CANNONS,
   blast: BLAST,
   stars: STARS,
   suits: SUITS,
+  dolphin: DOLPHIN,
+  rocket: ROCKET,
+  cards: CARDS,
+  balloons: BALLOONS,
 }
 
 function isKnownCelebration(value: string): value is Celebration {

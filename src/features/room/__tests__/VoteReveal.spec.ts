@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import IconPartyPopper from '~icons/lucide/party-popper'
 import VoteReveal from '../VoteReveal.vue'
@@ -226,14 +227,21 @@ describe('VoteReveal.vue', () => {
     expect(confetti).toHaveBeenCalled()
   })
 
-  it('sprite ainda não implementada (janela entre PR B e C) celebra com o fallback clássico', () => {
+  it('sorteada sprite monta o stage DOM e não toca canvas-confetti', async () => {
     vi.mocked(confetti).mockClear()
 
-    mount(VoteReveal, {
+    const wrapper = mount(VoteReveal, {
       props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebration: 'dolphin' },
     })
+    // o gatilho roda no onMounted e flipa `celebrating` — o render que monta o
+    // stage cai no próximo microtask
+    await nextTick()
 
-    expect(confetti).toHaveBeenCalled()
+    expect(wrapper.find('.celebration-stage').exists()).toBe(true)
+    expect(wrapper.find('.celebration-sprite').text()).toBe('🐬')
+    expect(confetti).not.toHaveBeenCalled()
+    // dolphin é índice 7 → 7 % 4 = 3 → quarta frase.
+    expect(wrapper.text()).toContain('Fechou!')
   })
 
   it('celebrate=false não monta stage mesmo com celebração sorteada (recaps)', () => {

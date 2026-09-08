@@ -14,9 +14,9 @@ vi.mock('canvas-confetti', () => ({
   }),
 }))
 
-// Os 7 confetti existem desde o PR B; as 4 sprites são do PR C e HOJE devem
-// degradar — se alguém mover a implementação de C para antes da hora, os
-// testes delas mudam junto, e o PR C reescreve as expectativas.
+// Os 7 confetti são JS (canvas-confetti); as 4 sprites são DOM e carregam
+// emoji + trajetória + duração. Os dois grupos somados cobrem o vocabulário
+// inteiro — "por omissão" é o que o teste abaixo não deixa acontecer.
 const CONFETTI_IDS = ['classic', 'fireworks', 'rain', 'cannons', 'blast', 'stars', 'suits'] as const
 const SPRITE_IDS = ['dolphin', 'rocket', 'cards', 'balloons'] as const
 
@@ -44,8 +44,28 @@ describe('celebration registry', () => {
     }
   })
 
-  it.each(SPRITE_IDS)('"%s" degrades to classic until PR C implements it', (celebration) => {
-    expect(resolvedImplementation(celebration)).toBe(resolvedImplementation('classic'))
+  it.each(SPRITE_IDS)('"%s" resolves to a self-describing sprite, not confetti', (celebration) => {
+    const impl = resolvedImplementation(celebration)
+    expect(impl.kind).toBe('sprite')
+    // Os três campos que o CelebrationStage consome: sem emoji/path/duration
+    // o sprite nasce invisível e o teste teria que denunciar.
+    if (impl.kind === 'sprite') {
+      expect(impl.emoji.trim()).not.toBe('')
+      expect(['arc', 'straight', 'rise']).toContain(impl.path)
+      expect(impl.durationMs).toBeGreaterThan(0)
+    }
+    expect(impl).not.toBe(resolvedImplementation('classic'))
+  })
+
+  it('sprite does NOT call canvas-confetti (the two mechanisms stay disjoint)', () => {
+    vi.mocked(confetti).mockClear()
+    for (const id of SPRITE_IDS) {
+      const impl = resolvedImplementation(id)
+      // Sprite roda como DOM; se um dia quem chamar .run() aqui, este é o
+      // sítio que pega o mecanismo errado.
+      expect(impl.kind).toBe('sprite')
+    }
+    expect(confetti).not.toHaveBeenCalled()
   })
 
   it('rounds without a celebration (pre-feature server) also degrade to classic', () => {
