@@ -2,28 +2,19 @@ import confetti from 'canvas-confetti'
 import { CELEBRATIONS } from '@/types'
 import type { Celebration } from '@/types'
 
-interface ConfettiImplementation {
-  kind: 'confetti'
+// Toda celebração é uma receita de canvas-confetti: a lib monta o próprio canvas
+// em tela cheia e o efeito é o `run()`. Não há discriminante porque não há um
+// segundo mecanismo — houve um (personagens em SVG atravessando a tela, com
+// scrim e coreografia própria) e ele foi retirado antes de chegar a produção.
+// Se um dia voltar um mecanismo de DOM, isto volta a ser união discriminada; um
+// `kind` que nada discrimina só custa ruído nos call-sites.
+export interface CelebrationImplementation {
   run: () => void
 }
 
-// Forma consumida pelo PR C (sprites atravessando a tela, estilo Slack). A
-// união já nasce discriminada porque os 4 ids de sprite existem no contrato de
-// rede HOJE — o que falta é a implementação, e até ela chegar a resolução
-// abaixo devolve 'classic' para eles (ver o teste que fixa essa degradação).
-export interface SpriteImplementation {
-  kind: 'sprite'
-  emoji: string
-  path: 'arc' | 'straight'
-  durationMs: number
-}
-
-export type CelebrationImplementation = ConfettiImplementation | SpriteImplementation
-
 // Reproduz exatamente a animação anterior à feature: burst central + 2 canhões
 // laterais. É também o fallback de TODA resolução que não acha implementação.
-const CLASSIC: ConfettiImplementation = {
-  kind: 'confetti',
+const CLASSIC: CelebrationImplementation = {
   run: () => {
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } })
     setTimeout(() => {
@@ -33,8 +24,7 @@ const CLASSIC: ConfettiImplementation = {
   },
 }
 
-const FIREWORKS: ConfettiImplementation = {
-  kind: 'confetti',
+const FIREWORKS: CelebrationImplementation = {
   run: () => {
     const end = Date.now() + 800
     const volley = () => {
@@ -51,39 +41,57 @@ const FIREWORKS: ConfettiImplementation = {
   },
 }
 
-// startVelocity 0 + gravidade fraca: as partículas não "explodem", chovem.
-const RAIN: ConfettiImplementation = {
-  kind: 'confetti',
+// startVelocity 0 + gravidade fraca fazia a leva NASCER acima da tela e morrer
+// antes de aparecer — "chuva que não se via". A receita dispara três frentes já
+// na borda superior, com velocidade de queda real e vida longa o bastante para
+// atravessar a viewport.
+const RAIN: CelebrationImplementation = {
   run: () => {
-    confetti({
-      particleCount: 80,
-      spread: 360,
-      startVelocity: 0,
-      ticks: 220,
-      gravity: 0.35,
-      origin: { y: -0.2 },
-    })
+    for (const x of [0.16, 0.5, 0.84]) {
+      confetti({
+        particleCount: 95,
+        spread: 120,
+        startVelocity: 18,
+        gravity: 0.9,
+        ticks: 320,
+        scalar: 1.05,
+        origin: { x, y: -0.1 },
+      })
+    }
+    // Segunda leva, defasada, com drift: sustenta a chuva em vez de ser uma
+    // rajada única — e a variância de x tira o efeito de "três jatos iguais".
+    setTimeout(() => {
+      for (const x of [0.32, 0.68]) {
+        confetti({
+          particleCount: 80,
+          spread: 130,
+          startVelocity: 16,
+          gravity: 0.9,
+          ticks: 320,
+          scalar: 1.05,
+          drift: 0.8,
+          origin: { x, y: -0.1 },
+        })
+      }
+    }, 450)
   },
 }
 
 // Como o classic sem o burst central: só os dois canhões, um de cada lado.
-const CANNONS: ConfettiImplementation = {
-  kind: 'confetti',
+const CANNONS: CelebrationImplementation = {
   run: () => {
     confetti({ particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.7 } })
     confetti({ particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.7 } })
   },
 }
 
-const BLAST: ConfettiImplementation = {
-  kind: 'confetti',
+const BLAST: CelebrationImplementation = {
   run: () => {
     confetti({ particleCount: 220, spread: 120, startVelocity: 45, origin: { y: 0.55 } })
   },
 }
 
-const STARS: ConfettiImplementation = {
-  kind: 'confetti',
+const STARS: CelebrationImplementation = {
   run: () => {
     confetti({
       particleCount: 90,
@@ -99,8 +107,7 @@ const STARS: ConfettiImplementation = {
 // Naipes vermelhos e pretos mantêm a cor da verdade. shapeFromText rasteriza o
 // glifo (a cor nasce assada na shape, e o scalar aqui precisa bater com o
 // scalar do confetti para não borrar — aviso do README da lib).
-const SUITS: ConfettiImplementation = {
-  kind: 'confetti',
+const SUITS: CelebrationImplementation = {
   run: () => {
     const suitShape = (text: string, color: string) =>
       confetti.shapeFromText({ text, scalar: 1.6, color })
@@ -121,12 +128,11 @@ const SUITS: ConfettiImplementation = {
   },
 }
 
-// Faltam de propósito as 4 sprites: entram no PR C. A janela entre o deploy do
-// servidor (sorteia as 11) e o do cliente com C tem que degradar para classic,
-// nunca quebrar — por isso a resolução abaixo nunca devolve undefined.
+// O vocabulário inteiro tem entrada aqui. `Partial` fica de propósito: é o que
+// mantém a resolução abaixo obrigada a tratar a ausência, e a ausência acontece
+// de verdade na janela entre o deploy do servidor e o do cliente.
 const implementations: Partial<Record<Celebration, CelebrationImplementation>> = {
   classic: CLASSIC,
-
   fireworks: FIREWORKS,
   rain: RAIN,
   cannons: CANNONS,
@@ -140,11 +146,12 @@ function isKnownCelebration(value: string): value is Celebration {
 }
 
 // Os dois resolvedores aceitam `Celebration | string` (e `undefined`) porque a
-// borda aqui é o broadcast da rede, que não passa por zod: um servidor futuro
-// pode sortear um 12º id que este vocabulário ainda não conhece (a janela
-// "server antes do cliente" do plano). Os call-sites tipados seguem passando
-// Celebration — o alargamento é só para a entrada de rede ser honestamente
-// tratável, e testável, sem cast.
+// borda aqui é o broadcast da rede, que não passa por zod: um servidor mais novo
+// pode sortear um id que este vocabulário ainda não conhece (a janela "server
+// antes do cliente"), e um servidor mais velho pode sortear um que já saiu daqui
+// — foi o caso das quatro sprites retiradas. Os call-sites tipados seguem
+// passando Celebration; o alargamento é só para a entrada de rede ser
+// honestamente tratável, e testável, sem cast.
 export function resolvedImplementation(
   celebration: Celebration | string | undefined,
 ): CelebrationImplementation {

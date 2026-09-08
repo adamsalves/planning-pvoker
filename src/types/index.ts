@@ -24,10 +24,6 @@ export const CELEBRATIONS = [
   'blast',
   'stars',
   'suits',
-  'dolphin',
-  'rocket',
-  'cards',
-  'balloons',
 ] as const
 
 // Tipos derivados das constantes — sempre sincronizados

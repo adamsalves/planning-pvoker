@@ -3,11 +3,9 @@ import { computed, watch, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPartyPopper from '~icons/lucide/party-popper'
 import type { Celebration } from '@/types'
-import type { SpriteImplementation } from './celebrations/registry'
 import { prefersReducedMotion } from '@/composables/matchMedia'
 import { useVoteStats } from '@/composables/useVoteStats'
 import { bannerMessageKey, resolvedImplementation } from './celebrations/registry'
-import CelebrationStage from './celebrations/CelebrationStage.vue'
 
 interface Props {
   votes: Record<string, string | number>
@@ -29,29 +27,18 @@ const { t } = useI18n()
 const resolvedCelebration = computed<Celebration>(() => props.celebration ?? 'classic')
 const bannerMessage = computed(() => t(bannerMessageKey(resolvedCelebration.value)))
 
-// Os dois tipos do registry se separam aqui: confetti é só JS (a lib monta o
-// próprio canvas em tela cheia) e roda no gatilho, síncrono como sempre foi;
-// sprite é DOM, e o stage abaixo assume quando a implementação sorteada for uma.
-const spriteImplementation = computed<SpriteImplementation | undefined>(() => {
-  const impl = resolvedImplementation(resolvedCelebration.value)
-  return impl.kind === 'sprite' ? impl : undefined
-})
-
 const hasCelebrated = ref(false)
-// true a partir do gatilho — é o que monta o stage. Fica falso em recap
-// (celebrate=false) e em prefers-reduced-motion, mesmo com sorteio sprite.
-const celebrating = ref(false)
 
 // Estatísticas dos votos — fonte única (useVoteStats).
 const { average, min, max, hasConsensus, consensusValue, distribution, maxCount, count } =
   useVoteStats(() => props.votes)
 
+// A celebração é só canvas-confetti: a lib monta o próprio canvas em tela cheia,
+// então roda no gatilho e não precisa de nada montado no template.
 function startCelebration() {
   if (hasCelebrated.value || prefersReducedMotion()) return
   hasCelebrated.value = true
-  celebrating.value = true
-  const impl = resolvedImplementation(resolvedCelebration.value)
-  if (impl.kind === 'confetti') impl.run()
+  resolvedImplementation(resolvedCelebration.value).run()
 }
 
 // Disparar na primeira renderização se houver consenso
@@ -66,11 +53,6 @@ watch(hasConsensus, (newVal) => {
 
 <template>
   <div class="vote-reveal animate-slide-up">
-    <CelebrationStage
-      v-if="celebrating && spriteImplementation"
-      :implementation="spriteImplementation"
-    />
-
     <!-- Consensus Banner -->
     <div v-if="hasConsensus" class="consensus-banner">
       <IconPartyPopper class="consensus-icon" aria-hidden="true" />

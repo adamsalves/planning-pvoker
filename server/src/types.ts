@@ -47,8 +47,14 @@ export type PlayerTag = (typeof PLAYER_TAGS)[number]
 // Celebração sorteada no reveal de consenso (sealRound). O servidor escolhe UMA
 // e a inclui no broadcast para TODOS verem a mesma; 'classic' é a animação de
 // hoje (fallback do cliente quando o campo não vem — snapshot pré-feature ou
-// servidor sem a feature). O espelho em src/types/index.ts chega no PR B desta
-// feature, e é lá que a entrada entra no guarda de deriva de src/types/__tests__.
+// servidor sem a feature). Espelhada em src/types/index.ts e coberta pelo guarda
+// de deriva em src/types/__tests__.
+//
+// As sete são todas de confetti. Houve mais quatro ('dolphin', 'rocket', 'cards',
+// 'balloons'), personagens em SVG atravessando a tela, retiradas antes de chegar
+// a produção — o resultado visual foi reprovado. Um id que saiu daqui e sobrou
+// num snapshot já é tratado: `celebration` cai para undefined no zod da
+// persistência e o cliente degrada para 'classic'.
 export const CELEBRATIONS = [
   'classic',
   'fireworks',
@@ -57,10 +63,6 @@ export const CELEBRATIONS = [
   'blast',
   'stars',
   'suits',
-  'dolphin',
-  'rocket',
-  'cards',
-  'balloons',
 ] as const
 /** @public */
 export type Celebration = (typeof CELEBRATIONS)[number]

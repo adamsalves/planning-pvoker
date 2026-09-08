@@ -201,7 +201,7 @@ describe('VoteReveal.vue', () => {
     expect(divergente.findComponent(IconPartyPopper).exists()).toBe(false)
   })
 
-  it('a sorteada chega ao stage: fireworks dispara confetti e troca a frase do banner', () => {
+  it('a sorteada chega à animação: fireworks dispara confetti e troca a frase do banner', () => {
     vi.mocked(confetti).mockClear()
 
     const wrapper = mount(VoteReveal, {
@@ -226,17 +226,7 @@ describe('VoteReveal.vue', () => {
     expect(confetti).toHaveBeenCalled()
   })
 
-  it('sprite ainda não implementada (janela entre PR B e C) celebra com o fallback clássico', () => {
-    vi.mocked(confetti).mockClear()
-
-    mount(VoteReveal, {
-      props: { votes: { p1: 5, p2: 5 }, playerCount: 2, celebration: 'dolphin' },
-    })
-
-    expect(confetti).toHaveBeenCalled()
-  })
-
-  it('celebrate=false não monta stage mesmo com celebração sorteada (recaps)', () => {
+  it('celebrate=false não celebra mesmo com celebração sorteada (recaps)', () => {
     vi.mocked(confetti).mockClear()
 
     mount(VoteReveal, {
