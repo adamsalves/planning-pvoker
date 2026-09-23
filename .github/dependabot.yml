@@ -26,6 +26,20 @@ updates:
       prefix: chore
       prefix-development: chore
       include: scope
+    # O major do zod fica ignorado por causa de um acoplamento EXTERNO aos grupos:
+    # os formulários validam com `@vee-validate/zod` (toTypedSchema em
+    # JoinRoomForm/CreateRoomForm) e a última estável dele (4.15.1) declara peer
+    # `zod@^3.24.0` — subir o zod sozinho derruba o `npm ci` com ERESOLVE, como o
+    # CI mostrou no #167 (fechado por isso). O suporte a zod 4 só existe no
+    # vee-validate v5 (standard schema, sem o adapter), que segue em beta
+    # (5.0.0-beta.1, mar/2026) sem release estável. Remover este ignore quando o
+    # vee-validate v5 estabilizar e migrar os forms juntos — no v5 o
+    # `@vee-validate/zod` é deprecated e o schema zod entra direto no
+    # `validationSchema`. O servidor não tem essa amarra e já está no zod 4 (#164).
+    ignore:
+      - dependency-name: zod
+        update-types:
+          - version-update:semver-major
     groups:
       # Toolchain de lint: sobe junto ou não sobe. `eslint-plugin-oxlint` declara
       # peer `oxlint@~<mesma minor>` a partir da 1.76, então separar os dois
